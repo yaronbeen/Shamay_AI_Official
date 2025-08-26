@@ -1,11 +1,9 @@
 /**
  * Building Permits Module - Hebrew Building Permits Document Processing
  * 
- * Main module that provides PDF to markdown conversion and field extraction
- * for Hebrew building permits (היתר בנייה מילולי) documents using MarkItDown and custom parsers.
+ * Main module that provides direct PDF processing and field extraction
+ * for Hebrew building permits (היתר בנייה מילולי) documents using AI and custom parsers.
  */
-
-import { convertPdfToMarkdown } from '../tabu/pdf-converter.js';
 import { BuildingPermitFieldParser } from './field-parser.js';
 import { BuildingPermitAIExtractor } from './ai-field-extractor.js';
 import { BuildingPermitDatabaseClient } from './database-client.js';
@@ -13,7 +11,7 @@ import path from 'path';
 import fs from 'fs';
 
 /**
- * Process a complete building permit document: PDF -> Markdown -> Field Extraction -> Database
+ * Process a complete building permit document: PDF -> Field Extraction -> Database
  * @param {string} pdfPath - Path to input PDF file
  * @param {string} outputDir - Directory to save markdown file (optional)
  * @param {Object} options - Processing options
@@ -24,37 +22,22 @@ import fs from 'fs';
  */
 async function processBuildingPermitDocument(pdfPath, outputDir = 'output', options = {}) {
   try {
-    // Step 1: Generate output path with timestamp
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const baseName = path.basename(pdfPath, '.PDF').replace('.pdf', '');
-    const markdownFileName = `${baseName}-${timestamp}.md`;
-    const markdownPath = path.join(outputDir, markdownFileName);
-
-    // Step 2: Convert PDF to markdown using MarkItDown (with pdf-parse fallback)
-    console.log(`Converting PDF to markdown: ${pdfPath} -> ${markdownPath}`);
-    const conversionResult = await convertPdfToMarkdown(pdfPath, markdownPath);
-    
-    // Step 3: Extract fields - try direct PDF processing first if AI is enabled
+    // Step 1: Extract fields directly from PDF
     console.log(`Extracting building permit fields using ${options.useAI !== false ? 'Anthropic AI (direct PDF)' : 'regex patterns'}...`);
     let extractionResults;
     
     if (options.useAI !== false) {
       const aiExtractor = new BuildingPermitAIExtractor(options.anthropicApiKey);
-      
-      // If markdown content is very short (likely scanned PDF), try direct PDF processing
-      if (conversionResult.markdownContent.trim().length < 100) {
-        console.log('📄 Short text detected, trying direct PDF processing with Anthropic...');
-        extractionResults = await aiExtractor.extractAllFields(pdfPath, { isPdf: true });
-      } else {
-        console.log('📄 Processing extracted text with Anthropic...');
-        extractionResults = await aiExtractor.extractAllFields(conversionResult.markdownContent);
-      }
+      // Direct PDF processing with Anthropic
+      console.log('📄 Processing PDF directly with Anthropic...');
+      extractionResults = await aiExtractor.extractAllFields(pdfPath, { isPdf: true });
     } else {
-      const parser = new BuildingPermitFieldParser();
-      extractionResults = parser.extractAllFields(conversionResult.markdownContent);
+      // For regex-based extraction, we'd need to extract text first
+      // This would require pdf-parse or similar library
+      throw new Error('Regex-based extraction requires text extraction from PDF. Please use AI mode.');
     }
 
-    // Step 4: Save to database if requested
+    // Step 2: Save to database if requested
     let databaseResult = null;
     if (options.saveToDatabase !== false) {
       console.log('Saving to database...');

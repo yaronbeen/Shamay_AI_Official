@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Shamay SaaS - A comprehensive document processing system for Hebrew real estate documents with AI-powered data extraction and markdown conversion.
+Shamay SaaS - A comprehensive document processing system for Hebrew real estate documents with AI-powered data extraction using direct PDF and image analysis.
 
 ## Common Development Commands
 
@@ -45,13 +45,11 @@ shamay-slow/
 ## Core Architecture
 
 ### Document Processing Pipeline
-1. **PDF Upload** → Web interface for document submission
-2. **PDF Input** → Direct text extraction or OCR fallback
-3. **Hebrew Text Processing** → RTL cleanup and error correction
-4. **Field Extraction** → Parse from processed text using specialized patterns
-5. **Database Storage** → Store extracted data in PostgreSQL with confidence scores
-6. **Web Display** → Present results through responsive web interface
-7. **AI Enhancement** → Optional LLM processing for complex cases
+1. **PDF Input** → Direct AI processing with Anthropic Claude
+2. **Hebrew Text Processing** → AI-powered extraction with confidence scores
+3. **Field Extraction** → Structured data extraction using Claude Opus model
+4. **Database Storage** → Store extracted data in PostgreSQL with confidence scores
+5. **Web Display** → Present results through responsive web interface
 
 ### Key Components
 
@@ -64,11 +62,11 @@ shamay-slow/
 - `extractOwners()` - Property owners with names, IDs, and ownership shares
 - `extractAllFields()` - Comprehensive analysis with confidence scores
 
-#### PDF Processing (`src/lib/pdf-to-markdown.js`)
-- Direct PDF text extraction (preferred)
-- OCR fallback for scanned documents
-- Hebrew text processing and cleanup
-- Structured markdown output
+#### PDF Processing 
+- Direct PDF processing with Anthropic Claude API
+- Vision capabilities for scanned documents
+- Hebrew text extraction with AI
+- Structured JSON output with confidence scores
 
 ## Hebrew Text Handling
 
@@ -104,16 +102,16 @@ shamay-slow/
 ## Best Practices
 
 ### Data Extraction Priority
-1. **First check `output/` folder** for existing processed markdown files
-2. **Extract from structured markdown** (highest accuracy)
-3. **Fallback to raw PDF text** extraction if needed
-4. **Always validate** against known good samples
+1. **Direct PDF processing** with Anthropic Claude API
+2. **Extract structured data** with confidence scores
+3. **Store in database** with full extraction metadata
+4. **Always validate** against confidence thresholds
 
 ### Development Notes
 
-- All Hebrew text patterns are extensively tested
+- AI-powered Hebrew text extraction using Claude Opus
 - Field extraction includes confidence metrics
-- Multiple extraction patterns per field for reliability
-- Comprehensive error handling and fallback mechanisms
-- **Authoritative source**: processed markdown files in `output/` directory
+- Direct PDF processing without intermediate conversions
+- Comprehensive error handling with AI fallbacks
+- **Primary method**: Anthropic Claude API for all extractions
 - **Database stores**: complete extraction history with confidence tracking

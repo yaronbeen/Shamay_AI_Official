@@ -80,24 +80,24 @@ export class BuildingPermitDatabaseClient {
       const values = [
         filename, // 1
         extractionData.document_path || filename, // 2
-        extractionData.permit_number || null, // 3
-        Math.min((extractionData.confidence_scores?.permit_number || 0) * 100, 100), // 4
+        extractionData.permit_number?.value || extractionData.permit_number || null, // 3
+        Math.min((extractionData.permit_number?.confidence || extractionData.confidence_scores?.permit_number || 0) * (extractionData.permit_number?.confidence ? 1 : 100), 100), // 4
         extractionData.extraction_contexts?.permit_number || null, // 5
-        parseDate(extractionData.permit_date), // 6
-        Math.min((extractionData.confidence_scores?.permit_date || 0) * 100, 100), // 7
+        parseDate(extractionData.permit_date?.value || extractionData.permit_date), // 6
+        Math.min((extractionData.permit_date?.confidence || extractionData.confidence_scores?.permit_date || 0) * (extractionData.permit_date?.confidence ? 1 : 100), 100), // 7
         extractionData.extraction_contexts?.permit_date || null, // 8
-        extractionData.permitted_description || null, // 9
-        Math.min((extractionData.confidence_scores?.permitted_description || 0) * 100, 100), // 10
+        extractionData.permitted_description?.value || extractionData.permitted_description || null, // 9
+        Math.min((extractionData.permitted_description?.confidence || extractionData.confidence_scores?.permitted_description || 0) * (extractionData.permitted_description?.confidence ? 1 : 100), 100), // 10
         extractionData.extraction_contexts?.permitted_description || null, // 11
-        parseDate(extractionData.permit_issue_date), // 12
-        Math.min((extractionData.confidence_scores?.permit_issue_date || 0) * 100, 100), // 13
+        parseDate(extractionData.permit_issue_date?.value || extractionData.permit_issue_date), // 12
+        Math.min((extractionData.permit_issue_date?.confidence || extractionData.confidence_scores?.permit_issue_date || 0) * (extractionData.permit_issue_date?.confidence ? 1 : 100), 100), // 13
         extractionData.extraction_contexts?.permit_issue_date || null, // 14
-        extractionData.local_committee_name || null, // 15
-        Math.min((extractionData.confidence_scores?.local_committee_name || 0) * 100, 100), // 16
+        extractionData.local_committee_name?.value || extractionData.local_committee_name || null, // 15
+        Math.min((extractionData.local_committee_name?.confidence || extractionData.confidence_scores?.local_committee_name || 0) * (extractionData.local_committee_name?.confidence ? 1 : 100), 100), // 16
         extractionData.extraction_contexts?.local_committee_name || null, // 17
-        extractionData.extraction_method || 'anthropic_ai', // 18
+        extractionData.extraction_method || extractionData.method || 'anthropic_ai', // 18
         Math.min((extractionData.confidence_scores?.overall || 0) * 100, 100), // 19
-        extractionData.processing_time || 0, // 20
+        extractionData.processing_time || extractionData.processingTime || 0, // 20
         extractionData.raw_text || '', // 21
         extractionData.markdown_path || null // 22
       ];

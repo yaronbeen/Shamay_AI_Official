@@ -133,17 +133,22 @@ ${input}`
         messages: messages
       });
 
+      console.log('Raw API response:', JSON.stringify(message, null, 2));
+      
       const content = message.content[0]?.text || JSON.stringify(message.content[0]);
+      console.log('Extracted content:', content);
       
       // Parse the JSON response
       let extractedData;
       try {
         extractedData = JSON.parse(content);
       } catch (parseError) {
+        console.log('JSON parse error:', parseError.message);
         // Try to extract JSON from response if wrapped in text
         if (typeof content === 'string' && content.includes('{')) {
           const jsonMatch = content.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
+            console.log('Found JSON match:', jsonMatch[0]);
             extractedData = JSON.parse(jsonMatch[0]);
           } else {
             throw new Error('No valid JSON found in response');

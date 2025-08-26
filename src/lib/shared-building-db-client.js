@@ -51,9 +51,9 @@ export class SharedBuildingDatabaseClient {
           building_sub_plots_count, building_sub_plots_count_confidence, building_sub_plots_count_context,
           building_address, building_address_confidence, building_address_context,
           total_sub_plots, total_sub_plots_confidence, total_sub_plots_context,
-          sub_plots, overall_confidence, extraction_notes
+          buildings_info, sub_plots, overall_confidence, extraction_notes
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24
         )
         RETURNING id, processed_at;
       `;
@@ -98,9 +98,10 @@ export class SharedBuildingDatabaseClient {
         extractionData.total_sub_plots || null, // 18
         extractionData.confidence_scores?.total_sub_plots || 0, // 19
         extractionData.extraction_contexts?.total_sub_plots || null, // 20
-        JSON.stringify(extractionData.sub_plots || []), // 21
-        extractionData.confidence_scores?.overall || 0, // 22
-        `Extracted using ${extractionData.extraction_method} with ${extractionData.model_used}` // 23
+        JSON.stringify(extractionData.buildings_info || []), // 21
+        JSON.stringify(extractionData.sub_plots || []), // 22
+        extractionData.confidence_scores?.overall || 0, // 23
+        `Extracted using ${extractionData.extraction_method} with ${extractionData.model_used}` // 24
       ];
 
       const result = await this.client.query(query, values);

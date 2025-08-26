@@ -19,10 +19,11 @@ class SharedBuildingAIExtractor {
 
   /**
    * Extract all fields using Anthropic with structured output
-   * @param {string} markdownText - The converted markdown text
+   * @param {string|Buffer} input - Either markdown text or PDF buffer for vision processing
+   * @param {Object} options - Processing options {useVision: boolean}
    * @returns {Promise<Object>} - Structured extraction results
    */
-  async extractAllFields(markdownText) {
+  async extractAllFields(input, options = {}) {
     const startTime = Date.now();
 
     const systemPrompt = `You are an expert at extracting data from Hebrew shared building order documents (צו רישום בית משותף).
@@ -36,7 +37,8 @@ REQUIRED FIELDS:
 - building_sub_plots_count: Number of sub-plots/units in the building (מספר תתי חלקות במבנה)
 - building_address: Complete address of the building (כתובת המבנה)
 - total_sub_plots: Total number of sub-plots in the project (סה"כ תתי חלקות)
-- sub_plots: Array of sub-plot details including floor, description, area, etc. (פירוט תתי החלקות)
+- buildings_info: Array of building information when multiple buildings exist
+- sub_plots: DETAILED array of ALL individual sub-plot information from the tables (פירוט מלא של כל תתי החלקות)
 
 CONFIDENCE SCORES:
 For each field, provide a confidence score from 0-1 based on text clarity and certainty.
@@ -46,12 +48,16 @@ Hebrew terms to look for:
 - צו רישום, צו רישום בית משותף
 - תאריך, מיום
 - קומות, קומה
-- תת חלקה, תתי חלקות
-- מבנה, בניין
+- תת חלקה, תתי חלקות, מספר תת חלקה
+- מבנה, בניין, מספר מבנה
 - כתובת, רחוב
-- שטח, מ"ר, מטר רבוע
-- דירה, יחידה
-- קרקע, מרתף, עליון
+- שטח, מ"ר, מטר רבוע, שטח במ"ר
+- דירה, יחידה, חנות, סלון, כתחז
+- קרקע, מרתף, עליון, קומה, ראשונה, שניה, שלישית
+- הצמדות, צמודות
+- סימון בתשריט, צבע בתשריט
+- חלקים ברכוש המשותף
+- תיאור הצמדה, תיאור צמודה
 
 Return ONLY the JSON object with this structure:
 {
@@ -61,13 +67,36 @@ Return ONLY the JSON object with this structure:
   "building_sub_plots_count": number,
   "building_address": "full address",
   "total_sub_plots": number,
+  "buildings_info": [
+    {
+      "building_number": "I/II/etc",
+      "address": "building address",
+      "floors": number,
+      "sub_plots_count": number
+    }
+  ],
   "sub_plots": [
     {
       "sub_plot_number": number,
-      "floor": "floor description",
-      "description": "unit description",
+      "building_number": "I/II/etc",
       "area": number,
-      "additional_info": "any additional details"
+      "description": "unit description (דירה/חנות/etc)",
+      "floor": "floor description",
+      "shared_property_parts": "חלקים ברכוש המשותף value",
+      "attachments": [
+        {
+          "description": "תיאור הצמדה",
+          "diagram_symbol": "סימון בתשריט", 
+          "diagram_color": "צבע בתשריט",
+          "area": number
+        }
+      ],
+      "non_attachment_areas": [
+        {
+          "description": "area description",
+          "area": number
+        }
+      ]
     }
   ],
   "confidence_scores": {
@@ -77,32 +106,73 @@ Return ONLY the JSON object with this structure:
     "building_sub_plots_count": 0.0-1.0,
     "building_address": 0.0-1.0,
     "total_sub_plots": 0.0-1.0,
+    "buildings_info": 0.0-1.0,
+    "sub_plots": 0.0-1.0,
     "overall": 0.0-1.0
   },
   "extraction_contexts": {
     "order_issue_date": "context explanation",
-    "building_description": "context explanation",
+    "building_description": "context explanation", 
     "building_floors": "context explanation",
     "building_sub_plots_count": "context explanation",
     "building_address": "context explanation",
-    "total_sub_plots": "context explanation"
+    "total_sub_plots": "context explanation",
+    "buildings_info": "context explanation",
+    "sub_plots": "context explanation with table details"
   }
 }`;
 
-    const userPrompt = `Extract structured data from this Hebrew shared building order document:
+    const userPrompt = `Extract structured data from this Hebrew shared building order document.
 
-${markdownText}`;
+CRITICAL: This document contains detailed TABLES with individual sub-plot information. You MUST extract ALL sub-plots from the tables, not just summary information.
+
+Look for tables with columns like:
+- מספר תת חלקה (sub-plot number)
+- מבנה (building)
+- כניסה (entrance) 
+- קומה (floor)
+- תיאור חלקה (description)
+- שטח במ"ר (area)
+- חלקים ברכוש המשותף (shared property parts)
+- הצמדות (attachments) with סימון, צבע, תיאור, שטח
+
+Extract EVERY ROW from these tables as individual sub_plots entries.
+
+The document should have around 55 individual sub-plot entries across multiple pages.`;
 
     try {
+      let messageContent;
+      
+      if (options.useVision && Buffer.isBuffer(input)) {
+        // Use vision API for PDF processing
+        messageContent = [
+          {
+            type: "text",
+            text: userPrompt
+          },
+          {
+            type: "document",
+            source: {
+              type: "base64",
+              media_type: "application/pdf",
+              data: input.toString('base64')
+            }
+          }
+        ];
+      } else {
+        // Use text-based processing
+        messageContent = userPrompt + (typeof input === 'string' ? `\n\nDocument:\n${input}` : '');
+      }
+
       const message = await this.client.messages.create({
         model: this.model,
-        max_tokens: 4000,
+        max_tokens: 8000, // Increased for detailed table extraction
         temperature: 0,
         system: systemPrompt,
         messages: [
           {
             role: "user",
-            content: userPrompt
+            content: options.useVision ? messageContent : messageContent
           }
         ]
       });
@@ -167,10 +237,19 @@ ${markdownText}`;
           pattern: 'ai_extraction'
         },
         
+        buildings_info: {
+          value: extractedData.buildings_info || [],
+          confidence: (extractedData.confidence_scores?.buildings_info || 0) * 100,
+          context: extractedData.extraction_contexts?.buildings_info || '',
+          pattern: 'ai_extraction',
+          count: extractedData.buildings_info ? extractedData.buildings_info.length : 0
+        },
+        
         sub_plots: {
           value: extractedData.sub_plots || [],
-          confidence: extractedData.sub_plots && extractedData.sub_plots.length > 0 ? 80 : 0,
-          context: extractedData.sub_plots ? `Found ${extractedData.sub_plots.length} sub-plots` : '',
+          confidence: (extractedData.confidence_scores?.sub_plots || 0) * 100,
+          context: extractedData.extraction_contexts?.sub_plots || '',
+          pattern: 'ai_extraction',
           count: extractedData.sub_plots ? extractedData.sub_plots.length : 0
         },
         
