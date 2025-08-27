@@ -42,34 +42,8 @@ async function processLandRegistryDocument(pdfPath, options = {}) {
       console.log('💾 Saving to database...');
       const db = new LandRegistryDatabaseClient();
       
-      // Prepare extraction data for database
-      const dbData = {
-        gush: extractionResults.gush,
-        chelka: extractionResults.chelka,
-        sub_chelka: extractionResults.sub_chelka,
-        apartment_area: extractionResults.apartment_area,
-        attachments: extractionResults.attachments,
-        owners: extractionResults.owners,
-        confidence_scores: {
-          gush: extractionResults.gush?.confidence / 100,
-          chelka: extractionResults.chelka?.confidence / 100,
-          sub_chelka: extractionResults.sub_chelka?.confidence / 100,
-          apartment_area: extractionResults.apartment_area?.confidence / 100,
-          attachments: extractionResults.attachments ? 0.8 : 0,
-          owners: extractionResults.owners?.length > 0 ? 0.8 : 0,
-          overall: extractionResults.overallConfidence / 100
-        },
-        extraction_contexts: {
-          gush: extractionResults.gush?.context,
-          chelka: extractionResults.chelka?.context,
-          sub_chelka: extractionResults.sub_chelka?.context,
-          apartment_area: extractionResults.apartment_area?.context,
-          attachments: 'Extracted from document tables',
-          owners: 'Extracted from ownership section'
-        },
-        processingTime: extractionResults.processingTime,
-        raw_text: extractionResults.rawResponse || ''
-      };
+      // Prepare extraction data for database - pass the raw extracted data
+      const dbData = extractionResults.rawExtractedData || extractionResults;
       
       databaseResult = await db.insertLandRegistryExtract(dbData, path.basename(pdfPath));
       await db.disconnect();

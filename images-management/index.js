@@ -281,6 +281,148 @@ async function organizeImagesByPropertyAssessment(propertyAssessmentId) {
 }
 
 /**
+ * Upload property images with specific Hebrew types
+ * Handles the following image types:
+ * - תמונה חיצונית (External photo)
+ * - סקרין שוט GOVMAP (GOVMAP screenshot)
+ * - סקרין שוט תצ״א (Aerial photo screenshot)
+ * - סקרין שוט תצ״א 2 (Aerial photo screenshot 2)
+ * - תמונות פנימיות (Interior photos)
+ * - סקרין שוט מהצו בית משותף (Shared building order screenshot)
+ * - צילום תשריט מהתב״ע (Zoning plan screenshot)
+ * 
+ * @param {Object} params - Upload parameters
+ * @param {Array} params.images - Array of image objects with file info
+ * @param {string} params.propertyAssessmentId - Property assessment ID to link images to
+ * @param {string} params.userId - User ID performing the upload
+ * @returns {Promise<Object>} - Upload results with detailed breakdown
+ */
+async function uploadPropertyImages(params) {
+  const { images, propertyAssessmentId, userId = 'system' } = params;
+  
+  try {
+    console.log(`📸 Starting property images upload for assessment ID: ${propertyAssessmentId}`);
+    console.log(`📊 Processing ${images.length} images...`);
+    
+    const results = {
+      successful: [],
+      failed: [],
+      total: images.length,
+      byType: {},
+      propertyAssessmentId
+    };
+    
+    // Initialize type counters
+    const validTypes = getImageTypes();
+    validTypes.forEach(type => {
+      results.byType[type] = { successful: 0, failed: 0 };
+    });
+    
+    for (let i = 0; i < images.length; i++) {
+      const imageInfo = images[i];
+      
+      try {
+        // Validate required fields
+        if (!imageInfo.image_type) {
+          throw new Error('Image type is required');
+        }
+        
+        if (!imageInfo.file_path) {
+          throw new Error('File path is required');
+        }
+        
+        if (!imageInfo.filename) {
+          throw new Error('Filename is required');
+        }
+        
+        // Validate image type
+        if (!validTypes.includes(imageInfo.image_type)) {
+          throw new Error(`Invalid image type: ${imageInfo.image_type}. Valid types: ${validTypes.join(', ')}`);
+        }
+        
+        // Prepare image data with property assessment link
+        const imageData = {
+          ...imageInfo,
+          property_assessment_id: propertyAssessmentId,
+          uploaded_by: userId,
+          status: 'active'
+        };
+        
+        // Upload image
+        const result = await uploadImage(imageData, userId);
+        
+        results.successful.push({
+          index: i,
+          id: result.id,
+          filename: imageInfo.filename,
+          image_type: imageInfo.image_type,
+          file_path: imageInfo.file_path,
+          created_at: result.created_at
+        });
+        
+        results.byType[imageInfo.image_type].successful++;
+        
+        console.log(`✅ [${i + 1}/${images.length}] ${imageInfo.image_type}: ${imageInfo.filename}`);
+        
+      } catch (error) {
+        const failureInfo = {
+          index: i,
+          filename: imageInfo.filename || 'Unknown',
+          image_type: imageInfo.image_type || 'Unknown',
+          file_path: imageInfo.file_path || 'Unknown',
+          error: error.message
+        };
+        
+        results.failed.push(failureInfo);
+        
+        if (imageInfo.image_type && validTypes.includes(imageInfo.image_type)) {
+          results.byType[imageInfo.image_type].failed++;
+        }
+        
+        console.error(`❌ [${i + 1}/${images.length}] Failed: ${imageInfo.filename || 'Unknown'} - ${error.message}`);
+      }
+    }
+    
+    // Generate summary
+    const summary = {
+      totalSuccessful: results.successful.length,
+      totalFailed: results.failed.length,
+      successRate: ((results.successful.length / results.total) * 100).toFixed(1) + '%'
+    };
+    
+    console.log(`\n📊 Upload Summary for Property Assessment ${propertyAssessmentId}:`);
+    console.log(`✅ Successful: ${summary.totalSuccessful}/${results.total} (${summary.successRate})`);
+    console.log(`❌ Failed: ${summary.totalFailed}/${results.total}`);
+    
+    // Log breakdown by type
+    console.log(`\n📋 Breakdown by Image Type:`);
+    validTypes.forEach(type => {
+      const typeStats = results.byType[type];
+      const typeTotal = typeStats.successful + typeStats.failed;
+      if (typeTotal > 0) {
+        console.log(`  ${type}: ${typeStats.successful}/${typeTotal} successful`);
+      }
+    });
+    
+    if (results.failed.length > 0) {
+      console.log(`\n⚠️ Failed uploads:`);
+      results.failed.forEach((failure, idx) => {
+        console.log(`  ${idx + 1}. ${failure.filename} (${failure.image_type}): ${failure.error}`);
+      });
+    }
+    
+    return {
+      ...results,
+      summary
+    };
+    
+  } catch (error) {
+    console.error('❌ Property images upload failed:', error.message);
+    throw error;
+  }
+}
+
+/**
  * Bulk upload images
  * @param {Array} imagesData - Array of image data objects
  * @param {string} userId - User uploading the images
@@ -341,6 +483,7 @@ export {
   getImageTypes,
   organizeImagesByPropertyAssessment,
   bulkUploadImages,
+  uploadPropertyImages,
   
   // Database client for advanced usage
   ImagesDatabaseClient

@@ -69,7 +69,7 @@ export class LandRegistryDatabaseClient {
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
           $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38,
-          $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52
+          $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55
         )
         RETURNING id, created_at;
       `;
@@ -144,21 +144,15 @@ export class LandRegistryDatabaseClient {
         extractionData.confidence_scores?.overall || 0, // 50
         extractionData.extraction_method || 'anthropic_ai', // 51
         extractionData.model_used || 'claude-opus-4-1-20250805', // 52
-        extractionData.text_length || 0 // 53
+        extractionData.text_length || 0, // 53
+        // Add raw_text and raw_response if they fit within reasonable limits
+        (extractionData.raw_text || '').length > 50000 ? 
+          (extractionData.raw_text || '').substring(0, 50000) : 
+          (extractionData.raw_text || ''), // 54
+        (extractionData.raw_response || '').length > 50000 ? 
+          (extractionData.raw_response || '').substring(0, 50000) : 
+          (extractionData.raw_response || '') // 55
       ];
-
-      // Add raw_text and raw_response if they fit within reasonable limits
-      const rawText = extractionData.raw_text || '';
-      const rawResponse = extractionData.raw_response || '';
-      
-      // Add the final values
-      values.push(rawText.length > 50000 ? rawText.substring(0, 50000) : rawText); // 54
-      values.push(rawResponse.length > 50000 ? rawResponse.substring(0, 50000) : rawResponse); // 55
-      
-      // Fix the values array length to match query parameters
-      while (values.length < 52) {
-        values.push(null);
-      }
 
       const result = await this.client.query(query, values);
       const insertedRow = result.rows[0];

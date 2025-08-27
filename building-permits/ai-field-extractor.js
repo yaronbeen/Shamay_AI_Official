@@ -231,8 +231,8 @@ ${input}`
         processingTime: Date.now() - startTime,
         method: 'anthropic_claude_opus',
         model: this.model,
-        tokensUsed: message.usage.total_tokens,
-        cost: this.estimateCost(message.usage.total_tokens),
+        tokensUsed: (message.usage?.input_tokens || 0) + (message.usage?.output_tokens || 0),
+        cost: this.estimateCost(message.usage?.input_tokens || 0, message.usage?.output_tokens || 0),
         rawResponse: content
       };
 
@@ -302,15 +302,12 @@ Return JSON format:
 
   /**
    * Estimate API cost based on token usage
-   * @param {number} tokens - Total tokens used
+   * @param {number} inputTokens - Input tokens used
+   * @param {number} outputTokens - Output tokens used
    * @returns {number} - Estimated cost in USD
    */
-  estimateCost(tokens) {
+  estimateCost(inputTokens = 0, outputTokens = 0) {
     // Claude Opus pricing: $15 per 1M input tokens, $75 per 1M output tokens
-    // Rough estimate assuming 70% input, 30% output
-    const inputTokens = Math.floor(tokens * 0.7);
-    const outputTokens = Math.floor(tokens * 0.3);
-    
     return ((inputTokens * 15) + (outputTokens * 75)) / 1000000;
   }
 }

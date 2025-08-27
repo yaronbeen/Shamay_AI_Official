@@ -329,7 +329,8 @@ ${input}`
         model: this.model,
         tokensUsed: message.usage.total_tokens,
         cost: this.estimateCost(message.usage.total_tokens),
-        rawResponse: content
+        rawResponse: content,
+        rawExtractedData: extractedData
       };
 
       return result;
