@@ -4,7 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Shamay SaaS - A comprehensive document processing system for Hebrew real estate documents with AI-powered data extraction using direct PDF and image analysis.
+Shamay SaaS - A comprehensive document processing system for Hebrew real estate documents with AI-powered data extraction using direct PDF and image analysis. The system processes various Hebrew real estate document types through specialized modules, each handling specific document categories with dedicated AI extractors and database clients.
+
+## Development Philosophy
+
+**Claude Code Guidelines:**
+- **Plan First:** Always analyze the current codebase structure before making changes
+- **Create Deliberately:** Follow existing architectural patterns and conventions  
+- **Validate Results:** Test functionality before considering tasks complete
+- **Be Patient:** Don't rush to create new files - understand what exists first
+- **Ask Questions:** When uncertain about requirements, clarify before implementing
 
 ## Common Development Commands
 
@@ -20,26 +29,46 @@ Shamay SaaS - A comprehensive document processing system for Hebrew real estate 
 
 ```
 shamay-slow/
-├── src/
-│   ├── lib/              # Core libraries
-│   │   ├── pdf-to-markdown.js      # PDF processing and conversion
-│   │   ├── field-extractors.js    # Specialized field extraction
-│   │   └── openai_client.js       # AI integration
-│   ├── utils/            # Utility functions
-│   └── examples/         # Usage examples and demos
-├── tests/               # Test files and reliability checks
-├── docs/                # Documentation
-├── output/              # Generated markdown files (authoritative source)
-├── database/            # PostgreSQL schema and setup
+├── building-permits/              # Building permit documents (היתר בנייה מילולי)
+│   ├── ai-field-extractor.js     # AI extraction for building permits
+│   ├── database-client.js        # PostgreSQL operations
+│   ├── field-parser.js           # Legacy regex patterns
+│   └── index.js                  # Main module orchestration
+├── land-registry-management/     # Land registry documents (נסח טאבו)
+│   ├── ai-field-extractor.js     # AI extraction for land registry
+│   ├── database-client.js        # PostgreSQL operations
+│   └── index.js                  # Main module orchestration
+├── shared-building-order/        # Shared building orders (צו רישום בית משותף)
+│   ├── ai-field-extractor.js     # AI extraction for shared buildings
+│   ├── field-parser.js           # Legacy regex patterns
+│   └── index.js                  # Main module orchestration
+├── comparable-data-management/   # Property comparable data
+│   ├── database-client.js        # PostgreSQL operations
+│   └── index.js                  # CSV import and management
+├── property-assessment/          # Property assessments (שומות שווי)
+│   ├── database-client.js        # PostgreSQL operations
+│   ├── index.js                  # Main module orchestration
+│   └── validator.js              # Input validation
+├── images-management/            # Property images and documents
+│   ├── database-client.js        # PostgreSQL operations
+│   └── index.js                  # Image management
+├── garmushka-management/         # Garmushka measurement documents
+│   ├── database-client.js        # PostgreSQL operations
+│   └── index.js                  # Main module orchestration
+├── database/                     # PostgreSQL schema and setup
 │   ├── create_land_registry_table.sql
-│   └── add_owner_fields.sql
-├── public/              # Web application frontend
-│   ├── index.html       # Document upload interface
-│   └── results.html     # Extraction results display
-├── uploads/             # Temporary file uploads
-├── temp/                # Temporary processing files
-├── server.js            # Express web application server
-└── node_modules/        # Dependencies
+│   ├── create_building_permits_table.sql
+│   ├── create_shared_building_order_table.sql
+│   ├── create_comparable_data_table.sql
+│   ├── create_property_assessment_table.sql
+│   ├── create_images_table.sql
+│   ├── create_garmushka_table.sql
+│   └── comprehensive_schema.sql
+├── output/                       # Generated extraction results
+├── docs/                         # Documentation
+├── test-building-permit-extraction.js  # Working test script
+├── package.json                  # Project configuration
+└── CLAUDE.md                     # This documentation file
 ```
 
 ## Core Architecture
@@ -53,20 +82,28 @@ shamay-slow/
 
 ### Key Components
 
-#### Field Extractors (`src/lib/field-extractors.js`)
-- `extractGush()` - Block number extraction
-- `extractChelka()` - Plot number extraction  
-- `extractSubChelka()` - Sub-plot extraction
-- `extractApartmentArea()` - Apartment area parsing
-- `extractAttachments()` - Parking, balcony detection
-- `extractOwners()` - Property owners with names, IDs, and ownership shares
-- `extractAllFields()` - Comprehensive analysis with confidence scores
+#### Modular Architecture
+Each document type has a dedicated management module with consistent structure:
+- **AI Field Extractor** - Anthropic Claude-based extraction with Hebrew expertise
+- **Database Client** - PostgreSQL operations with confidence tracking
+- **Index Module** - Main orchestration and business logic
+- **Optional Components** - Validators, parsers, or specialized utilities
 
-#### PDF Processing 
-- Direct PDF processing with Anthropic Claude API
+#### Document Types Supported
+- **Building Permits** (היתר בנייה מילולי) - Construction permission documents
+- **Land Registry** (נסח טאבו) - Property ownership and cadastral information  
+- **Shared Building Orders** (צו רישום בית משותף) - Condominium registration documents
+- **Property Assessments** (שומות שווי) - User-input property valuation data
+- **Comparable Data** - Property sales and market data from CSV imports
+- **Images** - Property photos and document images with metadata
+- **Garmushka** - Measurement and survey documents
+
+#### AI Processing Features
+- Direct PDF processing with Anthropic Claude Opus
 - Vision capabilities for scanned documents
-- Hebrew text extraction with AI
+- Hebrew text extraction with RTL support
 - Structured JSON output with confidence scores
+- Cost tracking and token usage monitoring
 
 ## Hebrew Text Handling
 
