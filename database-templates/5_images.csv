@@ -1,0 +1,4 @@
+id,created_at,updated_at,image_type,title,filename,file_path,file_size,mime_type,width,height,property_assessment_id,building_permit_id,shared_building_order_id,land_registry_id,captured_date,notes,tags,uploaded_by,status
+1,2024-01-15 13:00:00,2024-01-15 13:00:00,תמונה חיצונית,חזית הבניין,building_front.jpg,/uploads/images/building_front.jpg,2048000,image/jpeg,1920,1080,1,,,2024-01-15,תמונה צולמה בשעות הבוקר,"[""חזית"", ""בניין"", ""רחוב""]",צלם נכסים,active
+2,2024-01-15 13:15:00,2024-01-15 13:15:00,סקרין שוט GOVMAP,מפה קדסטרלית,govmap_screenshot.png,/uploads/images/govmap_screenshot.png,1024000,image/png,1600,900,1,,,2024-01-15,צילום מסך של מפת GOVMAP,"[""מפה"", ""קדסטרלי"", ""govmap""]",מעריך נכסים,active
+3,2024-01-15 13:30:00,2024-01-15 13:30:00,תמונות פנימיות,מטבח,kitchen_interior.jpg,/uploads/images/kitchen_interior.jpg,1500000,image/jpeg,1280,720,1,,,2024-01-15,מטבח אחרי שיפוץ,"[""מטבח"", ""פנים"", ""שיפוץ""]",צלם נכסים,active
