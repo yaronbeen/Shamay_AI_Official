@@ -1,38 +1,40 @@
 {
-  "name": "shamay-saas",
+  "name": "shamay-slow",
   "version": "1.0.0",
-  "description": "SaaS solution for Hebrew document processing with AI-powered data extraction",
-  "main": "index.js",
+  "description": "SHAMAY.AI Property Valuation Platform",
   "type": "module",
+  "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "webapp": "node server.js",
-    "test": "node tests/test-with-claude-pdf.js",
-    "example": "node src/examples/example-usage.js"
-  },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^0.60.0",
-    "cors": "^2.8.5",
-    "csv-parser": "^3.2.0",
-    "dotenv": "^17.2.1",
-    "express": "^5.1.0",
-    "form-data": "^4.0.4",
-    "multer": "^2.0.2",
-    "node-fetch": "^3.3.2",
-    "openai": "^4.0.0",
-    "pdf-parse": "^1.1.1",
-    "pdf-poppler": "^0.2.1",
-    "pg": "^8.16.3",
-    "sharp": "^0.33.0",
-    "tesseract.js": "^5.0.4",
-    "xlsx": "^0.18.5"
+    "dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "start": "cd frontend && npm start",
+    "start:next": "cd frontend && npm run dev",
+    "start-all": "./start-all.sh",
+    "start-fe": "./start-frontend.sh",
+    "start-be": "echo 'Backend services are integrated into frontend'",
+    "start-db": "echo 'Database setup required - run: npm run setup-db'",
+    "start-full": "./start-all.sh",
+    "dev-quick": "./dev-quick.sh",
+    "build-fe": "cd frontend && npm run build",
+    "install-all": "npm install && cd frontend && npm install",
+    "clean": "./clean.sh",
+    "fresh-start": "npm run clean && npm run install-all && npm run setup-db && npm run start-all",
+    "setup-db": "./setup-database-complete.sh",
+    "setup-db-api": "curl -X POST http://localhost:3000/api/setup-sample-data"
   },
   "keywords": [
-    "pdf",
-    "markdown",
-    "hebrew",
-    "ocr"
+    "property",
+    "valuation",
+    "real-estate",
+    "ai"
   ],
-  "author": "Shamay AI",
-  "license": "MIT"
+  "author": "SHAMAY.AI",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.65.0",
+    "dotenv": "^17.2.3",
+    "express": "^4.18.2",
+    "multer": "^1.4.5-lts.1",
+    "pg": "^8.16.3"
+  }
 }

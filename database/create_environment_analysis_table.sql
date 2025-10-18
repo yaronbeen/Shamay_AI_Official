@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS environment_analyses (
   
   -- Technical Details
   analysis_method VARCHAR(100) DEFAULT 'anthropic_claude_environment',
-  model_used VARCHAR(100) DEFAULT 'claude-opus-4-1-20250805',
+  model_used VARCHAR(100) DEFAULT 'claude-3-5-sonnet-20241022',
   raw_response TEXT, -- Store raw AI response (truncated if needed)
   
   -- Timestamps

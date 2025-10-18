@@ -1,0 +1,76 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { sessionStore } from '@/lib/session-store-global'
+import { unlink } from 'fs/promises'
+import { join } from 'path'
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { sessionId: string; uploadId: string } }
+) {
+  try {
+    const { sessionId, uploadId } = params
+    
+    console.log(`🗑️ Deleting upload ${uploadId} from session ${sessionId}`)
+    
+    // Get the current session
+    const session = sessionStore.getSession(sessionId)
+    if (!session) {
+      return NextResponse.json({ error: 'Session not found' }, { status: 404 })
+    }
+    
+    // Find the upload to delete
+    const uploads = session.uploads || []
+    const uploadIndex = uploads.findIndex((upload: any) => upload.id === uploadId)
+    
+    if (uploadIndex === -1) {
+      return NextResponse.json({ error: 'Upload not found' }, { status: 404 })
+    }
+    
+    const uploadToDelete = uploads[uploadIndex]
+    console.log(`📁 Found upload to delete:`, uploadToDelete)
+    
+    // Remove the upload from the session first
+    const updatedUploads = uploads.filter((_: any, index: number) => index !== uploadIndex)
+    
+    // Update the session
+    const updatedSession = sessionStore.updateSession(sessionId, {
+      uploads: updatedUploads
+    })
+    
+    // Delete the physical file from filesystem after session update
+    // Use setTimeout to delay physical deletion to avoid race conditions
+    setTimeout(async () => {
+      try {
+        if (uploadToDelete.path) {
+          // Use the stored path from the upload entry
+          const filePath = uploadToDelete.path
+          await unlink(filePath)
+          console.log(`✅ Physical file deleted: ${filePath}`)
+        } else {
+          // Fallback: construct path if stored path is not available
+          const filePath = join(process.cwd(), 'uploads', sessionId, uploadToDelete.fileName)
+          await unlink(filePath)
+          console.log(`✅ Physical file deleted (fallback): ${filePath}`)
+        }
+      } catch (error) {
+        console.warn(`⚠️ Could not delete physical file:`, error)
+      }
+    }, 1000) // 1 second delay
+    
+    console.log(`✅ Upload ${uploadId} deleted from session`)
+    console.log(`📊 Remaining uploads: ${updatedUploads.length}`)
+    
+    return NextResponse.json({
+      success: true,
+      message: 'Upload deleted successfully',
+      remainingUploads: updatedUploads.length
+    })
+    
+  } catch (error) {
+    console.error('❌ Error deleting upload:', error)
+    return NextResponse.json({
+      error: 'Failed to delete upload',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 })
+  }
+}

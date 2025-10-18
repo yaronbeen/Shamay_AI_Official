@@ -6,6 +6,7 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+.next/
 
 # Runtime data
 pids
@@ -46,6 +47,11 @@ temp/
 .Trashes
 ehthumbs.db
 Thumbs.db
+frontend/.next/
+backend/node_modules/
+frontend/uploads/
+backend/uploads/
+backend/temp/
 
 # Build outputs
 dist/
