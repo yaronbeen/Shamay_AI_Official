@@ -1,0 +1,723 @@
+'use client'
+
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+
+interface Step1InitialDataProps {
+  data: any
+  updateData: (updates: Partial<any>) => void
+  onValidationChange: (isValid: boolean) => void
+}
+
+export function Step1InitialData({ data, updateData, onValidationChange }: Step1InitialDataProps) {
+  const [formData, setFormData] = useState({
+    // סוג שומה ומועד כתיבתה
+    valuationType: data.valuationType || '',
+    valuationDate: data.valuationDate || new Date().toISOString().split('T')[0],
+    
+    // זהות מזמין השומה והקשר שלו לנכס
+    clientName: data.clientName || '',
+    clientId: data.clientId || '',
+    clientPhone: data.clientPhone || '',
+    clientEmail: data.clientEmail || '',
+    clientRelation: data.clientRelation || '',
+    
+    // מטרת השומה
+    valuationPurpose: data.valuationPurpose || '',
+    
+    // המועד הקובע לשומה
+    valuationEffectiveDate: data.valuationEffectiveDate || new Date().toISOString().split('T')[0],
+    
+    // מועד ביקור הנכס וזהות המבקר
+    visitDate: data.visitDate || new Date().toISOString().split('T')[0],
+    visitorName: data.visitorName || '',
+    visitorId: data.visitorId || '',
+    
+    // זיהוי הנכס
+    street: data.street || '',
+    buildingNumber: data.buildingNumber || '',
+    neighborhood: data.neighborhood || '',
+    city: data.city || '',
+    block: data.block || '',
+    parcel: data.parcel || '',
+    subParcel: data.subParcel || '',
+    
+    // תיאור הנכס והסביבה (basic info only - detailed analysis will be done by AI in Step 3)
+    rooms: data.rooms || 0,
+    floor: data.floor || 0,
+    area: data.area || 0,
+    
+    // פרטי שמאי
+    shamayName: data.shamayName || '',
+    shamaySerialNumber: data.shamaySerialNumber || '',
+    shamayLicense: data.shamayLicense || '',
+    shamayPhone: data.shamayPhone || '',
+    shamayEmail: data.shamayEmail || '',
+    
+    // חתימה
+    signature: data.signaturePreview || null
+  })
+
+  const [signatureUploading, setSignatureUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const validateForm = useCallback(() => {
+    const isValid = formData.valuationType.trim() !== '' && 
+                   formData.clientName.trim() !== '' && 
+                   formData.clientId.trim() !== '' && 
+                   formData.valuationPurpose.trim() !== '' && 
+                   formData.visitorName.trim() !== '' && 
+                   formData.street.trim() !== '' && 
+                   formData.buildingNumber.trim() !== '' && 
+                   formData.neighborhood.trim() !== '' && 
+                   formData.city.trim() !== '' && 
+                   formData.rooms > 0 && 
+                   formData.floor > 0 && 
+                   formData.area > 0 && 
+                   formData.shamayName.trim() !== '' && 
+                   formData.shamaySerialNumber.trim() !== '' &&
+                   formData.signature !== null
+    
+    console.log('Validation check:', { isValid, formData })
+    onValidationChange(isValid)
+    return isValid
+  }, [formData, onValidationChange])
+
+  // Validate only when formData changes, not on every render
+  useEffect(() => {
+    validateForm()
+  }, [validateForm])
+
+  const updateField = useCallback((field: string, value: any) => {
+    console.log(`🔄 Step1 - Updating field: ${field} = ${value}`)
+    setFormData(prev => {
+      const newData = { ...prev, [field]: value }
+      updateData(newData)
+      console.log(`✅ Step1 - Updated data:`, newData)
+      return newData
+    })
+  }, [updateData])
+
+  const handleVisitDateChange = useCallback((date: string) => {
+    setFormData(prev => {
+      const newData = { ...prev, visitDate: date, valuationEffectiveDate: date }
+      updateData(newData)
+      return newData
+    })
+  }, [updateData])
+
+  const handleSignatureUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('אנא בחר קובץ תמונה בלבד')
+      return
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('גודל הקובץ חייב להיות קטן מ-5MB')
+      return
+    }
+
+    setSignatureUploading(true)
+
+    try {
+      // Convert to base64
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const base64 = e.target?.result as string
+        // Save as signaturePreview to match DocumentContent component
+        updateField('signaturePreview', base64)
+        setFormData(prev => ({ ...prev, signature: base64 }))
+        setSignatureUploading(false)
+      }
+      reader.readAsDataURL(file)
+    } catch (error) {
+      console.error('Error uploading signature:', error)
+      alert('שגיאה בהעלאת החתימה')
+      setSignatureUploading(false)
+    }
+  }
+
+  const removeSignature = () => {
+    updateField('signaturePreview', null)
+    setFormData(prev => ({ ...prev, signature: null }))
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto p-6">
+      <div className="mb-8">
+        <h2 className="text-2xl font-bold text-gray-900 mb-2 text-right">
+          פרטי הנכס והזמנת השומה
+        </h2>
+        <p className="text-gray-600 text-right">
+          הזן את כל הפרטים הנדרשים לשומה מקיפה
+        </p>
+      </div>
+
+      <div className="space-y-8">
+        {/* סוג שומה ומועד כתיבתה */}
+        <div className="bg-white p-6 rounded-lg border border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">סוג שומה ומועד כתיבתה</h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                סוג השומה *
+              </label>
+              <select
+                name="valuationType"
+                value={formData.valuationType}
+                onChange={(e) => updateField('valuationType', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                dir="rtl"
+              >
+                <option value="">בחר סוג שומה</option>
+                <option value="market">שווי שוק</option>
+                <option value="investment">שווי השקעה</option>
+                <option value="insurance">שווי ביטוח</option>
+                <option value="tax">שווי מס</option>
+                <option value="expropriation">שווי הפקעה</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                מועד כתיבת השומה *
+              </label>
+              <input
+                type="date"
+                name="valuationDate"
+                autoComplete="off"
+                value={formData.valuationDate}
+                onChange={(e) => updateField('valuationDate', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* זהות מזמין השומה והקשר שלו לנכס */}
+        <div className="bg-white p-6 rounded-lg border border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">זהות מזמין השומה והקשר שלו לנכס</h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                שם מלא *
+              </label>
+              <input
+                type="text"
+                name="clientName"
+                autoComplete="name"
+                value={formData.clientName}
+                onChange={(e) => updateField('clientName', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="הזן שם מלא"
+                dir="rtl"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                תעודת זהות *
+              </label>
+              <input
+                type="text"
+                name="clientId"
+                autoComplete="off"
+                value={formData.clientId}
+                onChange={(e) => updateField('clientId', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="הזן תעודת זהות"
+                dir="rtl"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                טלפון
+              </label>
+              <input
+                type="tel"
+                name="clientPhone"
+                autoComplete="tel"
+                value={formData.clientPhone}
+                onChange={(e) => updateField('clientPhone', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="הזן מספר טלפון"
+                dir="rtl"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                אימייל
+              </label>
+              <input
+                type="email"
+                name="clientEmail"
+                autoComplete="email"
+                value={formData.clientEmail}
+                onChange={(e) => updateField('clientEmail', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="הזן כתובת אימייל"
+                dir="rtl"
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                הקשר לנכס
+              </label>
+              <select
+                name="clientRelation"
+                value={formData.clientRelation}
+                onChange={(e) => updateField('clientRelation', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                dir="rtl"
+              >
+                <option value="">בחר הקשר לנכס</option>
+                <option value="owner">בעלים</option>
+                <option value="buyer">רוכש פוטנציאלי</option>
+                <option value="seller">מוכר</option>
+                <option value="bank">בנק</option>
+                <option value="court">בית משפט</option>
+                <option value="other">אחר</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* מטרת השומה */}
+        <div className="bg-white p-6 rounded-lg border border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">מטרת השומה</h3>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+              מטרת השומה *
+            </label>
+            <textarea
+              name="valuationPurpose"
+              value={formData.valuationPurpose}
+              onChange={(e) => updateField('valuationPurpose', e.target.value)}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="תאר את מטרת השומה"
+              rows={3}
+              dir="rtl"
+            />
+          </div>
+        </div>
+
+        {/* המועד הקובע לשומה */}
+        <div className="bg-white p-6 rounded-lg border border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">המועד הקובע לשומה</h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                מועד ביקור בנכס *
+              </label>
+              <input
+                type="date"
+                name="visitDate"
+                autoComplete="off"
+                value={formData.visitDate}
+                onChange={(e) => handleVisitDateChange(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                המועד הקובע לשומה *
+              </label>
+              <input
+                type="date"
+                name="valuationEffectiveDate"
+                autoComplete="off"
+                value={formData.valuationEffectiveDate}
+                onChange={(e) => updateField('valuationEffectiveDate', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* מועד ביקור הנכס וזהות המבקר */}
+        <div className="bg-white p-6 rounded-lg border border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">מועד ביקור הנכס וזהות המבקר</h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                שם המבקר *
+              </label>
+              <input
+                type="text"
+                name="visitorName"
+                autoComplete="name"
+                value={formData.visitorName}
+                onChange={(e) => updateField('visitorName', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="הזן שם המבקר"
+                dir="rtl"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                תעודת זהות המבקר
+              </label>
+              <input
+                type="text"
+                name="visitorId"
+                autoComplete="off"
+                value={formData.visitorId}
+                onChange={(e) => updateField('visitorId', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="הזן תעודת זהות"
+                dir="rtl"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* זיהוי הנכס */}
+        <div className="bg-white p-6 rounded-lg border border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">זיהוי הנכס</h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                רחוב *
+              </label>
+              <input
+                type="text"
+                name="street"
+                autoComplete="address-line1"
+                value={formData.street}
+                onChange={(e) => updateField('street', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="הזן שם רחוב"
+                dir="rtl"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                מספר בניין *
+              </label>
+              <input
+                type="text"
+                name="buildingNumber"
+                autoComplete="address-line2"
+                value={formData.buildingNumber}
+                onChange={(e) => updateField('buildingNumber', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="הזן מספר בניין"
+                dir="rtl"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                שכונה (אופציונלי)
+              </label>
+              <input
+                type="text"
+                name="neighborhood"
+                autoComplete="address-level2"
+                value={formData.neighborhood}
+                onChange={(e) => updateField('neighborhood', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="הזן שם שכונה (אופציונלי)"
+                dir="rtl"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                עיר *
+              </label>
+              <input
+                type="text"
+                name="city"
+                autoComplete="address-level1"
+                value={formData.city}
+                onChange={(e) => updateField('city', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="הזן שם עיר"
+                dir="rtl"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                גוש
+              </label>
+              <input
+                type="text"
+                name="block"
+                autoComplete="off"
+                value={formData.block}
+                onChange={(e) => updateField('block', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="הזן מספר גוש"
+                dir="rtl"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                חלקה
+              </label>
+              <input
+                type="text"
+                name="parcel"
+                autoComplete="off"
+                value={formData.parcel}
+                onChange={(e) => updateField('parcel', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="הזן מספר חלקה"
+                dir="rtl"
+              />
+          </div>
+          
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                תת-חלקה
+              </label>
+              <input
+                type="text"
+                name="subParcel"
+                autoComplete="off"
+                value={formData.subParcel}
+                onChange={(e) => updateField('subParcel', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="הזן מספר תת-חלקה"
+                dir="rtl"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* תיאור הנכס והסביבה */}
+        <div className="bg-white p-6 rounded-lg border border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">תיאור הנכס והסביבה</h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                מספר חדרים *
+              </label>
+              <input
+                type="number"
+                name="rooms"
+                autoComplete="off"
+                min="1"
+                max="99"
+                value={formData.rooms}
+                onChange={(e) => updateField('rooms', parseInt(e.target.value) || 0)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="הזן מספר חדרים"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                קומה *
+              </label>
+              <input
+                type="number"
+                name="floor"
+                autoComplete="off"
+                min="1"
+                max="99"
+                value={formData.floor}
+                onChange={(e) => updateField('floor', parseInt(e.target.value) || 0)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="הזן מספר קומה"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                שטח (מ"ר) *
+              </label>
+              <input
+                type="number"
+                name="area"
+                autoComplete="off"
+                min="1"
+                step="0.1"
+                value={formData.area}
+                onChange={(e) => updateField('area', parseFloat(e.target.value) || 0)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="הזן שטח"
+              />
+          </div>
+          </div>
+        </div>
+
+        {/* פרטי שמאי */}
+        <div className="bg-white p-6 rounded-lg border border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">פרטי שמאי</h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                שם השמאי *
+              </label>
+              <input
+                type="text"
+                name="shamayName"
+                autoComplete="name"
+                value={formData.shamayName}
+                onChange={(e) => updateField('shamayName', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="הזן שם מלא של השמאי"
+                dir="rtl"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                מספר רישיון שמאי *
+              </label>
+              <input
+                type="text"
+                name="shamaySerialNumber"
+                autoComplete="off"
+                value={formData.shamaySerialNumber}
+                onChange={(e) => updateField('shamaySerialNumber', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="הזן מספר רישיון"
+                dir="rtl"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                מספר רישיון מקצועי
+              </label>
+              <input
+                type="text"
+                name="shamayLicense"
+                autoComplete="off"
+                value={formData.shamayLicense}
+                onChange={(e) => updateField('shamayLicense', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="הזן מספר רישיון מקצועי"
+                dir="rtl"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                טלפון שמאי
+              </label>
+              <input
+                type="tel"
+                name="shamayPhone"
+                autoComplete="tel"
+                value={formData.shamayPhone}
+                onChange={(e) => updateField('shamayPhone', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="הזן מספר טלפון"
+                dir="rtl"
+              />
+            </div>
+            
+              <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                אימייל שמאי
+                </label>
+              <input
+                type="email"
+                name="shamayEmail"
+                autoComplete="email"
+                value={formData.shamayEmail}
+                onChange={(e) => updateField('shamayEmail', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="הזן כתובת אימייל"
+                dir="rtl"
+              />
+              </div>
+          </div>
+        </div>
+
+        {/* חתימת השמאי */}
+        <div className="bg-white p-6 rounded-lg border border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">חתימת השמאי *</h3>
+          
+          <div className="space-y-4">
+            {formData.signature ? (
+              <div className="text-center">
+                <div className="mb-4">
+                  <img 
+                    src={formData.signature} 
+                    alt="חתימת שמאי" 
+                    className="max-w-xs mx-auto border border-gray-300 rounded-lg shadow-sm"
+                  />
+                </div>
+                <div className="flex gap-2 justify-center">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  >
+                    החלף חתימה
+                  </button>
+                  <button
+                    type="button"
+                    onClick={removeSignature}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                  >
+                    הסר חתימה
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center">
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-8">
+                  <div className="text-gray-500 mb-4">
+                    <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                      <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  </div>
+                  <p className="text-gray-600 mb-4">העלה תמונת חתימה</p>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={signatureUploading}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {signatureUploading ? 'מעלה...' : 'בחר קובץ'}
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleSignatureUpload}
+              className="hidden"
+            />
+            
+            <p className="text-xs text-gray-500 text-center">
+              פורמטים נתמכים: JPG, PNG, GIF. גודל מקסימלי: 5MB
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
