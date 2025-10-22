@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sessionStore } from '../../../../../lib/session-store-global'
+import { ShumaDB } from '../../../../../lib/shumadb.js'
 import { spawn } from 'child_process'
 import { join } from 'path'
 import fs from 'fs'
@@ -11,26 +11,27 @@ export async function POST(
   try {
     console.log('🔍 Frontend: Analyzing building permit documents for session:', params.sessionId)
     
-    // Get session data to find uploaded documents
-    const session = sessionStore.getSession(params.sessionId)
-    if (!session) {
+    // Get session data from database
+    const sessionData = await ShumaDB.loadShumaForWizard(params.sessionId)
+    if (!sessionData.success || !sessionData.valuationData) {
       return NextResponse.json({ 
         success: false,
-        error: 'Session not found' 
+        error: 'Session not found in database' 
       }, { status: 404 })
     }
 
-    const data = session.data
+    const data = sessionData.valuationData
     
     // Debug: Log the actual session data structure
     console.log('🔍 Session data structure:', JSON.stringify(data, null, 2))
     console.log('🔍 Available data keys:', Object.keys(data))
     
-    // For now, always use the test document to verify backend integration
-    const testPdfPath = join(process.cwd(), '..', 'integrations', 'test_documents', 'building_permit_1.PDF')
+    // Find uploaded building permit documents
+    const uploads = data.uploads || []
+    const buildingPermitUploads = uploads.filter((upload: any) => upload.type === 'building_permit' || upload.type === 'permit')
     
-    if (!fs.existsSync(testPdfPath)) {
-      console.log('❌ Test PDF not found, using mock data')
+    if (buildingPermitUploads.length === 0) {
+      console.log('❌ No building permit documents found, using mock data')
       return NextResponse.json({
         success: true,
         building_year: '2015',
@@ -43,8 +44,24 @@ export async function POST(
       })
     }
     
-    const pdfPath = testPdfPath
-    console.log('🔍 Using test PDF:', pdfPath)
+    // Use the first building permit document
+    const upload = buildingPermitUploads[0]
+    const pdfPath = upload.path || upload.extractedData?.filePath
+    
+    if (!pdfPath || !fs.existsSync(pdfPath)) {
+      console.log('❌ Building permit PDF not found at path:', pdfPath)
+      return NextResponse.json({
+        success: false,
+        error: 'Building permit PDF file not found',
+        building_year: 'לא נמצא',
+        permitted_description: 'לא נמצא',
+        permitted_use: 'לא נמצא',
+        built_area: 'לא נמצא',
+        building_description: 'לא נמצא'
+      }, { status: 404 })
+    }
+    
+    console.log('🔍 Using uploaded PDF:', pdfPath)
     
     // Call the real backend service
     const projectRoot = join(process.cwd(), '..')

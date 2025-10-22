@@ -153,6 +153,24 @@ export interface ValuationData {
   // Uploads
   uploads?: any[]
   
+  // GIS Analysis Data
+  gisAnalysis?: {
+    coordinates: {
+      x: number
+      y: number
+      lat: number
+      lng: number
+    }
+    govmapUrls: {
+      cropMode0: string
+      cropMode1: string
+    }
+    extractedAt: string
+    status: string
+    confidence?: number
+    address?: string
+  }
+  
   // GIS Screenshots (base64 data)
   gisScreenshots?: {
     cropMode0?: string // base64 data
@@ -173,6 +191,7 @@ export interface ValuationData {
     unitMode: 'metric' | 'imperial'
     isCalibrated: boolean
     fileName: string
+    pngExport?: string // Base64 PNG export of the measurements
   }
 }
 

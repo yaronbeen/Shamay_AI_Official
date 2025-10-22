@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sessionStore } from '../../../../../lib/session-store-global'
+import { ShumaDB } from '../../../../../lib/shumadb.js'
 import { spawn } from 'child_process'
 import { join } from 'path'
 import fs from 'fs'
@@ -11,26 +11,27 @@ export async function POST(
   try {
     console.log('🔍 Frontend: Analyzing land registry documents for session:', params.sessionId)
     
-    // Get session data to find uploaded documents
-    const session = sessionStore.getSession(params.sessionId)
-    if (!session) {
+    // Get session data from database
+    const sessionData = await ShumaDB.loadShumaForWizard(params.sessionId)
+    if (!sessionData.success || !sessionData.valuationData) {
       return NextResponse.json({ 
         success: false,
-        error: 'Session not found' 
+        error: 'Session not found in database' 
       }, { status: 404 })
     }
 
-    const data = session.data
+    const data = sessionData.valuationData
     
     // Debug: Log the actual session data structure
     console.log('🔍 Session data structure:', JSON.stringify(data, null, 2))
     console.log('🔍 Available data keys:', Object.keys(data))
     
-    // For now, always use the test document to verify backend integration
-    const testPdfPath = join(process.cwd(), '..', 'integrations', 'test_documents', 'land_registry_tabu.pdf')
+    // Find uploaded land registry documents
+    const uploads = data.uploads || []
+    const landRegistryUploads = uploads.filter((upload: any) => upload.type === 'land_registry' || upload.type === 'tabu')
     
-    if (!fs.existsSync(testPdfPath)) {
-      console.log('❌ Test PDF not found, using mock data')
+    if (landRegistryUploads.length === 0) {
+      console.log('❌ No land registry documents found, using mock data')
       return NextResponse.json({
         success: true,
         registration_office: 'לשכת רישום מקרקעין תל אביב',
@@ -46,8 +47,24 @@ export async function POST(
       })
     }
     
-    const pdfPath = testPdfPath
-    console.log('🔍 Using test PDF:', pdfPath)
+    // Use the first land registry document
+    const upload = landRegistryUploads[0]
+    const pdfPath = upload.path || upload.extractedData?.filePath
+    
+    if (!pdfPath || !fs.existsSync(pdfPath)) {
+      console.log('❌ Land registry PDF not found at path:', pdfPath)
+      return NextResponse.json({
+        success: false,
+        error: 'Land registry PDF file not found',
+        registration_office: 'לא נמצא',
+        gush: 'לא נמצא',
+        chelka: 'לא נמצא',
+        ownership_type: 'לא נמצא',
+        attachments: 'לא נמצא'
+      }, { status: 404 })
+    }
+    
+    console.log('🔍 Using uploaded PDF:', pdfPath)
     
     // Call the real backend service
     const projectRoot = join(process.cwd(), '..')

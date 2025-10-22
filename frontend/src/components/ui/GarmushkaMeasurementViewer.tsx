@@ -28,6 +28,7 @@ if (typeof window !== 'undefined') {
 interface GarmushkaMeasurementViewerProps {
   sessionId: string
   onMeasurementComplete: (measurementData: any) => void
+  initialMeasurements?: any
 }
 
 interface Point {
@@ -101,7 +102,8 @@ const KonvaImageComponent: React.FC<{ src: string }> = ({ src }) => {
 
 export default function GarmushkaMeasurementViewer({ 
   sessionId, 
-  onMeasurementComplete 
+  onMeasurementComplete,
+  initialMeasurements
 }: GarmushkaMeasurementViewerProps) {
   const [isClient, setIsClient] = useState(false)
   const [imageUrl, setImageUrl] = useState<string>('')
@@ -904,28 +906,44 @@ export default function GarmushkaMeasurementViewer({
   // Save measurements to session
   const saveMeasurements = useCallback(async () => {
     try {
+      // Capture PNG export as base64
+      let pngBase64 = null
+      const stage = stageRef.current
+      if (stage) {
+        const dataURL = stage.toDataURL({ mimeType: 'image/png', quality: 1 })
+        pngBase64 = dataURL // This is already in base64 format: "data:image/png;base64,..."
+        console.log('📸 Captured Garmushka measurement as PNG:', pngBase64.substring(0, 100) + '...')
+      }
+
       const measurementData = {
         measurementTable,
         metersPerPixel,
         unitMode,
         isCalibrated: metersPerPixel > 0,
-        fileName: isPdfMode ? `PDF Page ${selectedPageIndex + 1}` : 'Image'
+        fileName: isPdfMode ? `PDF Page ${selectedPageIndex + 1}` : 'Image',
+        pngExport: pngBase64 // Add PNG export to the data
       }
 
-      const response = await fetch(`/api/session/${sessionId}`, {
-        method: 'PUT',
+      console.log('💾 Saving Garmushka measurements with PNG export')
+
+      const response = await fetch(`/api/session/${sessionId}/garmushka-measurements`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          data: {
-            garmushkaMeasurements: measurementData
-          }
-        })
+        body: JSON.stringify(measurementData)
       })
 
       if (response.ok) {
+        const result = await response.json()
+        console.log('✅ Garmushka measurements saved successfully:', result)
         onMeasurementComplete(measurementData)
+        alert('✅ Measurements saved successfully!')
+      } else {
+        const errorData = await response.json()
+        console.error('❌ Failed to save measurements:', errorData)
+        setError(`Failed to save measurements: ${errorData.error || 'Unknown error'}`)
       }
     } catch (err) {
+      console.error('❌ Error saving measurements:', err)
       setError(`Failed to save measurements: ${err instanceof Error ? err.message : 'Unknown error'}`)
     }
   }, [sessionId, measurementTable, metersPerPixel, unitMode, isPdfMode, selectedPageIndex, onMeasurementComplete])

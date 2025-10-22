@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sessionStore } from '@/lib/session-store-global'
 import { unlink } from 'fs/promises'
 import { join } from 'path'
+const { ShumaDB } = require('@/lib/shumadb.js')
 
 export async function DELETE(
   request: NextRequest,
@@ -12,11 +12,13 @@ export async function DELETE(
     
     console.log(`🗑️ Deleting upload ${uploadId} from session ${sessionId}`)
     
-    // Get the current session
-    const session = sessionStore.getSession(sessionId)
-    if (!session) {
+    // Load session from database
+    const loadResult = await ShumaDB.loadShumaForWizard(sessionId)
+    if (loadResult.error) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
+    
+    const session = loadResult.valuationData
     
     // Find the upload to delete
     const uploads = session.uploads || []
@@ -29,13 +31,30 @@ export async function DELETE(
     const uploadToDelete = uploads[uploadIndex]
     console.log(`📁 Found upload to delete:`, uploadToDelete)
     
-    // Remove the upload from the session first
+    // Remove the upload from the array
     const updatedUploads = uploads.filter((_: any, index: number) => index !== uploadIndex)
     
-    // Update the session
-    const updatedSession = sessionStore.updateSession(sessionId, {
-      uploads: updatedUploads
-    })
+    // Also update interiorImages if it's an image
+    let updatedInteriorImages = session.interiorImages || []
+    if (uploadToDelete.type === 'interior_image' || uploadToDelete.type === 'building_image') {
+      updatedInteriorImages = updatedInteriorImages.filter((img: any) => 
+        !img.url?.includes(uploadToDelete.fileName)
+      )
+    }
+    
+    // Save updated session to database
+    const updatedSession = {
+      ...session,
+      uploads: updatedUploads,
+      interiorImages: updatedInteriorImages
+    }
+    
+    await ShumaDB.saveShumaFromSession(
+      sessionId,
+      'default-org',
+      'system',
+      updatedSession
+    )
     
     // Delete the physical file from filesystem after session update
     // Use setTimeout to delay physical deletion to avoid race conditions

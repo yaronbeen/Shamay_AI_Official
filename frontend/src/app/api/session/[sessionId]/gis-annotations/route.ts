@@ -1,38 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sessionStore } from '../../../../../lib/session-store-global'
+import { ShumaDB } from '../../../../../lib/shumadb'
 
 export async function POST(
   request: NextRequest,
   { params }: { params: { sessionId: string } }
 ) {
   try {
-    const session = sessionStore.getSession(params.sessionId)
-    if (!session) {
+    // Load session from database
+    const loadResult = await ShumaDB.loadShumaForWizard(params.sessionId)
+    if (!loadResult.success || !loadResult.valuationData) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
 
+    const sessionData = loadResult.valuationData
     const { annotations, annotationCanvasData, govmapUrls } = await request.json()
 
     console.log('📝 Saving GIS annotations for session:', params.sessionId)
     console.log('📝 Annotations count:', annotations?.length || 0)
 
-    // Update session with annotations
-    sessionStore.updateSession(params.sessionId, {
-      gisAnalysis: {
-        ...session.gisAnalysis,
-        annotations,
-        annotationCanvasData
-      },
-      data: {
-        ...session.data,
-        gisScreenshots: {
-          cropMode0: annotationCanvasData, // Clean map with annotations
-          cropMode1: annotationCanvasData  // תצ"א map with same annotations
-        }
-      }
-    })
+    // Update gisAnalysis with annotations
+    const updatedGisAnalysis = {
+      ...sessionData.gisAnalysis,
+      annotations,
+      annotationCanvasData
+    }
 
-    console.log('✅ GIS annotations saved successfully')
+    // Save updated data to database
+    const saveResult = await ShumaDB.saveShumaFromSession(
+      params.sessionId,
+      'default-org',
+      'system',
+      {
+        ...sessionData,
+        gisAnalysis: updatedGisAnalysis
+      }
+    )
+
+    if (!saveResult.success) {
+      throw new Error('Failed to save annotations to database')
+    }
+
+    console.log('✅ GIS annotations saved successfully to database')
 
     return NextResponse.json({
       success: true,
@@ -55,12 +63,14 @@ export async function GET(
   { params }: { params: { sessionId: string } }
 ) {
   try {
-    const session = sessionStore.getSession(params.sessionId)
-    if (!session) {
+    // Load session from database
+    const loadResult = await ShumaDB.loadShumaForWizard(params.sessionId)
+    if (!loadResult.success || !loadResult.valuationData) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
 
-    const gisAnalysis = session.gisAnalysis || null
+    const sessionData = loadResult.valuationData
+    const gisAnalysis = sessionData.gisAnalysis || null
     const annotations = gisAnalysis?.annotations || []
     const annotationCanvasData = gisAnalysis?.annotationCanvasData || null
 
