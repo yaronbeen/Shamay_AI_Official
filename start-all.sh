@@ -70,7 +70,60 @@ sleep 3
 
 # Setup database
 echo -e "${BLUE}📊 Setting up database...${NC}"
-npm run setup-db
+
+# Check if database exists
+DB_EXISTS=$(psql -U postgres -lqt | cut -d \| -f 1 | grep -w shamay_land_registry | wc -l)
+
+if [ $DB_EXISTS -eq 0 ]; then
+    echo -e "${YELLOW}📊 Database 'shamay_land_registry' does not exist. Creating...${NC}"
+    psql -U postgres -c "CREATE DATABASE shamay_land_registry;"
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ Database created successfully${NC}"
+    else
+        echo -e "${RED}❌ Failed to create database${NC}"
+        exit 1
+    fi
+else
+    echo -e "${GREEN}✅ Database 'shamay_land_registry' already exists${NC}"
+fi
+
+# Run complete database initialization
+echo -e "${BLUE}📊 Initializing database schema and tables...${NC}"
+psql -U postgres -d shamay_land_registry -f database/init_complete_database.sql
+
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}✅ Database schema initialized successfully${NC}"
+else
+    echo -e "${RED}❌ Failed to initialize database schema${NC}"
+    exit 1
+fi
+
+# Check if .env.local exists in frontend
+if [ ! -f "frontend/.env.local" ]; then
+    echo -e "${YELLOW}⚠️  .env.local not found. Creating from template...${NC}"
+    cat > frontend/.env.local << 'EOF'
+# Database Configuration
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/shamay_land_registry"
+DB_HOST="localhost"
+DB_PORT="5432"
+DB_NAME="shamay_land_registry"
+DB_USER="postgres"
+DB_PASSWORD="postgres"
+
+# NextAuth Configuration
+NEXTAUTH_URL="http://localhost:3002"
+NEXTAUTH_SECRET="your-random-secret-key-change-in-production"
+
+# OpenAI API Key
+OPENAI_API_KEY="your-openai-api-key-here"
+
+# Application Configuration
+NODE_ENV="development"
+PORT=3002
+EOF
+    echo -e "${GREEN}✅ Created .env.local with default values${NC}"
+    echo -e "${YELLOW}⚠️  Please update .env.local with your actual OpenAI API key${NC}"
+fi
 
 # Install dependencies if needed
 echo -e "${BLUE}📦 Installing dependencies...${NC}"
@@ -81,16 +134,27 @@ if [ ! -d "frontend/node_modules" ]; then
     cd frontend && npm install && cd ..
 fi
 
-# Start all services
-echo -e "${GREEN}🚀 Starting all services...${NC}"
-echo -e "${YELLOW}Frontend: http://localhost:3000${NC}"
-echo -e "${YELLOW}Database: PostgreSQL on port 5432${NC}"
+# Display connection information
+echo ""
+echo -e "${GREEN}=============================================${NC}"
+echo -e "${GREEN}🎉 SHAMAY.AI Setup Complete!${NC}"
+echo -e "${GREEN}=============================================${NC}"
+echo ""
+echo -e "${YELLOW}📊 Database:${NC}"
+echo -e "   Name: shamay_land_registry"
+echo -e "   Host: localhost:5432"
+echo -e "   User: postgres / shamay_user"
+echo ""
+echo -e "${YELLOW}🌐 Application URLs:${NC}"
+echo -e "   Frontend: ${BLUE}http://localhost:3002${NC}"
+echo -e "   API: ${BLUE}http://localhost:3002/api${NC}"
+echo ""
+echo -e "${YELLOW}👤 Default Login (Development):${NC}"
+echo -e "   Email: admin@shamay.ai"
+echo -e "   Password: admin123"
 echo ""
 echo -e "${BLUE}Press Ctrl+C to stop all services${NC}"
+echo ""
 
-# Start services - ONLY FRONTEND AND DATABASE
-npx concurrently \
-    --names "DB,FE" \
-    --prefix-colors "blue,yellow" \
-    "echo 'Database running on port 5432'" \
-    "cd frontend && npm run dev"
+# Start services - ONLY FRONTEND (database already running)
+cd frontend && npm run dev

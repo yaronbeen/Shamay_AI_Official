@@ -84,22 +84,75 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
           const response = await fetch(`/api/session/${sessionId}`)
           if (response.ok) {
             const sessionData = await response.json()
-            if (sessionData.uploads && Array.isArray(sessionData.uploads)) {
-              console.log('📁 Loading uploads from session:', sessionData.uploads)
+            console.log('📁 Session data received:', sessionData)
+
+            // The uploads are nested under sessionData.data.uploads
+            const uploads = sessionData.data?.uploads || sessionData.uploads || []
+            if (Array.isArray(uploads) && uploads.length > 0) {
+              console.log('📁 Loading uploads from session:', uploads)
               
               // Convert session uploads to DocumentUpload format
-              const sessionUploads: DocumentUpload[] = sessionData.uploads.map((upload: any) => ({
-                id: upload.id,
-                file: new File([], upload.name, { type: upload.mimeType }), // Create a dummy file object
-                type: upload.type as any,
-                status: 'completed' as const,
-                progress: 100,
-                url: upload.url,
-                extractedData: upload.extractedData || {}
+              const sessionUploads: DocumentUpload[] = await Promise.all(uploads.map(async (upload: any) => {
+                // Handle incomplete upload data (from before the fix)
+                const fileName = upload.fileName || upload.extractedData?.fileName || 'unknown_file'
+                let fileSize = upload.size || 0
+                const mimeType = upload.mimeType || 'application/octet-stream'
+                const uploadName = upload.name || fileName
+                const uploadPath = upload.path || upload.extractedData?.filePath || ''
+                const uploadDate = upload.uploadedAt || new Date().toISOString()
+                
+                // If file size is not in database, try to get it from the file
+                if (fileSize === 0 && uploadPath) {
+                  try {
+                    const response = await fetch(upload.url)
+                    if (response.ok) {
+                      const contentLength = response.headers.get('content-length')
+                      if (contentLength) {
+                        fileSize = parseInt(contentLength)
+                        console.log(`📁 Got file size from HTTP headers: ${fileSize} bytes`)
+                      }
+                    }
+                  } catch (error) {
+                    console.warn('⚠️ Could not get file size from HTTP headers:', error)
+                  }
+                }
+                
+                // Create a file object with the correct size from the database
+                const fileBlob = new Blob([], { type: mimeType })
+                const file = new File([fileBlob], uploadName, { 
+                  type: mimeType,
+                  lastModified: new Date(uploadDate).getTime()
+                })
+                
+                // Override the size property to use the database value
+                Object.defineProperty(file, 'size', {
+                  value: fileSize,
+                  writable: false
+                })
+                
+                return {
+                  id: upload.id,
+                  file: file,
+                  type: upload.type as any,
+                  status: upload.status || 'completed' as const, // Use status from DB, fallback to 'completed'
+                  progress: upload.status === 'processing' ? 50 : (upload.status === 'uploading' ? 25 : 100),
+                  url: upload.url,
+                  extractedData: upload.extractedData || {},
+                  error: upload.error,
+                  // Preserve original upload data (with fallbacks)
+                  name: uploadName,
+                  fileName: fileName,
+                  path: uploadPath,
+                  size: fileSize,
+                  mimeType: mimeType,
+                  uploadedAt: uploadDate
+                }
               }))
               
               setUploads(sessionUploads)
               updateData({ uploads: sessionUploads })
+            } else {
+              console.log('📁 No uploads found in session data')
             }
           }
         } catch (error) {
@@ -129,17 +182,17 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
       // Only call APIs for uploaded document types
       const apiCalls: Promise<any>[] = []
       
-      if (uploadedTypes.has('land_registry')) {
+      if (uploadedTypes.has('tabu')) {
         console.log('🏛️ Calling land registry analysis API')
         apiCalls.push(extractLandRegistryData())
       }
       
-      if (uploadedTypes.has('building_permit')) {
+      if (uploadedTypes.has('permit')) {
         console.log('🏗️ Calling building permit analysis API')
         apiCalls.push(extractBuildingPermitData())
       }
       
-      if (uploadedTypes.has('condominium_order')) {
+      if (uploadedTypes.has('condo')) {
         console.log('🏢 Calling shared building analysis API')
         apiCalls.push(extractSharedBuildingData())
       }
@@ -174,10 +227,12 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
       
       setExtractedData(combinedData)
       
-      // Update parent data
+      // Update parent data - only update extractedData to avoid overwriting other data
+      console.log('📊 About to update parent data with extracted data:', combinedData)
       updateData({
         extractedData: combinedData
       })
+      console.log('📊 Updated parent data with extracted data:', combinedData)
       
       // Save extracted data to session
       if (sessionId) {
@@ -186,7 +241,9 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              extractedData: combinedData
+              data: {
+                extractedData: combinedData
+              }
             })
           })
           
@@ -204,6 +261,11 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
       console.error('Error processing documents:', error)
     } finally {
       setIsProcessing(false)
+      
+      // Add a small delay to ensure extracted data is saved before uploads useEffect runs
+      setTimeout(() => {
+        console.log('✅ Processing complete, extracted data should be saved')
+      }, 1000)
     }
   }
 
@@ -452,14 +514,24 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
       // Generate file URL for document viewer
       const fileUrl = `/api/files/${sessionId}/${result.file?.fileName || upload.file.name}`
       
-      // Mark as completed with file URL
+      // Use the complete upload entry from the API response if available
+      const uploadEntry = result.uploadEntry || {}
+      
+      // Mark as completed with file URL and all metadata from API
       setUploads(prev => {
         const updated = prev.map(u => 
           u.id === upload.id ? { 
             ...u, 
-            status: 'completed' as const,
-            url: fileUrl,
-            extractedData: result.extractedData || { extracted: true }
+            status: uploadEntry.status || 'completed' as const,
+            url: uploadEntry.url || fileUrl,
+            // Add all metadata from the API response
+            name: uploadEntry.name || u.file.name,
+            fileName: uploadEntry.fileName || u.file.name,
+            path: uploadEntry.path || '',
+            size: uploadEntry.size || u.file.size,
+            mimeType: uploadEntry.mimeType || u.file.type,
+            uploadedAt: uploadEntry.uploadedAt || new Date().toISOString(),
+            extractedData: uploadEntry.extractedData || result.extractedData || { extracted: true }
           } : u
         )
         
@@ -623,14 +695,42 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
 
   // Save uploads to session data whenever uploads change
   useEffect(() => {
+    console.log('🔄 Uploads useEffect triggered, isProcessing:', isProcessing, 'uploads.length:', uploads.length)
+    
+    // Don't save uploads during processing to avoid overwriting extracted data
+    if (isProcessing) {
+      console.log('⏸️ Skipping upload save during processing to preserve extracted data')
+      return
+    }
+    
     if (uploads.length > 0) {
       console.log('💾 Saving uploads to session:', uploads.length, 'uploads')
-      updateData({ uploads })
+      
+      // Filter out UI-only fields before saving to database
+      const uploadsForDB = uploads.map(upload => ({
+        id: upload.id,
+        type: upload.type,
+        name: upload.name,
+        fileName: upload.fileName,
+        path: upload.path,
+        size: upload.size,
+        mimeType: upload.mimeType,
+        status: upload.status,
+        error: upload.error, // Include error message if any
+        url: upload.url,
+        uploadedAt: upload.uploadedAt,
+        extractedData: upload.extractedData
+      }))
+      
+      // Only update uploads, preserve other data like extractedData
+      console.log('💾 Updating parent data with uploads only, preserving extractedData')
+      console.log('💾 Uploads being saved (with status field):', JSON.stringify(uploadsForDB.map(u => ({ id: u.id, type: u.type, status: u.status }))))
+      updateData({ uploads: uploadsForDB })
     } else {
       // Clear uploads from parent data when no uploads remain
       updateData({ uploads: [] })
     }
-  }, [uploads, updateData])
+  }, [uploads, updateData, isProcessing])
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -814,13 +914,13 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
                       לחץ על "עבד מסמכים" כדי לחלץ נתונים מהמסמכים שהועלו באמצעות AI
                     </p>
                     <div className="mt-2 text-xs text-yellow-600">
-                      <p>⏱️ זמן עיבוד: 2-5 דקות | 💰 עלות משוערת: $0.50-2.00 למסמך</p>
+                      <p> 💰 עלות משוערת: $0.50-2.00 למסמך</p>
                       {(() => {
                         const uploadedTypes = new Set(data.uploads?.map((upload: any) => upload.type) || [])
                         const processableTypes = []
-                        if (uploadedTypes.has('land_registry')) processableTypes.push('תעודת בעלות')
-                        if (uploadedTypes.has('building_permit')) processableTypes.push('היתר בנייה')
-                        if (uploadedTypes.has('condominium_order')) processableTypes.push('תקנון בית משותף')
+                        if (uploadedTypes.has('tabu')) processableTypes.push('תעודת בעלות')
+                        if (uploadedTypes.has('permit')) processableTypes.push('היתר בנייה')
+                        if (uploadedTypes.has('condo')) processableTypes.push('תקנון בית משותף')
                         if (uploadedTypes.has('building_image') || uploadedTypes.has('interior_image')) processableTypes.push('תמונות')
                         
                         return processableTypes.length > 0 ? (

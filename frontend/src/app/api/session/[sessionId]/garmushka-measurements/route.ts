@@ -1,17 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sessionStore } from '../../../../../lib/session-store-global'
+import { ShumaDB } from '../../../../../lib/shumadb'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { sessionId: string } }
 ) {
   try {
-    const session = sessionStore.getSession(params.sessionId)
-    if (!session) {
+    // Load session from database
+    const loadResult = await ShumaDB.loadShumaForWizard(params.sessionId)
+    if (!loadResult.success || !loadResult.valuationData) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
 
-    const measurementData = session.data?.garmushkaMeasurements || null
+    const measurementData = loadResult.valuationData.garmushkaMeasurements || null
+    
+    console.log('📐 Garmushka Measurements GET - Session:', params.sessionId)
+    console.log('📐 Measurement Data:', measurementData)
+    
     return NextResponse.json({ measurementData })
   } catch (error) {
     console.error('Error fetching garmushka measurements:', error)
@@ -24,26 +29,29 @@ export async function POST(
   { params }: { params: { sessionId: string } }
 ) {
   try {
-    const session = sessionStore.getSession(params.sessionId)
-    if (!session) {
+    // Load session from database
+    const loadResult = await ShumaDB.loadShumaForWizard(params.sessionId)
+    if (!loadResult.success || !loadResult.valuationData) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
 
     const measurementData = await request.json()
     
-    const updatedSession = sessionStore.updateSession(params.sessionId, {
-      data: {
-        garmushkaMeasurements: measurementData
-      }
-    })
-
-    if (!updatedSession) {
-      return NextResponse.json({ error: 'Failed to update session' }, { status: 500 })
+    console.log('📐 Garmushka Measurements POST - Session:', params.sessionId)
+    console.log('📐 Saving measurement data:', measurementData)
+    
+    // Save measurements using ShumaDB
+    const saveResult = await ShumaDB.saveGarmushkaData(params.sessionId, measurementData)
+    
+    if (!saveResult.success) {
+      return NextResponse.json({ 
+        error: saveResult.error || 'Failed to save measurements' 
+      }, { status: 500 })
     }
 
     return NextResponse.json({ 
       success: true, 
-      measurementData: updatedSession.data?.garmushkaMeasurements 
+      measurementData: measurementData 
     })
   } catch (error) {
     console.error('Error saving garmushka measurements:', error)
@@ -56,19 +64,21 @@ export async function DELETE(
   { params }: { params: { sessionId: string } }
 ) {
   try {
-    const session = sessionStore.getSession(params.sessionId)
-    if (!session) {
+    // Load session from database
+    const loadResult = await ShumaDB.loadShumaForWizard(params.sessionId)
+    if (!loadResult.success || !loadResult.valuationData) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
 
-    const updatedSession = sessionStore.updateSession(params.sessionId, {
-      data: {
-        garmushkaMeasurements: null
-      }
-    })
-
-    if (!updatedSession) {
-      return NextResponse.json({ error: 'Failed to update session' }, { status: 500 })
+    console.log('📐 Garmushka Measurements DELETE - Session:', params.sessionId)
+    
+    // Delete measurements by saving empty/null data
+    const saveResult = await ShumaDB.saveGarmushkaData(params.sessionId, {})
+    
+    if (!saveResult.success) {
+      return NextResponse.json({ 
+        error: saveResult.error || 'Failed to delete measurements' 
+      }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })

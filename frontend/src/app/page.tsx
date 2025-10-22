@@ -2,86 +2,40 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useSession } from 'next-auth/react'
 import { ArrowRight, CheckCircle, FileText, Calculator, Eye, Download, Star, Users, Award, Shield, Database, Zap, TrendingUp, Globe, Lock, Sparkles, Target, BarChart3, Brain, Building2, MapPin } from 'lucide-react'
 
 export default function Home() {
   const router = useRouter()
-  const [dbSetupLoading, setDbSetupLoading] = useState(false)
-  const [dbSetupStatus, setDbSetupStatus] = useState<string | null>(null)
+  const { data: session, status } = useSession()
   const [isVisible, setIsVisible] = useState(false)
-  const [hasExistingSession, setHasExistingSession] = useState(false)
 
   useEffect(() => {
     setIsVisible(true)
-    // Check if there's an existing session
-    const existingSessionId = localStorage.getItem('shamay_session_id')
-    setHasExistingSession(!!existingSessionId)
   }, [])
 
-  const startWizard = async () => {
-    try {
-      console.log('🚀 Creating new session for wizard...')
-      
-      const response = await fetch('/api/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      })
-      
-      if (!response.ok) {
-        throw new Error(`Session creation failed: ${response.status}`)
-      }
-      
-      const { sessionId } = await response.json()
-      console.log('✅ Session created:', sessionId)
-      
-      // Store sessionId in localStorage for persistence
-      localStorage.setItem('shamay_session_id', sessionId)
-      
-      // Navigate to wizard with sessionId
-      router.push(`/wizard?step=1&sessionId=${sessionId}`)
-      
-    } catch (error) {
-      console.error('❌ Failed to create session:', error)
-      // Fallback to wizard without sessionId
-      router.push('/wizard?step=1')
-    }
+  const handleGetStarted = () => {
+    router.push('/sign-up')
   }
 
-  const continueWizard = () => {
-    const existingSessionId = localStorage.getItem('shamay_session_id')
-    if (existingSessionId) {
-      router.push(`/wizard?step=1&sessionId=${existingSessionId}`)
-    } else {
-      startWizard()
-    }
+  const handleSignIn = () => {
+    router.push('/sign-in')
   }
 
-  const clearSession = () => {
-    localStorage.removeItem('shamay_session_id')
-    console.log('🗑️ Session cleared')
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen flex items-center justify-center" dir="rtl">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">טוען...</h1>
+          <p className="text-gray-600">מעביר אותך לדף המתאים</p>
+        </div>
+      </div>
+    )
   }
 
-  const setupDatabase = async () => {
-    try {
-      setDbSetupLoading(true)
-      setDbSetupStatus('מאתחל מסד נתונים...')
-      
-      const response = await fetch('/api/setup-database', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      })
-      
-      if (response.ok) {
-        setDbSetupStatus('מסד הנתונים הותקן בהצלחה!')
-      } else {
-        const error = await response.json()
-        setDbSetupStatus(`שגיאה: ${error.details || 'Unknown error'}`)
-      }
-    } catch (error) {
-      setDbSetupStatus(`שגיאה: ${error instanceof Error ? error.message : 'Unknown error'}`)
-    } finally {
-      setDbSetupLoading(false)
-    }
+  if (session) {
+    router.push('/dashboard')
+    return null
   }
 
   return (
@@ -108,37 +62,22 @@ export default function Home() {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <button className="text-white/80 hover:text-white transition-colors">עברית</button>
+              <button 
+                onClick={handleSignIn}
+                className="text-white/80 hover:text-white transition-colors"
+              >
+                התחברות
+              </button>
+              <button 
+                onClick={handleGetStarted}
+                className="bg-white/20 text-white px-4 py-2 rounded-lg hover:bg-white/30 transition-colors"
+              >
+                התחל עכשיו
+              </button>
             </div>
           </div>
         </div>
       </header>
-
-      {/* Database Setup Section
-      <div className="relative z-10 bg-gradient-to-r from-amber-500/20 to-orange-500/20 backdrop-blur-sm border border-amber-400/30 py-4">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <Database className="h-5 w-5 text-amber-400 mr-2" />
-              <span className="text-sm text-amber-100">
-                מסד נתונים לא מוכן - יש לאתחל את מסד הנתונים לפני השימוש
-              </span>
-            </div>
-            <button
-              onClick={setupDatabase}
-              disabled={dbSetupLoading}
-              className="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-4 py-2 rounded-lg text-sm hover:from-amber-600 hover:to-orange-600 disabled:opacity-50 transition-all duration-200 shadow-lg hover:shadow-xl"
-            >
-              {dbSetupLoading ? 'מאתחל...' : 'אתחל מסד נתונים'}
-            </button>
-          </div>
-          {dbSetupStatus && (
-            <div className="mt-2 text-sm text-amber-100">
-              {dbSetupStatus}
-            </div>
-          )}
-        </div>
-      </div> */}
 
       {/* Hero Section */}
       <main className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
@@ -161,41 +100,20 @@ export default function Home() {
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-              {hasExistingSession ? (
-                <>
-                  <button
-                    onClick={continueWizard}
-                    className="group bg-gradient-to-r from-green-500 to-emerald-600 text-white px-8 py-4 rounded-xl text-lg font-semibold hover:from-green-600 hover:to-emerald-700 transition-all duration-300 flex items-center shadow-2xl hover:shadow-green-500/25 transform hover:scale-105"
-                  >
-                    המשך הערכה קיימת
-                    <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-                  </button>
-                  
-                  <button
-                    onClick={() => {
-                      clearSession()
-                      setHasExistingSession(false)
-                      startWizard()
-                    }}
-                    className="group bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-3 rounded-lg text-base font-semibold hover:from-blue-600 hover:to-purple-700 transition-all duration-300 flex items-center shadow-xl hover:shadow-purple-500/25 transform hover:scale-105"
-                  >
-                    התחל הערכה חדשה
-                    <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
-                  </button>
-                </>
-              ) : (
-                <button
-                  onClick={startWizard}
-                  className="group bg-gradient-to-r from-blue-500 to-purple-600 text-white px-8 py-4 rounded-xl text-lg font-semibold hover:from-blue-600 hover:to-purple-700 transition-all duration-300 flex items-center shadow-2xl hover:shadow-purple-500/25 transform hover:scale-105"
-                >
-                  התחל הערכת שווי
-                  <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-                </button>
-              )}
+              <button
+                onClick={handleGetStarted}
+                className="group bg-gradient-to-r from-blue-500 to-purple-600 text-white px-8 py-4 rounded-xl text-lg font-semibold hover:from-blue-600 hover:to-purple-700 transition-all duration-300 flex items-center shadow-2xl hover:shadow-purple-500/25 transform hover:scale-105"
+              >
+                התחל הערכת שווי
+                <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+              </button>
               
-              <button className="text-white/80 hover:text-white transition-colors flex items-center">
+              <button 
+                onClick={handleSignIn}
+                className="text-white/80 hover:text-white transition-colors flex items-center"
+              >
                 <Eye className="mr-2 h-4 w-4" />
-                צפה בדוגמה
+                התחבר לחשבון קיים
               </button>
             </div>
           </div>

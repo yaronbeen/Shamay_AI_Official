@@ -13,47 +13,99 @@ interface Step3ValidationProps {
 }
 
 interface ExtractedData {
-  // Legal Status
-  registrationOffice?: string
-  gush?: string
+  // Land Registry Data (from Tabu) - as object not array
+  land_registry?: {
+    registration_office?: string
+    gush?: number | string
+    chelka?: number | string
+    sub_chelka?: string
+    ownership_type?: string
+    attachments?: string
+    owners?: Array<any>
+    owners_count?: number
+    registered_area?: number | string
+    apartment_registered_area?: number | string
+    balcony_area?: number | string
+    confidence?: number
+    [key: string]: any
+  }
+  
+  // Building Permit Data
+  building_permit?: {
+    permit_number?: string
+    permit_date?: string
+    permitted_usage?: string
+    local_committee_name?: string
+    building_description?: string
+    building_floors?: number | string
+    building_units?: number | string
+    confidence?: number
+    [key: string]: any
+  }
+  
+  // Shared Building Order Data (Beit Meshutaf)
+  shared_building?: {
+    order_issue_date?: string
+    building_description?: string
+    building_floors?: number | string
+    building_address?: string
+    total_sub_plots?: number | string
+    sub_plots?: Array<any>
+    confidence?: number
+    [key: string]: any
+  }
+  
+  // Image Analysis - Interior
+  interior_analysis?: {
+    property_layout_description?: string
+    room_analysis?: Array<{
+      room_type: string
+      size_estimate: string
+      features: string
+      condition: string
+    }>
+    condition_assessment?: string
+    interior_features?: string
+    finish_level?: string
+    [key: string]: any
+  }
+  
+  // Image Analysis - Exterior  
+  exterior_analysis?: {
+    building_condition?: string
+    building_features?: string
+    building_type?: string
+    exterior_assessment?: string
+    building_year?: string
+    [key: string]: any
+  }
+  
+  // Legacy flat fields for backward compatibility
   parcel?: string
   ownershipType?: string
   attachments?: string
   sharedAreas?: string
   buildingRights?: string
   permittedUse?: string
-  
-  // Building Details
   buildingYear?: string
   floor?: string
   builtArea?: string
   buildingDescription?: string
-  
-  // Property Characteristics
   rooms?: string
   propertyCondition?: string
   finishLevel?: string
-  
-  // Image Analysis - Interior
   propertyLayoutDescription?: string
-  roomAnalysis?: Array<{
-    room_type: string
-    size_estimate: string
-    features: string
-    condition: string
-  }>
+  roomAnalysis?: Array<any>
   conditionAssessment?: string
-  
-  // Image Analysis - Exterior
   buildingCondition?: string
   buildingFeatures?: string
   buildingType?: string
   overallAssessment?: string
-  
-  // Comparable Sales
   averagePricePerSqm?: string
   medianPricePerSqm?: string
   adjustmentFactor?: string
+  
+  [key: string]: any
 }
 
 export function Step3Validation({ data, updateData, onValidationChange, sessionId }: Step3ValidationProps) {
@@ -77,18 +129,21 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
           if (response.ok) {
             const sessionData = await response.json()
             
-            // Load extracted data
-            if (sessionData.extractedData) {
-              console.log('📊 Loading extracted data from session:', sessionData.extractedData)
-              setExtractedData(sessionData.extractedData)
+            // Load extracted data - check both possible locations
+            const extractedDataFromSession = sessionData.extractedData || sessionData.data?.extractedData
+            if (extractedDataFromSession && Object.keys(extractedDataFromSession).length > 0) {
+              console.log('📊 Loading extracted data from session:', extractedDataFromSession)
+              setExtractedData(extractedDataFromSession)
+            } else {
+              console.log('📊 No extracted data found in session')
             }
             
             // Load uploads
-            if (sessionData.uploads && Array.isArray(sessionData.uploads)) {
-              console.log('📁 Loading uploads from session:', sessionData.uploads)
+            if (sessionData.data.uploads && Array.isArray(sessionData.data.uploads)) {
+              console.log('📁 Loading uploads from session:', sessionData.data.uploads)
               
               // Convert session uploads to the format expected by getAllFiles
-              const sessionUploads = sessionData.uploads.map((upload: any) => ({
+              const sessionUploads = sessionData.data.uploads.map((upload: any) => ({
                 type: upload.type,
                 name: upload.name,
                 preview: upload.url, // Use URL as preview for images
@@ -99,24 +154,45 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
                 } as File
               }))
               
-              // Update parent data with uploads
+              // Update parent data with uploads - only update specific fields to avoid overwriting existing data
               console.log('📁 Setting uploads to parent data:', sessionUploads)
-              updateData({
-                extractedData: sessionData.extractedData,
-                uploads: sessionUploads
-              })
+              console.log('📁 Session extracted data:', sessionData.extractedData)
+              console.log('session extracted data length:', Object.keys(extractedData).length)
+              
+              // Only update if we have valid data
+              const updates: any = {}
+              if (sessionData.extractedData && Object.keys(sessionData.extractedData).length > 0) {
+                updates.extractedData = sessionData.extractedData
+              }
+              if (sessionUploads && sessionUploads.length > 0) {
+                updates.uploads = sessionUploads
+              }
+              
+              if (Object.keys(updates).length > 0) {
+                updateData(updates)
+              }
               
               // Load files directly from session data
               console.log('📁 Loading files directly from session data')
-              const files = await getAllFilesFromSessionData(sessionData.uploads)
+              console.log('📁 Session data structure:', sessionData)
+              console.log('📁 Session uploads:', sessionData.data.uploads)
+              console.log('📁 Session uploads length:', sessionData.data.uploads?.length || 0)
+              const files = await getAllFilesFromSessionData(sessionData.data.uploads || [])
+              console.log('📁 Files returned from getAllFilesFromSessionData:', files)
               setAllFiles(files)
               setFilesLoading(false)
               console.log('📁 Files loaded from session:', files.length)
+              console.log('📁 allFiles state set to:', files)
             } else {
-              // Update parent data with just extracted data
-              updateData({
-                extractedData: sessionData.extractedData
-              })
+              // Update parent data with just extracted data - only if we have valid data
+              if (sessionData.extractedData && Object.keys(sessionData.extractedData).length > 0) {
+                console.log('📁 Setting extracted data to parent data:', sessionData.extractedData)
+                updateData({
+                  extractedData: sessionData.extractedData
+                })
+              } else {
+                console.log('📁 No valid extracted data found in session')
+              }
               setFilesLoading(false)
             }
           }
@@ -129,6 +205,14 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
     
     loadSessionData()
   }, [sessionId, extractedData, updateData])
+
+  // Sync local extractedData state with props data
+  useEffect(() => {
+    if (data.extractedData && Object.keys(data.extractedData).length > 0) {
+      console.log('📊 Syncing local extractedData with props data:', data.extractedData)
+      setExtractedData(data.extractedData)
+    }
+  }, [data.extractedData])
 
   // Remove the problematic useEffect that was causing infinite loops
 
@@ -382,23 +466,53 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
     
     console.log('🔍 getAllFilesFromSessionData called with:', sessionUploads)
     
+    if (!sessionUploads || !Array.isArray(sessionUploads)) {
+      console.warn('⚠️ sessionUploads is not an array or is undefined:', sessionUploads)
+      return files
+    }
+    
     for (const upload of sessionUploads) {
       try {
         console.log('🔍 Processing upload:', upload)
         console.log('🔍 Upload details:', {
+          id: upload.id,
           type: upload.type,
           name: upload.name,
+          fileName: upload.fileName,
           mimeType: upload.mimeType,
-          url: upload.url
+          url: upload.url,
+          status: upload.status
         })
+        
+        // Skip if upload is not completed
+        if (upload.status !== 'completed') {
+          console.log('⏭️ Skipping incomplete upload:', upload.id, 'status:', upload.status)
+          continue
+        }
         
         let preview = upload.url
         let url = upload.url
-        let fileName = upload.name || `${upload.type}_document`
-        let fileType = upload.mimeType
+        let fileName = upload.name || upload.fileName || `${upload.type}_document`
+        let fileType = upload.mimeType || 'application/octet-stream'
         
-        // Only process PDFs and documents, skip images
-        if (fileType === 'application/pdf') {
+        // Check if it's a PDF by file extension or MIME type
+        const isPDF = fileType === 'application/pdf' || 
+                     fileType.includes('pdf') || 
+                     fileName.toLowerCase().endsWith('.pdf') ||
+                     upload.type === 'tabu' || 
+                     upload.type === 'permit' || 
+                     upload.type === 'condo'
+        
+        console.log('🔍 PDF check for:', fileName, {
+          fileType,
+          fileName,
+          uploadType: upload.type,
+          isPDF,
+          url
+        })
+        
+        // Process PDFs and documents, skip images
+        if (isPDF) {
           if (url) {
             // Use the server URL for PDFs
             files.push({
@@ -406,13 +520,29 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
               name: fileName,
               preview: preview,
               url: url,
-              file: new File([], fileName, { type: fileType })
+              file: new File([], fileName, { type: 'application/pdf' })
             })
             console.log('📄 Added PDF file:', fileName, url, 'type:', fileType)
+          } else {
+            console.warn('⚠️ PDF file has no URL:', fileName)
           }
+        } else if (fileType.includes('image')) {
+          // Skip images for document processing
+          console.log('⏭️ Skipping image file:', fileName, 'type:', fileType)
         } else {
-          // Skip non-PDF files (images, etc.)
-          console.log('⏭️ Skipping non-PDF file:', fileName, 'type:', fileType)
+          // Process other document types
+          if (url) {
+            files.push({
+              type: upload.type,
+              name: fileName,
+              preview: preview,
+              url: url,
+              file: new File([], fileName, { type: fileType })
+            })
+            console.log('📄 Added document file:', fileName, url, 'type:', fileType)
+          } else {
+            console.warn('⚠️ Document file has no URL:', fileName)
+          }
         }
       } catch (error) {
         console.warn(`⚠️ Error processing upload ${upload.id || 'unknown'}:`, error)
@@ -513,6 +643,10 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
     )
   }
 
+  // Use props data as fallback if local state is empty
+  const displayExtractedData = data.extractedData || {}
+  const hasExtractedData = Object.keys(displayExtractedData).length > 0
+
   return (
     <div className="max-w-6xl mx-auto p-6">
       <div className="mb-8">
@@ -525,7 +659,6 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
       </div>
 
       {/* Processing Status - Show if data was processed in Step 2 */}
-      {Object.keys(extractedData).length > 0 && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
           <div className="flex items-center gap-3">
             <CheckCircle className="w-5 h-5 text-green-600" />
@@ -537,7 +670,6 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
             </div>
           </div>
         </div>
-      )}
 
       {/* Document Viewer and Data Validation */}
       <div className="grid grid-cols-2 lg:grid-cols-1 gap-6 mb-6">
@@ -692,14 +824,14 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
             <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
               <h4 className="font-semibold text-yellow-900 mb-3">סיכום נתונים שחולצו</h4>
               <div className="space-y-2 text-sm">
-                {extractedData.registrationOffice && (
-                  <p><strong>משרד רישום מקרקעין:</strong> {extractedData.registrationOffice}</p>
+                {extractedData.land_registry?.registration_office && (
+                  <p><strong>משרד רישום מקרקעין:</strong> {extractedData.land_registry.registration_office}</p>
                 )}
-                {extractedData.gush && (
-                  <p><strong>גוש:</strong> {extractedData.gush} | <strong>חלקה:</strong> {extractedData.parcel}</p>
+                {extractedData.land_registry?.gush && (
+                  <p><strong>גוש:</strong> {extractedData.land_registry.gush} | <strong>חלקה:</strong> {extractedData.land_registry.chelka}</p>
                 )}
-                {extractedData.ownershipType && (
-                  <p><strong>סוג בעלות:</strong> {extractedData.ownershipType}</p>
+                {extractedData.land_registry?.ownership_type && (
+                  <p><strong>סוג בעלות:</strong> {extractedData.land_registry.ownership_type}</p>
                 )}
                 {extractedData.attachments && (
                   <p><strong>נספחים:</strong> {extractedData.attachments}</p>
@@ -731,11 +863,11 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
                 <div className="relative">
                   <input
                     type="text"
-                    value={editingField === 'registrationOffice' ? tempValue : (extractedData.registrationOffice || '')}
+                    value={editingField === 'registrationOffice' ? tempValue : (extractedData.land_registry?.registration_office || '')}
                     onChange={(e) => setTempValue(e.target.value)}
                     onFocus={() => {
                       setEditingField('registrationOffice')
-                      setTempValue(extractedData.registrationOffice || '')
+                      setTempValue(extractedData.land_registry?.registration_office || '')
                     }}
                     onBlur={async () => {
                       if (editingField === 'registrationOffice') {
@@ -762,11 +894,11 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
                   <div className="relative">
                     <input
                       type="text"
-                      value={editingField === 'gush' ? tempValue : (extractedData.gush || '')}
+                      value={editingField === 'gush' ? tempValue : (extractedData.land_registry?.gush?.toString() || '')}
                       onChange={(e) => setTempValue(e.target.value)}
                       onFocus={() => {
                         setEditingField('gush')
-                        setTempValue(extractedData.gush || '')
+                        setTempValue(extractedData.land_registry?.gush?.toString() || '')
                       }}
                       onBlur={async () => {
                         if (editingField === 'gush') {
@@ -792,11 +924,11 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
                   <div className="relative">
                   <input
                     type="text"
-                      value={editingField === 'parcel' ? tempValue : (extractedData.parcel || '')}
+                      value={editingField === 'parcel' ? tempValue : (extractedData.land_registry?.chelka?.toString() || '')}
                       onChange={(e) => setTempValue(e.target.value)}
                       onFocus={() => {
                         setEditingField('parcel')
-                        setTempValue(extractedData.parcel || '')
+                        setTempValue(extractedData.land_registry?.chelka?.toString() || '')
                       }}
                       onBlur={async () => {
                         if (editingField === 'parcel') {
@@ -975,7 +1107,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
               </div>
 
       {/* Extraction Results Summary - Only show if data has been processed */}
-      {Object.keys(extractedData).length > 0 && (
+      {hasExtractedData && (
         <div className="bg-blue-50 rounded-lg border border-blue-200 p-6 mb-6">
           <h3 className="text-lg font-semibold text-blue-900 mb-4 text-right">סיכום חילוץ נתונים</h3>
           
@@ -1029,11 +1161,11 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
             </div>
                   </div>
                 </div>
-              )}
+      )}
 
 
       {/* Legal Status Section - Only show if data has been processed */}
-      {Object.keys(extractedData).length > 0 && (
+      {hasExtractedData && (
         <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">מצב משפטי</h3>
         
@@ -1296,7 +1428,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
       )}
 
       {/* Building Details Section - Only show if data has been processed */}
-      {Object.keys(extractedData).length > 0 && (
+      {hasExtractedData && (
         <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">פרטי הבניין</h3>
         
@@ -1519,7 +1651,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
       )}
 
       {/* Property Characteristics Section - Only show if data has been processed */}
-      {Object.keys(extractedData).length > 0 && (
+      {hasExtractedData && (
         <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">מאפייני הנכס</h3>
         
@@ -1648,7 +1780,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
         )}
 
       {/* Interior Analysis Section - Only show if data has been processed */}
-      {Object.keys(extractedData).length > 0 && (
+      {hasExtractedData && (
         <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">ניתוח פנים הנכס</h3>
         
@@ -1765,7 +1897,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
     )}
 
     {/* Exterior Analysis Section - Only show if data has been processed */}
-    {Object.keys(extractedData).length > 0 && (
+    {hasExtractedData && (
       <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
       <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">ניתוח חוץ הנכס</h3>
       
@@ -1959,7 +2091,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
     )}
 
     {/* Comparable Sales Section - Only show if data has been processed */}
-    {Object.keys(extractedData).length > 0 && (
+    {hasExtractedData && (
       <div className="bg-white rounded-lg border border-gray-200 p-6">
       <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">מכירות דומות</h3>
       

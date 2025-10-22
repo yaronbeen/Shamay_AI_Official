@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { existsSync } from 'fs'
-import { sessionStore } from '../../../../../lib/session-store-global'
+const { ShumaDB } = require('../../../../../lib/shumadb.js')
 
 export async function POST(
   request: NextRequest,
@@ -10,15 +10,24 @@ export async function POST(
 ) {
   try {
     console.log(`🚀 Upload request for session: ${params.sessionId}`)
-    console.log(`📊 Session store state:`, sessionStore.getAllSessions())
     
-    const session = sessionStore.getSession(params.sessionId)
-    if (!session) {
-      console.error(`❌ Session not found in upload route: ${params.sessionId}`)
-      return NextResponse.json({ error: 'Session not found' }, { status: 404 })
+    // Load session from database
+    const loadResult = await ShumaDB.loadShumaForWizard(params.sessionId)
+    
+    // If session doesn't exist in DB, create a minimal one
+    let session: any = {}
+    if (!loadResult.error) {
+      session = loadResult.valuationData || {}
+    } else {
+      // Create a minimal session if it doesn't exist
+      console.log(`📝 Creating new session for upload: ${params.sessionId}`)
+      session = {
+        sessionId: params.sessionId,
+        uploads: []
+      }
     }
-
-    console.log(`✅ Session found in upload route:`, session)
+    
+    console.log(`✅ Session loaded from database for upload`)
 
     const formData = await request.formData()
     const type = formData.get('type') as string
@@ -33,6 +42,12 @@ export async function POST(
       }
 
       console.log(`📁 Processing ${type} file: ${file.name} (${file.size} bytes)`)
+      console.log(`📁 File details:`, {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        lastModified: file.lastModified
+      })
 
       // Create uploads directory
       const uploadsDir = join(process.cwd(), 'uploads', params.sessionId)
@@ -65,24 +80,9 @@ export async function POST(
         filePath: filePath
       }
 
-      // Update session with file info
-      const updatedDocuments = {
-        ...session.documents,
-        [type]: {
-          name: file.name,
-          originalName: file.name,
-          fileName: fileName,
-          path: filePath,
-          size: file.size,
-          type: file.type,
-          uploadedAt: new Date().toISOString(),
-          extractedData: extractedData
-        }
-      }
-
       // Create upload entry for the uploads array
       const uploadEntry = {
-        id: `${type}_${Date.now()}`,
+        id: `${type}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         type: type,
         name: file.name,
         fileName: fileName,
@@ -95,21 +95,34 @@ export async function POST(
         uploadedAt: new Date().toISOString(),
         extractedData: extractedData
       }
+      
+      console.log(`📁 Created upload entry:`, JSON.stringify(uploadEntry, null, 2))
 
-      // Update session with both documents and uploads
+      // Update uploads array in session
       const existingUploads = session.uploads || []
       const updatedUploads = [...existingUploads, uploadEntry]
       
-      sessionStore.updateSession(params.sessionId, { 
-        documents: updatedDocuments,
+      // Save to database
+      const updatedSession = {
+        ...session,
         uploads: updatedUploads
-      })
+      }
+      
+      console.log(`📊 Saving session to database:`, JSON.stringify(updatedSession, null, 2))
+      
+      await ShumaDB.saveShumaFromSession(
+        params.sessionId,
+        'default-org',
+        'system',
+        updatedSession
+      )
 
-      console.log(`📊 Session updated with file data:`, updatedDocuments[type])
+      console.log(`📊 Session updated with file data in database`)
 
       return NextResponse.json({
         success: true,
         message: 'File uploaded successfully',
+        uploadEntry: uploadEntry, // Return the complete upload entry
         file: {
           name: file.name,
           fileName: fileName,
@@ -190,19 +203,9 @@ export async function POST(
         }
       }
 
-      // Update session with uploaded images
-      const updatedDocuments = {
-        ...session.documents,
-        images: {
-          count: uploadedImages.length,
-          files: uploadedImages,
-          uploadedAt: new Date().toISOString()
-        }
-      }
-
       // Create upload entries for the uploads array
       const uploadEntries = uploadedImages.map((image, index) => ({
-        id: `image_${Date.now()}_${index}`,
+        id: `image_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`,
         type: 'interior_image',
         name: image.name,
         fileName: image.fileName,
@@ -215,14 +218,32 @@ export async function POST(
         extractedData: {}
       }))
 
-      // Update session with both documents and uploads
+      // Update uploads array in session
       const existingUploads = session.uploads || []
       const updatedUploads = [...existingUploads, ...uploadEntries]
       
-      sessionStore.updateSession(params.sessionId, { 
-        documents: updatedDocuments,
-        uploads: updatedUploads
-      })
+      // Also update interiorImages for compatibility
+      const existingInteriorImages = session.interiorImages || []
+      const newInteriorImages = uploadedImages.map(img => ({
+        url: `/api/files/${params.sessionId}/images/${img.fileName}`,
+        name: img.name,
+        size: img.size,
+        type: img.type
+      }))
+      
+      // Save to database
+      const updatedSession = {
+        ...session,
+        uploads: updatedUploads,
+        interiorImages: [...existingInteriorImages, ...newInteriorImages]
+      }
+      
+      await ShumaDB.saveShumaFromSession(
+        params.sessionId,
+        'default-org',
+        'system',
+        updatedSession
+      )
 
       console.log(`📊 Session updated with ${uploadedImages.length} images`)
 
@@ -250,11 +271,18 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { sessionId: string } }
 ) {
-  console.log(`🔍 GET request for session: ${params.sessionId}`)
-  const session = sessionStore.getSession(params.sessionId)
-  if (!session) {
+  console.log(`🔍 GET request for session uploads: ${params.sessionId}`)
+  
+  // Load session from database
+  const loadResult = await ShumaDB.loadShumaForWizard(params.sessionId)
+  
+  if (loadResult.error) {
     return NextResponse.json({ error: 'Session not found' }, { status: 404 })
   }
   
-  return NextResponse.json(session)
+  // Return uploads data
+  return NextResponse.json({
+    uploads: loadResult.valuationData.uploads || [],
+    interiorImages: loadResult.valuationData.interiorImages || []
+  })
 }

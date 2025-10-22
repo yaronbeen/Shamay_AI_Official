@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sessionStore } from '../../../../../lib/session-store-global'
+import { ShumaDB } from '../../../../../lib/shumadb.js'
 import { spawn } from 'child_process'
 import { join } from 'path'
 import fs from 'fs'
@@ -11,26 +11,27 @@ export async function POST(
   try {
     console.log('🔍 Frontend: Analyzing shared building order documents for session:', params.sessionId)
     
-    // Get session data to find uploaded documents
-    const session = sessionStore.getSession(params.sessionId)
-    if (!session) {
+    // Get session data from database
+    const sessionData = await ShumaDB.loadShumaForWizard(params.sessionId)
+    if (!sessionData.success || !sessionData.valuationData) {
       return NextResponse.json({ 
         success: false,
-        error: 'Session not found' 
+        error: 'Session not found in database' 
       }, { status: 404 })
     }
 
-    const data = session.data
+    const data = sessionData.valuationData
     
     // Debug: Log the actual session data structure
     console.log('🔍 Session data structure:', JSON.stringify(data, null, 2))
     console.log('🔍 Available data keys:', Object.keys(data))
     
-    // For now, always use the test document to verify backend integration
-    const testPdfPath = join(process.cwd(), '..', 'integrations', 'test_documents', 'shared_building_order_1.pdf')
+    // Find uploaded shared building documents
+    const uploads = data.uploads || []
+    const sharedBuildingUploads = uploads.filter((upload: any) => upload.type === 'condo' || upload.type === 'condominium_order')
     
-    if (!fs.existsSync(testPdfPath)) {
-      console.log('❌ Test PDF not found, using mock data')
+    if (sharedBuildingUploads.length === 0) {
+      console.log('❌ No shared building documents found, using mock data')
       return NextResponse.json({
         success: true,
         order_issue_date: '2020-01-15',
@@ -44,8 +45,25 @@ export async function POST(
       })
     }
     
-    const pdfPath = testPdfPath
-    console.log('🔍 Using test PDF:', pdfPath)
+    // Use the first shared building document
+    const upload = sharedBuildingUploads[0]
+    const pdfPath = upload.path || upload.extractedData?.filePath
+    
+    if (!pdfPath || !fs.existsSync(pdfPath)) {
+      console.log('❌ Shared building PDF not found at path:', pdfPath)
+      return NextResponse.json({
+        success: false,
+        error: 'Shared building PDF file not found',
+        order_issue_date: 'לא נמצא',
+        building_description: 'לא נמצא',
+        building_floors: 'לא נמצא',
+        building_sub_plots_count: 'לא נמצא',
+        building_address: 'לא נמצא',
+        total_sub_plots: 'לא נמצא'
+      }, { status: 404 })
+    }
+    
+    console.log('🔍 Using uploaded PDF:', pdfPath)
     
     // Call the real backend service
     const projectRoot = join(process.cwd(), '..')

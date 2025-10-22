@@ -43,6 +43,22 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
   const [analysisResults, setAnalysisResults] = useState<any>({})
   const [gisMapFile, setGisMapFile] = useState<File | null>(null)
   const [gisMapPreview, setGisMapPreview] = useState<string | null>(null)
+  
+  // Debug: Log uploads data when Step4 mounts or data changes
+  useEffect(() => {
+    console.log('🔍 Step4 - data.uploads:', data.uploads)
+    if (data.uploads && Array.isArray(data.uploads)) {
+      data.uploads.forEach((upload: any, index: number) => {
+        console.log(`🔍 Step4 - Upload ${index}:`, {
+          id: upload.id,
+          type: upload.type,
+          name: upload.name,
+          status: upload.status,
+          hasStatus: 'status' in upload
+        })
+      })
+    }
+  }, [data.uploads])
 
   const sections: AIAnalysisSection[] = [
     {
@@ -220,25 +236,8 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
       {sessionId ? (
         <GISMapViewer 
           sessionId={sessionId}
-          onAnalysisComplete={(measurements) => {
-            // Only update if measurements is not null
-            if (measurements) {
-              console.log('📊 Step4AIAnalysis: GIS analysis completed', measurements)
-              
-              // Update local state
-              setAnalysisResults((prev: any) => ({
-                ...prev,
-                gisAnalysis: measurements
-              }))
-              
-              // Save to session via updateData
-              updateData({
-                gisScreenshots: data.gisScreenshots
-              })
-              
-              console.log('💾 Step4AIAnalysis: Data saved to session')
-            }
-          }}
+          data={data}
+          initialScreenshots={data.gisScreenshots}
         />
       ) : (
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
@@ -254,6 +253,7 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
       {sessionId ? (
         <GarmushkaMeasurementViewer 
           sessionId={sessionId}
+          initialMeasurements={data.garmushkaMeasurements}
           onMeasurementComplete={(measurements) => {
             if (measurements) {
               console.log('📐 Step4AIAnalysis: Garmushka measurements completed', measurements)

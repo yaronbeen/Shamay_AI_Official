@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
-import { sessionStore } from '../../../../../lib/session-store-global'
+import { ShumaDB } from '../../../../../lib/shumadb'
 import puppeteer from 'puppeteer'
 
 export async function POST(
@@ -12,12 +12,15 @@ export async function POST(
     const { sessionId } = params
     console.log(`📸 GIS Screenshot API called for session: ${sessionId}`)
     
-    const session = sessionStore.getSession(sessionId)
+    // Load session from database
+    const loadResult = await ShumaDB.loadShumaForWizard(sessionId)
     
-    if (!session) {
+    if (!loadResult.success || !loadResult.valuationData) {
       console.error(`❌ Session not found: ${sessionId}`)
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
+    
+    const sessionData = loadResult.valuationData
 
     // Check if this is a file upload (FormData) or JSON request
     const contentType = request.headers.get('content-type') || ''
@@ -260,22 +263,16 @@ export async function POST(
       console.log(`📸 Fallback composite screenshot saved to: ${filePath}`)
     }
     
-    // Save file path to session data
-    const existingScreenshots = session.data?.gisScreenshots || {}
-    console.log(`📸 Existing screenshots:`, existingScreenshots)
-    
-    const updatedScreenshots = {
-      ...existingScreenshots,
-      [`cropMode${cropMode}`]: `/uploads/${sessionId}/screenshots/${filename}` // Save file path
-    }
-    
-    console.log(`📸 Updated screenshots:`, updatedScreenshots)
-    console.log(`📸 File saved locally, session will be updated by frontend`)
+    // Note: We don't save to database here - the frontend will handle that
+    // The frontend will call saveGISData with the base64 version
+    console.log(`📸 File saved locally at: ${filePath}`)
+    console.log(`📸 Frontend will save base64 version to database`)
 
       return NextResponse.json({
         success: true,
-        screenshotUrl: `/uploads/${sessionId}/screenshots/${filename}`, // Return file path
-        cropMode
+        screenshotUrl: `/uploads/${sessionId}/screenshots/${filename}`, // Return file path for frontend to fetch
+        cropMode,
+        filePath
       })
     }
 

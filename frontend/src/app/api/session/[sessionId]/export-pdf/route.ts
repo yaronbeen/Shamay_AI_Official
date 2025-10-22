@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sessionStore } from '../../../../../lib/session-store-global'
 import puppeteer from 'puppeteer'
 import { A4_SPECS, PDF_STYLES } from '../../../../../lib/pdf/a4-specs'
 import { formatDateHebrew, formatCurrency, numberToHebrewText } from '../../../../../lib/utils/hebrew'
+import { ShumaDB } from '../../../../../lib/shumadb'
 
 export async function POST(
   request: NextRequest,
@@ -11,13 +11,14 @@ export async function POST(
   try {
     console.log(`📄 Generating PRODUCTION PDF for session: ${params.sessionId}`)
     
-    
-    const session = sessionStore.getSession(params.sessionId)
-    if (!session) {
+    // Load session data from database
+    const loadResult = await ShumaDB.loadShumaForWizard(params.sessionId)
+    if (!loadResult.success || !loadResult.valuationData) {
+      console.error('❌ Session not found in database:', params.sessionId)
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
 
-    const data = session.data || {}
+    const data = loadResult.valuationData
 
 // Add debugging and validation
 console.log('📊 PDF Export - Session data:', {
@@ -63,13 +64,10 @@ if (!data || Object.keys(data).length === 0) {
       htmlContent = data.customHTML
       console.log('📝 Using custom edited HTML content')
     } else {
-    // Refresh session data before generating HTML to get latest gisScreenshots
-    const refreshedSession = sessionStore.getSession(params.sessionId)
-    const refreshedData = refreshedSession?.data || {}
-    
-    // Generate HTML content using the shared template with refreshed data
-    const { generateDocumentHTML } = await import('../../../../../lib/document-template')
-    htmlContent = generateDocumentHTML(refreshedData, false)
+      // Generate HTML content using the shared template
+      const { generateDocumentHTML } = await import('../../../../../lib/document-template')
+      htmlContent = generateDocumentHTML(data, false)
+      console.log('📝 Generated HTML from template')
     }
 
     // Launch Puppeteer

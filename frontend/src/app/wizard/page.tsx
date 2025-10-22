@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { useSession } from 'next-auth/react'
 import { StepIndicator } from '@/components/StepIndicator'
 import { DocumentPreview } from '@/components/DocumentPreview'
 import { NavigationButtons } from '@/components/NavigationButtons'
@@ -11,6 +12,7 @@ import { Step3Validation } from '@/components/steps/Step3Validation'
 import { Step4AIAnalysis } from '@/components/steps/Step4AIAnalysis'
 import { Step5Export } from '@/components/steps/Step5Export'
 import { ValuationData } from '@/components/ValuationWizard'
+import { useShumaDB } from '@/hooks/useShumaDB'
 
 // Simple debounce function
 function debounce<T extends (...args: any[]) => any>(func: T, wait: number): T {
@@ -24,10 +26,22 @@ function debounce<T extends (...args: any[]) => any>(func: T, wait: number): T {
 export default function WizardPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { data: session } = useSession()
   const [currentStep, setCurrentStep] = useState(1)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [sessionLoading, setSessionLoading] = useState(true)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const [valuationId, setValuationId] = useState<string | null>(null)
+  
+  // Database integration hook
+  const { 
+    saveShumaToDatabase, 
+    loadShumaForWizard,
+    saveGISData, 
+    saveGarmushkaData, 
+    saveFinalResults,
+    isLoading: dbLoading 
+  } = useShumaDB()
   const [stepValidation, setStepValidation] = useState({
     step1: false,
     step2: false,
@@ -69,6 +83,21 @@ export default function WizardPage() {
     setCurrentStep(step)
   }, [searchParams])
 
+  // Keyboard shortcut for returning to dashboard (Ctrl/Cmd + D)
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'd') {
+        event.preventDefault()
+        if (confirm('האם אתה בטוח שברצונך לעזוב את האשף? כל ההתקדמות נשמרת אוטומטית.')) {
+          router.push('/dashboard')
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [router])
+
   // Check for existing session or create new one only if needed
   useEffect(() => {
     const initializeSession = async () => {
@@ -83,6 +112,28 @@ export default function WizardPage() {
           setData(prev => ({ ...prev, sessionId: urlSessionId }))
           // Save to localStorage for persistence
           localStorage.setItem('shamay_session_id', urlSessionId)
+          
+          // Load existing data from database
+          try {
+            const loadResult = await loadShumaForWizard(urlSessionId)
+            console.log('🔍 Database load result:', loadResult)
+            if (loadResult.success && loadResult.valuationData) {
+              console.log('✅ Loaded existing data from database:', loadResult.valuationData)
+              console.log('🔍 [LOAD] Uploads from database:', loadResult.valuationData.uploads)
+              console.log('🔍 [LOAD] Uploads status:', loadResult.valuationData.uploads?.map((u: any) => ({ id: u.id, type: u.type, status: u.status, hasStatus: 'status' in u })))
+              // Directly set the data without going through session store merge
+              setData(prev => ({
+                ...prev,
+                ...loadResult.valuationData,
+                sessionId: urlSessionId
+              }))
+            } else {
+              console.log('⚠️ No existing data found, starting fresh')
+            }
+          } catch (error) {
+            console.error('❌ Error loading existing data:', error)
+          }
+          
           setSessionLoading(false)
           setIsInitialLoad(false)
           return
@@ -94,14 +145,47 @@ export default function WizardPage() {
           console.log('🔄 Using existing session from localStorage:', localSessionId)
           setSessionId(localSessionId)
           setData(prev => ({ ...prev, sessionId: localSessionId }))
+          
+          // Load existing data from database
+          try {
+            const loadResult = await loadShumaForWizard(localSessionId)
+            if (loadResult.success && loadResult.valuationData) {
+              console.log('✅ Loaded existing data from database')
+              console.log('🔍 [LOAD] Uploads from database:', loadResult.valuationData.uploads)
+              console.log('🔍 [LOAD] Uploads status:', loadResult.valuationData.uploads?.map((u: any) => ({ id: u.id, type: u.type, status: u.status, hasStatus: 'status' in u })))
+              // Directly set the data without going through session store merge
+              setData(prev => ({
+                ...prev,
+                ...loadResult.valuationData,
+                sessionId: localSessionId
+              }))
+            } else {
+              console.log('⚠️ No existing data found, starting fresh')
+            }
+          } catch (error) {
+            console.error('❌ Error loading existing data:', error)
+          }
+          
           setSessionLoading(false)
           setIsInitialLoad(false)
           return
         }
         
-        // If no existing session, redirect to home page
-        console.log('❌ No existing session found, redirecting to home')
-        router.push('/')
+        // If no existing session, create a new one
+        console.log('🆕 No existing session found, creating new session')
+        try {
+          // Generate a new session ID locally
+          const newSessionId = Date.now().toString()
+          console.log('✅ Created new session:', newSessionId)
+          setSessionId(newSessionId)
+          setData(prev => ({ ...prev, sessionId: newSessionId }))
+          localStorage.setItem('shamay_session_id', newSessionId)
+          setSessionLoading(false)
+          setIsInitialLoad(false)
+        } catch (error) {
+          console.error('❌ Error creating session:', error)
+          router.push('/')
+        }
         
       } catch (error) {
         console.error('❌ Failed to initialize session:', error)
@@ -110,41 +194,57 @@ export default function WizardPage() {
       }
     }
     initializeSession()
-  }, [searchParams, router])
+  }, [searchParams, router, loadShumaForWizard])
 
-  // Debounced save function to prevent excessive API calls
+  // Enhanced debounced save function with database integration
   const debouncedSave = useCallback(
     debounce(async (dataToSave: ValuationData) => {
       if (sessionId && !isInitialLoad) {
         try {
-          // First, get the current session data to merge with
-          const currentSessionResponse = await fetch(`/api/session/${sessionId}`)
-          const currentSession = await currentSessionResponse.json()
-          const existingData = currentSession?.data || {}
+          console.log('💾 [DEBOUNCED SAVE] Starting save to database...')
+          console.log('💾 [DEBOUNCED SAVE] Uploads status:', dataToSave.uploads?.map((u: any) => ({ id: u.id, type: u.type, status: u.status })))
           
-          // Merge existing data with new data
-          const mergedData = {
-            ...existingData,
-            ...dataToSave
+          const organizationId = session?.user?.primaryOrganizationId
+          const userId = session?.user?.id
+
+          if (!organizationId || !userId) {
+            console.warn('⚠️ Skipping save: missing authenticated user or organization')
+            return
           }
+
+          // Save directly to database using ShumaDB
+          const result = await saveShumaToDatabase(
+            sessionId,
+            organizationId,
+            userId,
+            dataToSave
+          )
           
-          const response = await fetch(`/api/session/${sessionId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ data: mergedData })
-          })
-          
-          if (!response.ok) {
-            console.error('❌ Session save failed:', response.status, response.statusText)
+          if (result.success) {
+            console.log('✅ Data saved to database successfully')
+            console.log('✅ Uploads with status saved:', dataToSave.uploads?.length || 0, 'uploads')
+            if (result.shumaId && !valuationId) {
+              setValuationId(result.shumaId)
+              console.log('✅ New shuma created:', result.shumaId)
+            }
+          } else {
+            console.error('❌ Database save failed:', result.error)
           }
         } catch (err) {
-          console.error('Session save error:', err)
+          console.error('Database save error:', err)
         }
       } else if (isInitialLoad) {
         console.log('⏭️ Skipping save during initial load')
       }
     }, 1000), // 1 second debounce
-    [sessionId, isInitialLoad]
+    [
+      sessionId,
+      isInitialLoad,
+      saveShumaToDatabase,
+      valuationId,
+      session?.user?.primaryOrganizationId,
+      session?.user?.id
+    ]
   )
 
   // Memoize the updateData function to prevent infinite loops
@@ -158,6 +258,42 @@ export default function WizardPage() {
       return newData
     })
   }, [debouncedSave])
+
+  // Save GIS data to database
+  const saveGISDataToDB = useCallback(async (gisData: any) => {
+    if (valuationId) {
+      const result = await saveGISData(valuationId, gisData)
+      if (result.success) {
+        console.log('✅ GIS data saved to database')
+      } else {
+        console.error('❌ Failed to save GIS data:', result.error)
+      }
+    }
+  }, [valuationId, saveGISData])
+
+  // Save Garmushka data to database
+  const saveGarmushkaDataToDB = useCallback(async (garmushkaData: any) => {
+    if (valuationId) {
+      const result = await saveGarmushkaData(valuationId, garmushkaData)
+      if (result.success) {
+        console.log('✅ Garmushka data saved to database')
+      } else {
+        console.error('❌ Failed to save Garmushka data:', result.error)
+      }
+    }
+  }, [valuationId, saveGarmushkaData])
+
+  // Save final results to database
+  const saveFinalResultsToDB = useCallback(async (finalValuation: number, pricePerSqm: number, comparableData: any, propertyAnalysis: any) => {
+    if (valuationId) {
+      const result = await saveFinalResults(valuationId, finalValuation, pricePerSqm, comparableData, propertyAnalysis)
+      if (result.success) {
+        console.log('✅ Final results saved to database')
+      } else {
+        console.error('❌ Failed to save final results:', result.error)
+      }
+    }
+  }, [valuationId, saveFinalResults])
 
   // Memoize the validation handler to prevent infinite loops
   const handleValidationChange = useCallback((step: number, isValid: boolean) => {
@@ -229,10 +365,17 @@ export default function WizardPage() {
             updateData={updateData}
             sessionId={sessionId || undefined}
             onValidationChange={(isValid) => handleValidationChange(4, isValid)}
+            onSaveGISData={saveGISDataToDB}
+            onSaveGarmushkaData={saveGarmushkaDataToDB}
           />
         )
       case 5:
-        return <Step5Export data={data} />
+        return (
+          <Step5Export 
+            data={data} 
+            onSaveFinalResults={saveFinalResultsToDB}
+          />
+        )
       default:
         return (
           <Step1InitialData 
@@ -257,6 +400,46 @@ export default function WizardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Navigation Bar */}
+      <nav className="bg-white shadow-sm border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                  <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                </div>
+                <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+                  SHAMAY.AI
+                </h1>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-4">
+              <div className="text-sm text-gray-600">
+                שלב {currentStep} מתוך 5
+              </div>
+              <button
+                onClick={() => {
+                  if (confirm('האם אתה בטוח שברצונך לעזוב את האשף? כל ההתקדמות נשמרת אוטומטית.')) {
+                    router.push('/dashboard')
+                  }
+                }}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
+                title="חזור ללוח בקרה (Ctrl+D)"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+                <span>חזור ללוח בקרה</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </nav>
+
       {/* Debug info */}
       {sessionId && (
         <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 mb-4">

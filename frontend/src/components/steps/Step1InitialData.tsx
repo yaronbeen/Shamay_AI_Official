@@ -55,10 +55,74 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
     
     // חתימה
     signature: data.signaturePreview || null
+
+
   })
+
+  console.log('Validation check:',  data )
 
   const [signatureUploading, setSignatureUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Sync local formData with incoming data prop when data changes
+  useEffect(() => {
+    console.log('🔄 Step1 - Data prop changed:', data)
+    console.log('🔄 Step1 - Specific fields:', {
+      clientName: data.clientName,
+      street: data.street,
+      shamayName: data.shamayName,
+      valuationType: data.valuationType
+    })
+    
+    // Always sync the form data with the incoming data prop
+    setFormData({
+      // סוג שומה ומועד כתיבתה
+      valuationType: data.valuationType || '',
+      valuationDate: data.valuationDate || new Date().toISOString().split('T')[0],
+      
+      // זהות מזמין השומה והקשר שלו לנכס
+      clientName: data.clientName || '',
+      clientId: data.clientId || '',
+      clientPhone: data.clientPhone || '',
+      clientEmail: data.clientEmail || '',
+      clientRelation: data.clientRelation || '',
+      
+      // מטרת השומה
+      valuationPurpose: data.valuationPurpose || '',
+      
+      // המועד הקובע לשומה
+      valuationEffectiveDate: data.valuationEffectiveDate || new Date().toISOString().split('T')[0],
+      
+      // מועד ביקור הנכס וזהות המבקר
+      visitDate: data.visitDate || new Date().toISOString().split('T')[0],
+      visitorName: data.visitorName || '',
+      visitorId: data.visitorId || '',
+      
+      // זיהוי הנכס
+      street: data.street || '',
+      buildingNumber: data.buildingNumber || '',
+      neighborhood: data.neighborhood || '',
+      city: data.city || '',
+      block: data.block || '',
+      parcel: data.parcel || '',
+      subParcel: data.subParcel || '',
+      
+      // תיאור הנכס והסביבה (basic info only - detailed analysis will be done by AI in Step 3)
+      rooms: data.rooms || 0,
+      floor: data.floor || 0,
+      area: data.area || 0,
+      
+      // פרטי שמאי
+      shamayName: data.shamayName || '',
+      shamaySerialNumber: data.shamaySerialNumber || '',
+      shamayLicense: data.shamayLicense || '',
+      shamayPhone: data.shamayPhone || '',
+      shamayEmail: data.shamayEmail || '',
+      
+      // חתימה
+      signature: data.signaturePreview || null
+    })
+  }, [data])
 
   const validateForm = useCallback(() => {
     const isValid = formData.valuationType.trim() !== '' && 
@@ -561,7 +625,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="הזן שטח"
               />
-          </div>
+            </div>
           </div>
         </div>
 
@@ -600,8 +664,8 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 placeholder="הזן מספר רישיון"
                 dir="rtl"
               />
-            </div>
-            
+        </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
                 מספר רישיון מקצועי
@@ -617,7 +681,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 dir="rtl"
               />
             </div>
-
+            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
                 טלפון שמאי

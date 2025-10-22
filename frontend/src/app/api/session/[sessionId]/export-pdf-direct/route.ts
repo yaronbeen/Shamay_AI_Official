@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sessionStore } from '../../../../../lib/session-store-global'
 import puppeteer from 'puppeteer-core'
 import { A4_SPECS, PDF_STYLES } from '../../../../../lib/pdf-specs'
+import { ShumaDB } from '../../../../../lib/shumadb'
 
 export async function GET(
   request: NextRequest,
@@ -10,13 +10,14 @@ export async function GET(
   try {
     console.log(`📄 PDF Export - Session ID: ${params.sessionId}`)
     
-    const session = sessionStore.getSession(params.sessionId)
-    if (!session) {
-      console.error(`❌ Session not found: ${params.sessionId}`)
+    // Load session data from database
+    const loadResult = await ShumaDB.loadShumaForWizard(params.sessionId)
+    if (!loadResult.success || !loadResult.valuationData) {
+      console.error(`❌ Session not found in database: ${params.sessionId}`)
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
 
-    const data = session.data || {}
+    const data = loadResult.valuationData
 
     // Add debugging and validation
     console.log('📊 PDF Export - Session data:', {

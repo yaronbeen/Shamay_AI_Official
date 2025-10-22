@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sessionStore } from '../../../../../lib/session-store-global'
+import { ShumaDB } from '../../../../../lib/shumadb.js'
 import { spawn } from 'child_process'
 import path from 'path'
 import fs from 'fs'
@@ -16,11 +16,11 @@ export async function POST(
       const { sessionId } = params
       console.log(`🔍 Starting interior analysis for session: ${sessionId}`)
 
-    // Get session data
-    const sessionData = sessionStore.getSession(sessionId)
-    if (!sessionData) {
-      console.log('❌ Session not found:', sessionId)
-      return NextResponse.json({ error: 'Session not found' }, { status: 404 })
+    // Get session data from database
+    const sessionData = await ShumaDB.loadShumaForWizard(sessionId)
+    if (!sessionData.success || !sessionData.valuationData) {
+      console.log('❌ Session not found in database:', sessionId)
+      return NextResponse.json({ error: 'Session not found in database' }, { status: 404 })
     }
     
     console.log('✅ Session found:', sessionId)
@@ -258,17 +258,7 @@ processImage();
 
     console.log('📊 Extracted data:', extractedData)
 
-    // Update session data
-    sessionStore.updateSession(sessionId, {
-      ...sessionData,
-      data: {
-        ...sessionData.data,
-        extractedData: {
-          ...sessionData.data?.extractedData,
-          ...extractedData
-        }
-      }
-    })
+    // Note: Session data is now managed by the database, no need to update sessionStore
 
     return NextResponse.json({
       success: true,

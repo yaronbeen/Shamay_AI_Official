@@ -194,21 +194,6 @@ export function generateDocumentHTML(data: ValuationData, isPreview: boolean = t
           </div>
         ` : ''}
 
-        <!-- Interior Images -->
-        ${data.interiorImages && data.interiorImages.length > 0 ? `
-          <div style="text-align: center; margin-bottom: 20px;">
-            <h4 style="font-size: 12pt; font-weight: bold; margin-bottom: 10px;">תמונות פנים הדירה</h4>
-            <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
-              ${data.interiorImages.map((image: string, index: number) => `
-                <img 
-                  src="${image}" 
-                  alt="תמונה פנים ${index + 1}"
-                  style="max-width: 150px; max-height: 100px; border: 1px solid #ccc; border-radius: 4px;"
-                />
-              `).join('')}
-            </div>
-          </div>
-        ` : ''}
 
         <!-- Report Date and Reference Number -->
         <div style="display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 11pt;">
@@ -255,32 +240,7 @@ export function generateDocumentHTML(data: ValuationData, isPreview: boolean = t
           ${getFullAddress()}
         </h3>
 
-        <!-- Property Image -->
-        ${data.selectedImagePreview ? `
-          <div style="text-align: center; margin-bottom: 20px; display: flex; justify-content: center; align-items: center;">
-            <img 
-              src="${data.selectedImagePreview}" 
-              alt="תמונה של הבניין"
-              style="max-width: 300px; max-height: 200px; border: 1px solid #ccc; border-radius: 4px; display: block; margin: 0 auto;"
-            />
-          </div>
-        ` : ''}
 
-        <!-- Interior Images -->
-        ${data.interiorImages && data.interiorImages.length > 0 ? `
-          <div style="text-align: center; margin-bottom: 20px;">
-            <h4 style="font-size: 12pt; font-weight: bold; margin-bottom: 10px;">תמונות פנים הדירה</h4>
-            <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
-              ${data.interiorImages.map((image: string, index: number) => `
-                <img 
-                  src="${image}" 
-                  alt="תמונה פנים ${index + 1}"
-                  style="max-width: 150px; max-height: 100px; border: 1px solid #ccc; border-radius: 4px;"
-                />
-              `).join('')}
-            </div>
-          </div>
-        ` : ''}
 
         <!-- Report Date and Reference Number -->
         <div style="display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 11pt;">
@@ -342,7 +302,7 @@ export function generateDocumentHTML(data: ValuationData, isPreview: boolean = t
           </h3>
           <div style="background-color: #e8f4fd; padding: 12px; border-radius: 4px; font-size: 11pt;">
             <p>
-              חלקה ${data.extractedData?.parcel || data.parcel || '[מספר חלקה]'} בגוש ${data.extractedData?.gush || data.extractedData?.gush || '[מספר גוש]'}, 
+              חלקה ${data.extractedData?.parcel || data.parcel || '[מספר חלקה]'} בגוש ${data.extractedData?.gush || data.gush || '[מספר גוש]'}, 
               בשטח קרקע רשום של ${data.parcelArea || '[שטח חלקה]'} מ"ר, 
               צורתה ${data.parcelShape || '[צורת החלקה]'}, 
               פני הקרקע ${data.parcelSurface || '[פני הקרקע]'}.
@@ -379,7 +339,7 @@ export function generateDocumentHTML(data: ValuationData, isPreview: boolean = t
               (נשלף אוטומטית מנסח הטאבו), 
               ובשטח בנוי רישוי של כ-<span data-field="builtArea" data-editable="true">${data.extractedData?.builtArea || data.builtArea || '[שטח בנוי]'}</span> מ"ר 
               (נשלף אוטומטית מהיתר הבנייה). 
-              ${data.extractedData?.attachments ? `לדירה צמודות ${data.extractedData.attachments}.` : ''}
+              ${data.extractedData?.attachments || data.attachments ? `לדירה צמודות ${data.extractedData?.attachments || data.attachments}.` : ''}
             </p>
             <p>
               הדירה כוללת <span data-field="rooms" data-editable="true">${data.rooms || '[מספר חדרים]'}</span> חדרים, 
@@ -413,17 +373,17 @@ export function generateDocumentHTML(data: ValuationData, isPreview: boolean = t
               בתאריך ${formatDate(data.extractDate || '')} (נשלף אוטומטית מהנסח).
             </p>
             <p>
-              חלקה ${data.extractedData?.parcel || data.parcel || '[מספר חלקה]'} בגוש ${data.extractedData?.gush || data.extractedData?.gush || '[מספר גוש]'}, 
-              בשטח קרקע רשום של ${data.parcelArea || '[שטח חלקה]'} מ"ר 
+              חלקה ${data.extractedData?.parcel || data.parcel || '[מספר חלקה]'} בגוש ${data.extractedData?.gush || data.gush || '[מספר גוש]'}, 
+              בשטח קרקע רשום של ${data.parcelArea || data.extractedData?.registeredArea || data.registeredArea || '[שטח חלקה]'} מ"ר 
               (כל הערכים נשלפים אוטומטית מהנסח).
             </p>
             
             <div style="margin-top: 10px; padding: 10px; background-color: #fff3cd; border-radius: 4px;">
               <p><strong>בעלויות:</strong> ${data.extractedData?.ownershipType || data.ownershipRights || '[פירוט בעלויות - נשלף אוטומטית מהנסח]'}</p>
-              ${data.extractedData?.attachments ? `
+              ${data.extractedData?.attachments || data.attachments ? `
                 <div>
                   <p><strong>הצמדות:</strong></p>
-                  <p>${data.extractedData.attachments}</p>
+                  <p>${data.extractedData?.attachments || data.attachments}</p>
                 </div>
               ` : ''}
               ${data.notes ? `
@@ -702,11 +662,11 @@ export function generateDocumentHTML(data: ValuationData, isPreview: boolean = t
               <tbody>
                 <tr>
                   <td style="border: 1px solid #ccc; padding: 8px;">${data.propertyEssence || '[תיאור הנכס]'}</td>
-                  <td style="border: 1px solid #ccc; padding: 8px;">${data.builtArea || '[שטח בנוי]'}</td>
-                  <td style="border: 1px solid #ccc; padding: 8px;">${data.extractedData?.builtArea || data.builtArea || '[שטח בנוי]'}</td>
+                  <td style="border: 1px solid #ccc; padding: 8px;">${data.extractedData?.builtArea || data.builtArea || data.registeredArea || '[שטח בנוי]'}</td>
+                  <td style="border: 1px solid #ccc; padding: 8px;">${data.extractedData?.balconyArea || data.balconyArea || '0'}</td>
                   <td style="border: 1px solid #ccc; padding: 8px;">
-                    ${data.extractedData?.builtArea || data.builtArea ? 
-                      (parseFloat(String(data.extractedData?.builtArea || data.builtArea || '0'))).toFixed(1) : 
+                    ${data.extractedData?.builtArea || data.builtArea || data.registeredArea ? 
+                      (parseFloat(String(data.extractedData?.builtArea || data.builtArea || data.registeredArea || '0')) + parseFloat(String(data.extractedData?.balconyArea || data.balconyArea || '0')) * 0.5).toFixed(1) : 
                       '[חישוב]'
                     }
                   </td>

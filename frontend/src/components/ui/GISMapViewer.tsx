@@ -3,7 +3,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { MapPin, Settings, Camera, Save, Eye, RefreshCw } from 'lucide-react'
 import ReactCrop, { Crop, PixelCrop, centerCrop, makeAspectCrop } from 'react-image-crop'
+import { ValuationData } from '../ValuationWizard'
 import 'react-image-crop/dist/ReactCrop.css'
+import { useShumaDB } from '@/hooks/useShumaDB'
 
 interface GovMapData {
   coordinates: {
@@ -49,10 +51,13 @@ interface Screenshots {
 
 interface GISMapViewerProps {
   sessionId: string
-  onAnalysisComplete?: (data: GovMapData | null) => void
+  data: ValuationData
+  initialScreenshots?: Screenshots
+  onAnalysisComplete?: (measurements: GovMapData) => void
 }
 
-export default function GISMapViewer({ sessionId, onAnalysisComplete }: GISMapViewerProps) {
+export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GISMapViewerProps) {
+  const { saveGISData } = useShumaDB()
   const [gisData, setGisData] = useState<GovMapData | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -73,6 +78,8 @@ export default function GISMapViewer({ sessionId, onAnalysisComplete }: GISMapVi
   const [serverScreenshot, setServerScreenshot] = useState<string | null>(null)
   const [isCapturingServer, setIsCapturingServer] = useState(false)
   const imgRef = useRef<HTMLImageElement>(null)
+
+
   
   // Annotation drawing state
   const [isDrawing, setIsDrawing] = useState(false)
@@ -87,39 +94,51 @@ export default function GISMapViewer({ sessionId, onAnalysisComplete }: GISMapVi
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
-    if (sessionId) {
+    if (sessionId && data) {
       loadGISAnalysis()
     }
-  }, [sessionId])
-
+  }, [sessionId, data])
+  
+  console.log('🔍 GISMapViewer data:', data)
+  
   const loadGISAnalysis = async () => {
     try {
-      console.log('📊 Loading existing GovMap analysis...')
-      const response = await fetch(`/api/session/${sessionId}/gis-analysis`)
-      const data = await response.json()
+      console.log('📊 Loading existing GovMap analysis from session data...')
       
-      if (data.success && data.gisAnalysis) {
-        if (data.gisAnalysis.status === 'error' || data.gisAnalysis.error) {
-          setGisData(null)
-          onAnalysisComplete?.(null)
-        } else {
-          console.log('📊 Setting GovMap data:', data.gisAnalysis)
-          setGisData(data.gisAnalysis)
-          onAnalysisComplete?.(data.gisAnalysis)
+      // Safety check: ensure data is defined
+      if (!data) {
+        console.log('⚠️ Data prop is undefined, skipping load')
+        return
+      }
+      
+      // Load GIS analysis from ValuationData prop
+      if (data.gisScreenshots) {
+        console.log('📊 Setting GovMap data from props:', data.gisScreenshots)
+        setGisData(data.gisScreenshots)
+      }
+      
+      // Load screenshots from ValuationData
+      if (data.gisScreenshots) {
+        // Ensure screenshots are in proper base64 format for display
+        const formattedScreenshots = {
+          cropMode0: data.gisScreenshots.cropMode0,
+          cropMode1: data.gisScreenshots.cropMode1
         }
         
-        if (data.gisScreenshots) {
-          // Ensure screenshots are in proper base64 format for display
-          const formattedScreenshots = {
-            cropMode0: data.gisScreenshots.cropMode0,
-            cropMode1: data.gisScreenshots.cropMode1
+        setScreenshots(formattedScreenshots)
+        console.log('📸 Loaded existing screenshots from data:', formattedScreenshots)
+      }
+      
+      // If no data in props, try to load from session API (fallback)
+      if (!data.gisAnalysis) {
+        const response = await fetch(`/api/session/${sessionId}/gis-analysis`)
+        if (response.ok) {
+          const result = await response.json()
+          if (result.success && result.measurements) {
+            console.log('📊 Setting GovMap data from API:', result.measurements)
+            setGisData(result.measurements)
           }
-          
-          setScreenshots(formattedScreenshots)
-          console.log('📸 Loaded existing screenshots:', formattedScreenshots)
         }
-      } else {
-        onAnalysisComplete?.(null)
       }
     } catch (error) {
       console.error('❌ Error loading GovMap analysis:', error)
@@ -280,33 +299,16 @@ export default function GISMapViewer({ sessionId, onAnalysisComplete }: GISMapVi
       console.log(`📤 Existing screenshots:`, existingScreenshots)
       console.log(`📤 Updated screenshots:`, updatedScreenshots)
 
-      // Save directly to session with base64 data
-      const response = await fetch(`/api/session/${sessionId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
-      })
+      // Save directly to database with base64 data
+      const result = await saveGISData(sessionId, updatedScreenshots)
 
-      if (response.ok) {
-        const result = await response.json()
-        console.log(`✅ Session update response:`, result)
-        console.log(`📊 Updated session data:`, result.session?.data)
+      if (result.success) {
+        console.log(`✅ Database save successful`)
         
         setScreenshots(prev => ({
           ...prev,
           [`cropMode${selectedCropMode}`]: base64Data
         }))
-        
-        // Update the parent component's state with the new screenshot
-        if (gisData) {
-          onAnalysisComplete?.({
-            ...gisData,
-            screenshots: {
-              ...screenshots,
-              [`cropMode${selectedCropMode}`]: base64Data
-            }
-          })
-        }
 
         setShowEditModal(false)
         setCapturedImage(null)
@@ -560,32 +562,15 @@ export default function GISMapViewer({ sessionId, onAnalysisComplete }: GISMapVi
           console.log(`✅ File saved locally: ${localSaveResult.filePath}`)
         }
         
-        // 2. Save base64 to session data
-        const sessionResponse = await fetch(`/api/session/${sessionId}`)
-        const sessionData = await sessionResponse.json()
-        const existingScreenshots = sessionData?.data?.gisScreenshots || {}
-        
+        // 2. Save base64 to database
         const updatedScreenshots = {
-          ...existingScreenshots,
           [`cropMode${selectedCropMode}`]: croppedDataUrl
         }
         
-        // Save to session
-        const requestBody = {
-          data: {
-            ...sessionData.data,
-            gisScreenshots: updatedScreenshots
-          }
-        }
-        
-        const response = await fetch(`/api/session/${sessionId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(requestBody)
-        })
+        const result = await saveGISData(sessionId, updatedScreenshots)
 
-        if (response.ok) {
-          const result = await response.json()
+        if (result.success) {
+          console.log(`✅ Database save successful`)
           
           // Update local state
           setScreenshots(prev => ({
@@ -938,6 +923,8 @@ export default function GISMapViewer({ sessionId, onAnalysisComplete }: GISMapVi
     redrawCanvas()
   }
 
+  console.log('🔍 GISData:', gisData)
+
   const saveAnnotations = async () => {
     if (!gisData || annotations.length === 0) return
 
@@ -960,12 +947,6 @@ export default function GISMapViewer({ sessionId, onAnalysisComplete }: GISMapVi
 
         if (response.ok) {
           console.log('✅ Annotations saved successfully')
-          // Update the parent component
-          onAnalysisComplete?.({
-            ...gisData,
-            annotations,
-            annotationCanvasData: canvasData
-          })
         } else {
           console.error('❌ Failed to save annotations')
         }

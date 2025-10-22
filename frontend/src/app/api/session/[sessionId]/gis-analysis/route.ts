@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sessionStore } from '../../../../../lib/session-store-global'
+import { ShumaDB } from '../../../../../lib/shumadb'
 import axios from 'axios'
 
 // GovMap Integration Functions
@@ -224,28 +224,30 @@ export async function POST(
   { params }: { params: { sessionId: string } }
 ) {
   try {
-    const session = sessionStore.getSession(params.sessionId)
-    if (!session) {
+    // Load session from database
+    const loadResult = await ShumaDB.loadShumaForWizard(params.sessionId)
+    if (!loadResult.success || !loadResult.valuationData) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
 
+    const sessionData = loadResult.valuationData
     console.log(`🗺️ Starting GovMap analysis for session ${params.sessionId}`)
 
     // Get property data from session
     const propertyData = {
       // Address information from Step 1
-      street: session.data.street || '',
-      buildingNumber: session.data.buildingNumber || '',
-      city: session.data.city || '',
+      street: sessionData.street || '',
+      buildingNumber: sessionData.buildingNumber || '',
+      city: sessionData.city || '',
       
       // Full address for geocoding
-      address: (session.data.street && session.data.city) ? 
-        `${session.data.street} ${session.data.buildingNumber || ''}, ${session.data.city}`.trim() : 
+      address: (sessionData.street && sessionData.city) ? 
+        `${sessionData.street} ${sessionData.buildingNumber || ''}, ${sessionData.city}`.trim() : 
         '',
       
       // Coordinates (only include if they exist)
-      ...(session.data.lat && session.data.lng ? { lat: session.data.lat, lng: session.data.lng } : {}),
-      ...(session.data.coordinates ? { coordinates: session.data.coordinates } : {})
+      ...(sessionData.lat && sessionData.lng ? { lat: sessionData.lat, lng: sessionData.lng } : {}),
+      ...(sessionData.coordinates ? { coordinates: sessionData.coordinates } : {})
     }
 
     console.log('📍 Property data for GovMap analysis:', propertyData)
@@ -305,18 +307,21 @@ export async function POST(
         address: typeof result.address === 'string' ? result.address : result.address?.normalized || ''
       }
 
-      // Update session with GovMap analysis results
-      sessionStore.updateSession(params.sessionId, {
-        gisAnalysis: measurements,
-        data: {
-          ...session.data,
+      // Update session with GovMap analysis results in database
+      const updateResult = await ShumaDB.saveShumaFromSession(
+        params.sessionId,
+        'default-org',
+        'system',
+        {
+          ...sessionData,
           lat: result.coordinates?.wgs84?.lat || 0,
           lng: result.coordinates?.wgs84?.lon || 0,
-          coordinates: measurements.coordinates
+          coordinates: measurements.coordinates,
+          gisAnalysis: measurements
         }
-      })
+      )
 
-      console.log('🗺️ Updated session with GovMap analysis:', measurements)
+      console.log('🗺️ Updated session with GovMap analysis:', measurements, 'DB result:', updateResult)
 
       return NextResponse.json({
         success: true,
@@ -347,13 +352,15 @@ export async function GET(
   { params }: { params: { sessionId: string } }
 ) {
   try {
-    const session = sessionStore.getSession(params.sessionId)
-    if (!session) {
+    // Load session from database
+    const loadResult = await ShumaDB.loadShumaForWizard(params.sessionId)
+    if (!loadResult.success || !loadResult.valuationData) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
 
-    const gisAnalysis = session.gisAnalysis || null
-    const gisScreenshots = session.data?.gisScreenshots || null
+    const sessionData = loadResult.valuationData
+    const gisAnalysis = sessionData.gisAnalysis || null
+    const gisScreenshots = sessionData.gisScreenshots || null
 
     console.log(`📊 GovMap Analysis GET - Session: ${params.sessionId}`)
     console.log(`📊 GovMap Analysis:`, gisAnalysis)
@@ -361,7 +368,7 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      gisAnalysis: gisAnalysis,
+      measurements: gisAnalysis,
       gisScreenshots: gisScreenshots
     })
 
