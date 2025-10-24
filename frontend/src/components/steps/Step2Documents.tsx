@@ -75,6 +75,16 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
   const [isProcessing, setIsProcessing] = useState(false)
   const [extractedData, setExtractedData] = useState<any>({})
   const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({})
+  
+  // AI Extraction state
+  const [existingAIExtraction, setExistingAIExtraction] = useState<any>(null)
+  const [showReprocessConfirm, setShowReprocessConfirm] = useState(false)
+  const [selectiveReprocess, setSelectiveReprocess] = useState({
+    tabu: false,
+    permit: false,
+    condo: false,
+    images: false
+  })
 
   // Load uploads from session on mount
   useEffect(() => {
@@ -164,94 +174,182 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
     loadUploadsFromSession()
   }, [sessionId, updateData])
 
+  // Load existing AI extractions
+  useEffect(() => {
+    const checkExistingAIExtraction = async () => {
+      if (!sessionId) return
+      
+      try {
+        const response = await fetch(`/api/session/${sessionId}/ai-extractions?type=combined`)
+        if (response.ok) {
+          const { extractions } = await response.json()
+          if (extractions && extractions.length > 0) {
+            const latestExtraction = extractions[0]
+            setExistingAIExtraction(latestExtraction)
+            console.log('📚 Found existing AI extraction:', latestExtraction)
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error checking for existing AI extractions:', error)
+      }
+    }
+    
+    checkExistingAIExtraction()
+  }, [sessionId])
+
   const getUploadsByType = (type: string) => {
     return uploads.filter(upload => upload.type === type)
   }
 
   // Process documents using AI services
-  const processDocuments = async () => {
+  const processDocuments = async (reprocessSelection?: typeof selectiveReprocess) => {
     if (!sessionId) return
     
     setIsProcessing(true)
+    setShowReprocessConfirm(false)
     
     try {
       // Check which document types were uploaded
       const uploadedTypes = new Set(data.uploads?.map((upload: any) => upload.type) || [])
       console.log('📋 Uploaded document types:', Array.from(uploadedTypes))
       
-      // Only call APIs for uploaded document types
-      const apiCalls: Promise<any>[] = []
+      // If reprocessSelection is provided, only process selected types
+      // Otherwise, process all uploaded types
+      const shouldProcess = reprocessSelection || {
+        tabu: uploadedTypes.has('tabu'),
+        permit: uploadedTypes.has('permit'),
+        condo: uploadedTypes.has('condo'),
+        images: uploadedTypes.has('building_image') || uploadedTypes.has('interior_image')
+      }
       
-      if (uploadedTypes.has('tabu')) {
+      console.log('🔄 Reprocessing selection:', shouldProcess)
+      
+      // Only call APIs for selected document types
+      const apiCalls: Promise<any>[] = []
+      const apiTypes: string[] = []
+      
+      if (uploadedTypes.has('tabu') && shouldProcess.tabu) {
         console.log('🏛️ Calling land registry analysis API')
         apiCalls.push(extractLandRegistryData())
+        apiTypes.push('tabu')
       }
       
-      if (uploadedTypes.has('permit')) {
+      if (uploadedTypes.has('permit') && shouldProcess.permit) {
         console.log('🏗️ Calling building permit analysis API')
         apiCalls.push(extractBuildingPermitData())
+        apiTypes.push('permit')
       }
       
-      if (uploadedTypes.has('condo')) {
+      if (uploadedTypes.has('condo') && shouldProcess.condo) {
         console.log('🏢 Calling shared building analysis API')
         apiCalls.push(extractSharedBuildingData())
+        apiTypes.push('condo')
       }
       
-      if (uploadedTypes.has('building_image') || uploadedTypes.has('interior_image')) {
+      if ((uploadedTypes.has('building_image') || uploadedTypes.has('interior_image')) && shouldProcess.images) {
         console.log('📸 Calling image analysis API')
         apiCalls.push(extractImageAnalysisData())
+        apiTypes.push('images')
       }
       
-      // If no relevant documents uploaded, show message
+      // If no relevant documents selected for processing, show message
       if (apiCalls.length === 0) {
-        console.log('⚠️ No relevant documents found for AI analysis')
-        setExtractedData({})
-        updateData({ extractedData: {} })
+        console.log('⚠️ No documents selected for AI analysis')
         setIsProcessing(false)
         return
       }
       
       console.log(`🚀 Processing ${apiCalls.length} document types with AI...`)
       
+      // If reprocessing selectively, fetch latest data from database first
+      let baseData = {}
+      if (reprocessSelection) {
+        console.log('🔄 Selective reprocess - fetching latest data from database first...')
+        try {
+          const sessionResponse = await fetch(`/api/session/${sessionId}`)
+          if (sessionResponse.ok) {
+            const sessionData = await sessionResponse.json()
+            baseData = sessionData.data?.extractedData || sessionData.extractedData || {}
+            console.log('✅ Loaded base data from database:', Object.keys(baseData))
+          }
+        } catch (error) {
+          console.error('❌ Failed to load base data, using local state:', error)
+          baseData = { ...extractedData }
+        }
+      }
+      
       // Call only the relevant APIs
       const results = await Promise.allSettled(apiCalls)
       
-      // Combine results
-      const combinedData: any = {}
+      // Start with base data (from DB if selective, empty if full reprocess)
+      const combinedData: any = { ...baseData }
+      
+      console.log('🔄 Starting with base data:', reprocessSelection ? 'FROM DATABASE (selective)' : 'EMPTY (full process)')
+      console.log('🔄 Base data keys:', Object.keys(combinedData))
       
       results.forEach((result, index) => {
         if (result.status === 'fulfilled' && result.value) {
+          console.log(`📦 Merging result ${index} (${apiTypes[index]}):`, result.value)
           Object.assign(combinedData, result.value)
+        } else if (result.status === 'rejected') {
+          console.error(`❌ API call ${index} (${apiTypes[index]}) failed:`, result.reason)
         }
       })
+      
+      console.log('📦 Final combined data after merging all results:', combinedData)
+      console.log('📦 Combined data keys:', Object.keys(combinedData))
       
       setExtractedData(combinedData)
       
       // Update parent data - only update extractedData to avoid overwriting other data
-      console.log('📊 About to update parent data with extracted data:', combinedData)
+      console.log('📊 About to update parent data with extracted data:', JSON.stringify(combinedData, null, 2))
       updateData({
         extractedData: combinedData
       })
-      console.log('📊 Updated parent data with extracted data:', combinedData)
+      console.log('📊 Updated parent data with extracted data')
+      console.log('📊 Extracted data keys in combinedData:', Object.keys(combinedData))
       
-      // Save extracted data to session
+      // Save extracted data to session AND save original AI extractions separately
       if (sessionId) {
         try {
+          const savePayload = {
+            data: {
+              extractedData: combinedData
+            }
+          }
+          console.log('💾 Saving to session API. Payload:', JSON.stringify(savePayload, null, 2))
+          
           const response = await fetch(`/api/session/${sessionId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              data: {
-                extractedData: combinedData
-              }
-            })
+            body: JSON.stringify(savePayload)
           })
           
           if (response.ok) {
-            console.log('✅ Extracted data saved to session:', combinedData)
+            const savedData = await response.json()
+            console.log('✅ Extracted data saved to session successfully')
+            console.log('✅ Server response:', savedData)
+            console.log('✅ Keys that were saved:', Object.keys(combinedData))
           } else {
-            console.error('❌ Failed to save extracted data to session')
+            const errorText = await response.text()
+            console.error('❌ Failed to save extracted data to session:', response.status, errorText)
           }
+          
+          // Also save original AI extractions for potential revert
+          console.log('💾 Saving original AI extractions for future revert...')
+          await fetch(`/api/session/${sessionId}/ai-extractions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              extractionType: 'combined',
+              extractedFields: combinedData,
+              metadata: {
+                extractionDate: new Date().toISOString(),
+                documentTypes: Array.from(uploadedTypes)
+              }
+            })
+          })
+          console.log('✅ Original AI extractions saved for revert capability')
         } catch (error) {
           console.error('❌ Error saving extracted data to session:', error)
         }
@@ -283,7 +381,10 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
           gush: result.gush || 'לא נמצא',
           parcel: result.chelka || 'לא נמצא',
           ownershipType: result.ownership_type || 'לא נמצא',
-          attachments: result.attachments || 'לא נמצא'
+          attachments: result.attachments || 'לא נמצא',
+          balconyArea: result.balcony_area || result.balcony_sqm || 0,
+          buildingNumber: result.building_number || result.house_number || '',
+          registeredArea: result.registered_area || result.apartment_registered_area || 0
         }
       }
     } catch (error) {
@@ -295,7 +396,10 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
       gush: 'לא נמצא',
       parcel: 'לא נמצא',
       ownershipType: 'לא נמצא',
-      attachments: 'לא נמצא'
+      attachments: 'לא נמצא',
+      balconyArea: 0,
+      buildingNumber: '',
+      registeredArea: 0
     }
   }
 
@@ -313,7 +417,12 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
           buildingRights: result.permitted_description || 'לא נמצא',
           permittedUse: result.permitted_use || 'לא נמצא',
           builtArea: result.built_area || 'לא נמצא',
-          buildingDescription: result.building_description || 'לא נמצא'
+          buildingDescription: result.building_description || 'לא נמצא',
+          buildingPermitNumber: result.permit_number || result.building_permit_number || 'לא נמצא',
+          buildingPermitDate: result.permit_date || result.building_permit_date || 'לא נמצא',
+          buildingFloors: result.building_floors || result.floors || 'לא נמצא',
+          buildingUnits: result.building_units || result.units || 'לא נמצא',
+          buildingDetails: result.building_details || result.additional_details || ''
         }
       }
     } catch (error) {
@@ -325,7 +434,12 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
       buildingRights: 'לא נמצא',
       permittedUse: 'לא נמצא',
       builtArea: 'לא נמצא',
-      buildingDescription: 'לא נמצא'
+      buildingDescription: 'לא נמצא',
+      buildingPermitNumber: 'לא נמצא',
+      buildingPermitDate: 'לא נמצא',
+      buildingFloors: 'לא נמצא',
+      buildingUnits: 'לא נמצא',
+      buildingDetails: ''
     }
   }
 
@@ -372,24 +486,36 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
       // Process interior analysis results
       if (interiorResponse.status === 'fulfilled' && interiorResponse.value.ok) {
         const interiorData = await interiorResponse.value.json()
-        if (interiorData.success && interiorData.extractedData) {
-          result.propertyLayoutDescription = interiorData.extractedData.property_layout_description || 'לא נמצא'
-          result.roomAnalysis = interiorData.extractedData.room_analysis || []
-          result.conditionAssessment = interiorData.extractedData.condition_assessment || 'לא נמצא'
+        console.log('📸 Interior API response:', interiorData)
+        
+        if (interiorData.success) {
+          // Handle both nested and flat extractedData structure
+          const extracted = interiorData.extractedData || interiorData
+          result.propertyLayoutDescription = extracted.property_layout_description || 'לא נמצא'
+          result.roomAnalysis = extracted.room_analysis || []
+          result.conditionAssessment = extracted.condition_assessment || 'לא נמצא'
+          result.interiorFeatures = extracted.interior_features || 'לא נמצא'
+          result.finishLevel = extracted.finish_level || 'לא נמצא'
         }
       }
       
       // Process exterior analysis results
       if (exteriorResponse.status === 'fulfilled' && exteriorResponse.value.ok) {
         const exteriorData = await exteriorResponse.value.json()
-        if (exteriorData.success && exteriorData.extractedData) {
-          result.buildingCondition = exteriorData.extractedData.building_condition || 'לא נמצא'
-          result.buildingFeatures = exteriorData.extractedData.building_features || 'לא נמצא'
-          result.buildingType = exteriorData.extractedData.building_type || 'לא נמצא'
-          result.overallAssessment = exteriorData.extractedData.overall_assessment || 'לא נמצא'
+        console.log('📸 Exterior API response:', exteriorData)
+        
+        if (exteriorData.success) {
+          // Handle both nested and flat extractedData structure
+          const extracted = exteriorData.extractedData || exteriorData
+          result.buildingCondition = extracted.building_condition || 'לא נמצא'
+          result.buildingFeatures = extracted.building_features || 'לא נמצא'
+          result.buildingType = extracted.building_type || 'לא נמצא'
+          result.overallAssessment = extracted.overall_assessment || extracted.exterior_assessment || 'לא נמצא'
+          result.buildingYear = extracted.building_year || 'לא נמצא'
         }
       }
       
+      console.log('📸 Combined image analysis result:', result)
       return result
     } catch (error) {
       console.error('Image analysis failed:', error)
@@ -903,7 +1029,144 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
       {/* Process Documents Section */}
       {uploads.some(u => u.status === 'completed') && (
         <div className="mt-8">
-          {!isProcessing && Object.keys(extractedData).length === 0 && (
+          {/* Show existing AI extraction info */}
+          {existingAIExtraction && !isProcessing && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-6" dir="rtl">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <CheckCircle className="w-6 h-6 text-green-600" />
+                  <div>
+                    <h3 className="text-lg font-semibold text-green-900">נתונים כבר חולצו באמצעות AI</h3>
+                    <p className="text-green-700 text-sm">
+                      תאריך חילוץ: {new Date(existingAIExtraction.extraction_date).toLocaleString('he-IL')}
+                    </p>
+                    <p className="text-green-600 text-xs mt-1">
+                      {Object.keys(existingAIExtraction.extracted_fields || {}).length} שדות חולצו
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowReprocessConfirm(true)}
+                  className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 text-sm"
+                >
+                  עבד מחדש
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Reprocess confirmation dialog */}
+          {showReprocessConfirm && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" dir="rtl">
+              <div className="bg-white rounded-lg p-6 max-w-lg mx-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">עיבוד מחדש של המסמכים?</h3>
+                <p className="text-gray-700 text-sm mb-4">
+                  בחר אילו מסמכים לעבד מחדש. נתונים ממסמכים שלא נבחרו יישמרו כפי שהם.
+                </p>
+                
+                {/* Selective reprocess checkboxes */}
+                <div className="space-y-3 mb-4 bg-gray-50 rounded-lg p-4">
+                  {data.uploads?.some((u: any) => u.type === 'tabu') && (
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectiveReprocess.tabu}
+                        onChange={(e) => setSelectiveReprocess(prev => ({ ...prev, tabu: e.target.checked }))}
+                        className="w-5 h-5 text-blue-600 rounded"
+                      />
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900">טאבו (לשכת רישום מקרקעין)</p>
+                        <p className="text-xs text-gray-600">גוש, חלקה, בעלים, שטח רשום</p>
+                      </div>
+                    </label>
+                  )}
+                  
+                  {data.uploads?.some((u: any) => u.type === 'permit') && (
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectiveReprocess.permit}
+                        onChange={(e) => setSelectiveReprocess(prev => ({ ...prev, permit: e.target.checked }))}
+                        className="w-5 h-5 text-blue-600 rounded"
+                      />
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900">היתר בנייה</p>
+                        <p className="text-xs text-gray-600">שנת בנייה, שימוש מותר, שטח בנוי</p>
+                      </div>
+                    </label>
+                  )}
+                  
+                  {data.uploads?.some((u: any) => u.type === 'condo') && (
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectiveReprocess.condo}
+                        onChange={(e) => setSelectiveReprocess(prev => ({ ...prev, condo: e.target.checked }))}
+                        className="w-5 h-5 text-blue-600 rounded"
+                      />
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900">תקנון בית משותף</p>
+                        <p className="text-xs text-gray-600">קומות, יחידות, שטחים משותפים</p>
+                      </div>
+                    </label>
+                  )}
+                  
+                  {data.uploads?.some((u: any) => u.type === 'building_image' || u.type === 'interior_image') && (
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectiveReprocess.images}
+                        onChange={(e) => setSelectiveReprocess(prev => ({ ...prev, images: e.target.checked }))}
+                        className="w-5 h-5 text-blue-600 rounded"
+                      />
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900">תמונות</p>
+                        <p className="text-xs text-gray-600">ניתוח חזית ופנים הנכס</p>
+                      </div>
+                    </label>
+                  )}
+                </div>
+                
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+                  <p className="text-yellow-800 text-xs">
+                    💰 עלות משוערת: $0.50-2.00 למסמך נבחר
+                  </p>
+                  <p className="text-blue-800 text-xs mt-1">
+                    ℹ️ נתונים ממסמכים שלא נבחרו יישמרו
+                  </p>
+                </div>
+                
+                <div className="flex gap-3 justify-end">
+                  <button
+                    onClick={() => {
+                      setShowReprocessConfirm(false)
+                      setSelectiveReprocess({ tabu: false, permit: false, condo: false, images: false })
+                    }}
+                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                  >
+                    ביטול
+                  </button>
+                  <button
+                    onClick={() => {
+                      const hasSelection = Object.values(selectiveReprocess).some(v => v)
+                      if (!hasSelection) {
+                        alert('אנא בחר לפחות מסמך אחד לעיבוד')
+                        return
+                      }
+                      processDocuments(selectiveReprocess)
+                      setSelectiveReprocess({ tabu: false, permit: false, condo: false, images: false })
+                    }}
+                    disabled={!Object.values(selectiveReprocess).some(v => v)}
+                    className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    עבד מחדש מסמכים נבחרים
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!isProcessing && !existingAIExtraction && Object.keys(extractedData).length === 0 && (
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">

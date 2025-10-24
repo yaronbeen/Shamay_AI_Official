@@ -1,6 +1,6 @@
 'use client'
 
-import { CheckCircle, XCircle, AlertTriangle, FileText, Building, Users, MapPin, Eye, Edit3, Save, Loader2, ChevronLeft, ChevronRight, Download, Maximize2, X } from 'lucide-react'
+import { CheckCircle, XCircle, AlertTriangle, FileText, Building, Users, MapPin, Eye, Edit3, Save, Loader2, ChevronLeft, ChevronRight, Download, Maximize2, X, RotateCcw, History } from 'lucide-react'
 import { ValuationData } from '../ValuationWizard'
 import { useState, useEffect } from 'react'
 import { DataSource } from '../ui/DataSource'
@@ -117,6 +117,11 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [allFiles, setAllFiles] = useState<Array<{type: string, name: string, preview?: string, url?: string, file?: File}>>([])
   const [filesLoading, setFilesLoading] = useState(true)
+  
+  // AI Extraction History
+  const [aiExtractions, setAIExtractions] = useState<any[]>([])
+  const [showAIHistory, setShowAIHistory] = useState(false)
+  const [isRestoringAI, setIsRestoringAI] = useState(false)
 
   // Processing is now handled in Step 2 - just display the results here
 
@@ -154,45 +159,20 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
                 } as File
               }))
               
-              // Update parent data with uploads - only update specific fields to avoid overwriting existing data
-              console.log('📁 Setting uploads to parent data:', sessionUploads)
-              console.log('📁 Session extracted data:', sessionData.extractedData)
-              console.log('session extracted data length:', Object.keys(extractedData).length)
-              
-              // Only update if we have valid data
-              const updates: any = {}
-              if (sessionData.extractedData && Object.keys(sessionData.extractedData).length > 0) {
-                updates.extractedData = sessionData.extractedData
-              }
-              if (sessionUploads && sessionUploads.length > 0) {
-                updates.uploads = sessionUploads
-              }
-              
-              if (Object.keys(updates).length > 0) {
-                updateData(updates)
-              }
+              // DON'T update parent data - the wizard already has this data from the database
+              // Just use it locally in Step 3 for display purposes
+              console.log('📁 Using session data locally (not updating parent to avoid unnecessary saves)')
+              console.log('📁 Session uploaded files:', sessionUploads.length)
+              console.log('📁 Session extracted data:', Object.keys(sessionData.extractedData || {}).length, 'fields')
               
               // Load files directly from session data
-              console.log('📁 Loading files directly from session data')
-              console.log('📁 Session data structure:', sessionData)
-              console.log('📁 Session uploads:', sessionData.data.uploads)
-              console.log('📁 Session uploads length:', sessionData.data.uploads?.length || 0)
               const files = await getAllFilesFromSessionData(sessionData.data.uploads || [])
               console.log('📁 Files returned from getAllFilesFromSessionData:', files)
               setAllFiles(files)
               setFilesLoading(false)
-              console.log('📁 Files loaded from session:', files.length)
-              console.log('📁 allFiles state set to:', files)
             } else {
-              // Update parent data with just extracted data - only if we have valid data
-              if (sessionData.extractedData && Object.keys(sessionData.extractedData).length > 0) {
-                console.log('📁 Setting extracted data to parent data:', sessionData.extractedData)
-                updateData({
-                  extractedData: sessionData.extractedData
-                })
-              } else {
-                console.log('📁 No valid extracted data found in session')
-              }
+              // No uploads, but we still have local extracted data from props
+              console.log('📁 No uploads in session, using extracted data from props')
               setFilesLoading(false)
             }
           }
@@ -231,32 +211,84 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
     
     setExtractedData(newExtractedData)
     
-    // Update parent data
+    // Update parent data - this will trigger auto-save via the wizard's updateData
+    // No need to manually save here, let the wizard handle it
     updateData({
       extractedData: newExtractedData
     })
     
-    // Save to session
-    if (sessionId) {
-      try {
-        const response = await fetch(`/api/session/${sessionId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            extractedData: newExtractedData
-          })
-        })
-        
-        if (response.ok) {
-          console.log('✅ Extracted data field updated in session:', field, value)
-        } else {
-          console.error('❌ Failed to update extracted data in session')
-        }
-      } catch (error) {
-        console.error('❌ Error updating extracted data in session:', error)
+    console.log('✅ Step3 - Updated extracted data field:', field)
+  }
+
+  // Load AI extraction history
+  const loadAIExtractions = async () => {
+    if (!sessionId) return
+    
+    try {
+      const response = await fetch(`/api/session/${sessionId}/ai-extractions`)
+      if (response.ok) {
+        const { extractions } = await response.json()
+        setAIExtractions(extractions || [])
+        console.log('📚 Loaded AI extraction history:', extractions?.length || 0, 'versions')
       }
+    } catch (error) {
+      console.error('❌ Error loading AI extractions:', error)
     }
   }
+
+  // Restore AI extraction (revert to original AI values)
+  const restoreAIExtraction = async (extractionId: number) => {
+    if (!sessionId) return
+    
+    setIsRestoringAI(true)
+    try {
+      const response = await fetch(`/api/session/${sessionId}/ai-extractions`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          extractionId,
+          action: 'restore'
+        })
+      })
+      
+      if (response.ok) {
+        const { restoredFields } = await response.json()
+        console.log('✅ Restored AI extraction:', restoredFields)
+        
+        // Create the complete updated extracted data
+        const updatedExtractedData = { ...extractedData, ...restoredFields }
+        
+        // Update local state
+        setExtractedData(updatedExtractedData)
+        
+        // Update parent data with complete extracted data object
+        updateData({
+          extractedData: updatedExtractedData
+        })
+        
+        // Reload AI extraction history
+        await loadAIExtractions()
+        
+        alert('✅ נתונים שוחזרו לגרסת הבינה המלאכותית המקורית')
+      } else {
+        const errorData = await response.json()
+        console.error('❌ Failed to restore AI extraction:', errorData)
+        alert(`❌ שגיאה בשחזור הנתונים: ${errorData.error || 'Unknown error'}`)
+      }
+    } catch (error) {
+      console.error('❌ Error restoring AI extraction:', error)
+      alert('❌ שגיאה בשחזור הנתונים')
+    } finally {
+      setIsRestoringAI(false)
+    }
+  }
+
+  // Load AI extractions on mount
+  useEffect(() => {
+    if (sessionId && aiExtractions.length === 0) {
+      loadAIExtractions()
+    }
+  }, [sessionId])
 
   const extractLandRegistryData = async (): Promise<Partial<ExtractedData>> => {
     try {
@@ -650,13 +682,96 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
   return (
     <div className="max-w-6xl mx-auto p-6">
       <div className="mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2 text-right">
-          תצוגת מסמכים ונתונים שחולצו
-        </h2>
+        <div className="flex justify-between items-center mb-2">
+          <h2 className="text-2xl font-bold text-gray-900 text-right">
+            תצוגת מסמכים ונתונים שחולצו
+          </h2>
+          {aiExtractions.length > 0 && (
+            <button
+              onClick={() => setShowAIHistory(!showAIHistory)}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
+            >
+              <History className="w-4 h-4" />
+              <span className="text-sm font-medium">
+                היסטוריית AI ({aiExtractions.length})
+              </span>
+            </button>
+          )}
+        </div>
         <p className="text-gray-600 text-right">
           סקור את המסמכים שהועלו ואת הנתונים שחולצו מהם באמצעות AI
         </p>
       </div>
+
+      {/* AI Extraction History Panel */}
+      {showAIHistory && aiExtractions.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6" dir="rtl">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-semibold text-blue-900">
+              גרסאות קודמות של חילוץ הנתונים
+            </h3>
+            <button
+              onClick={() => setShowAIHistory(false)}
+              className="text-blue-600 hover:text-blue-800"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <p className="text-sm text-blue-700 mb-4">
+            ניתן לשחזר גרסה קודמת של הנתונים שחולצו על ידי הבינה המלאכותית
+          </p>
+          <div className="space-y-3">
+            {aiExtractions.map((extraction, index) => (
+              <div
+                key={extraction.id}
+                className="bg-white rounded-lg p-4 border border-blue-200"
+              >
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-sm font-semibold text-gray-900">
+                        גרסה #{aiExtractions.length - index}
+                      </span>
+                      {extraction.is_active && (
+                        <span className="px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full">
+                          🤖 גרסה נוכחית
+                        </span>
+                      )}
+                      {!extraction.is_active && (
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
+                          ✏️ נערך ידנית
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-600 space-y-1">
+                      <p>
+                        תאריך: {new Date(extraction.extraction_date).toLocaleString('he-IL')}
+                      </p>
+                      <p>
+                        סוג: {extraction.extraction_type === 'combined' ? 'משולב' : extraction.extraction_type}
+                      </p>
+                      {extraction.ai_model && (
+                        <p>מודל AI: {extraction.ai_model}</p>
+                      )}
+                      <p className="text-gray-500 mt-2">
+                        {Object.keys(extraction.extracted_fields || {}).length} שדות
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => restoreAIExtraction(extraction.id)}
+                    disabled={extraction.is_active || isRestoringAI}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    {extraction.is_active ? 'גרסה נוכחית' : 'שחזר גרסה זו'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Processing Status - Show if data was processed in Step 2 */}
         <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">

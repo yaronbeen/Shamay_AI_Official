@@ -133,9 +133,9 @@ export function ValuationsTable() {
                           const response = await fetch(`/api/valuation-session?action=get_valuation&valuationId=${valuation.id}`)
                           if (response.ok) {
                             const { shuma } = await response.json()
-                            if (shuma && shuma.session_id) {
+                            if (shuma && shuma.sessionId) {
                               // Use existing session ID
-                              window.location.href = `/wizard?sessionId=${shuma.session_id}&step=1`
+                              window.location.href = `/wizard?sessionId=${shuma.sessionId}&step=1`
                             } else {
                               // No existing session, create new one
                               const sessionResponse = await fetch('/api/session', {

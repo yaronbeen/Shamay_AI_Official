@@ -134,6 +134,12 @@ if [ ! -d "frontend/node_modules" ]; then
     cd frontend && npm install && cd ..
 fi
 
+# Install backend dependencies if needed
+if [ ! -d "backend/node_modules" ]; then
+    echo -e "${BLUE}📦 Installing backend dependencies...${NC}"
+    cd backend && npm install && cd ..
+fi
+
 # Display connection information
 echo ""
 echo -e "${GREEN}=============================================${NC}"
@@ -147,7 +153,8 @@ echo -e "   User: postgres / shamay_user"
 echo ""
 echo -e "${YELLOW}🌐 Application URLs:${NC}"
 echo -e "   Frontend: ${BLUE}http://localhost:3002${NC}"
-echo -e "   API: ${BLUE}http://localhost:3002/api${NC}"
+echo -e "   Backend API: ${BLUE}http://localhost:3001${NC}"
+echo -e "   Backend Health: ${BLUE}http://localhost:3001/health${NC}"
 echo ""
 echo -e "${YELLOW}👤 Default Login (Development):${NC}"
 echo -e "   Email: admin@shamay.ai"
@@ -156,5 +163,16 @@ echo ""
 echo -e "${BLUE}Press Ctrl+C to stop all services${NC}"
 echo ""
 
-# Start services - ONLY FRONTEND (database already running)
-cd frontend && npm run dev
+# Check if concurrently is installed globally
+if ! command -v concurrently >/dev/null 2>&1; then
+    echo -e "${YELLOW}Installing concurrently globally...${NC}"
+    npm install -g concurrently
+fi
+
+# Start both services concurrently
+npx concurrently \
+    --names "BACKEND,FRONTEND" \
+    --prefix-colors "cyan,yellow" \
+    --kill-others \
+    "cd backend && npm run dev" \
+    "cd frontend && npm run dev"

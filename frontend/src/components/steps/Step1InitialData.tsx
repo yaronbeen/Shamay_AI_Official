@@ -16,30 +16,16 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
     
     // זהות מזמין השומה והקשר שלו לנכס
     clientName: data.clientName || '',
-    clientId: data.clientId || '',
-    clientPhone: data.clientPhone || '',
-    clientEmail: data.clientEmail || '',
     clientRelation: data.clientRelation || '',
-    
-    // מטרת השומה
-    valuationPurpose: data.valuationPurpose || '',
     
     // המועד הקובע לשומה
     valuationEffectiveDate: data.valuationEffectiveDate || new Date().toISOString().split('T')[0],
-    
-    // מועד ביקור הנכס וזהות המבקר
-    visitDate: data.visitDate || new Date().toISOString().split('T')[0],
-    visitorName: data.visitorName || '',
-    visitorId: data.visitorId || '',
     
     // זיהוי הנכס
     street: data.street || '',
     buildingNumber: data.buildingNumber || '',
     neighborhood: data.neighborhood || '',
     city: data.city || '',
-    block: data.block || '',
-    parcel: data.parcel || '',
-    subParcel: data.subParcel || '',
     
     // תיאור הנכס והסביבה (basic info only - detailed analysis will be done by AI in Step 3)
     rooms: data.rooms || 0,
@@ -49,9 +35,6 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
     // פרטי שמאי
     shamayName: data.shamayName || '',
     shamaySerialNumber: data.shamaySerialNumber || '',
-    shamayLicense: data.shamayLicense || '',
-    shamayPhone: data.shamayPhone || '',
-    shamayEmail: data.shamayEmail || '',
     
     // חתימה
     signature: data.signaturePreview || null
@@ -82,30 +65,16 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
       
       // זהות מזמין השומה והקשר שלו לנכס
       clientName: data.clientName || '',
-      clientId: data.clientId || '',
-      clientPhone: data.clientPhone || '',
-      clientEmail: data.clientEmail || '',
       clientRelation: data.clientRelation || '',
-      
-      // מטרת השומה
-      valuationPurpose: data.valuationPurpose || '',
       
       // המועד הקובע לשומה
       valuationEffectiveDate: data.valuationEffectiveDate || new Date().toISOString().split('T')[0],
-      
-      // מועד ביקור הנכס וזהות המבקר
-      visitDate: data.visitDate || new Date().toISOString().split('T')[0],
-      visitorName: data.visitorName || '',
-      visitorId: data.visitorId || '',
       
       // זיהוי הנכס
       street: data.street || '',
       buildingNumber: data.buildingNumber || '',
       neighborhood: data.neighborhood || '',
       city: data.city || '',
-      block: data.block || '',
-      parcel: data.parcel || '',
-      subParcel: data.subParcel || '',
       
       // תיאור הנכס והסביבה (basic info only - detailed analysis will be done by AI in Step 3)
       rooms: data.rooms || 0,
@@ -115,9 +84,6 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
       // פרטי שמאי
       shamayName: data.shamayName || '',
       shamaySerialNumber: data.shamaySerialNumber || '',
-      shamayLicense: data.shamayLicense || '',
-      shamayPhone: data.shamayPhone || '',
-      shamayEmail: data.shamayEmail || '',
       
       // חתימה
       signature: data.signaturePreview || null
@@ -127,12 +93,8 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
   const validateForm = useCallback(() => {
     const isValid = formData.valuationType.trim() !== '' && 
                    formData.clientName.trim() !== '' && 
-                   formData.clientId.trim() !== '' && 
-                   formData.valuationPurpose.trim() !== '' && 
-                   formData.visitorName.trim() !== '' && 
                    formData.street.trim() !== '' && 
                    formData.buildingNumber.trim() !== '' && 
-                   formData.neighborhood.trim() !== '' && 
                    formData.city.trim() !== '' && 
                    formData.rooms > 0 && 
                    formData.floor > 0 && 
@@ -155,19 +117,13 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
     console.log(`🔄 Step1 - Updating field: ${field} = ${value}`)
     setFormData(prev => {
       const newData = { ...prev, [field]: value }
-      updateData(newData)
-      console.log(`✅ Step1 - Updated data:`, newData)
+      // Skip auto-save for text inputs - only save on step navigation or explicit save
+      updateData(newData, { skipAutoSave: true })
+      console.log(`✅ Step1 - Updated data (no auto-save):`, newData)
       return newData
     })
   }, [updateData])
 
-  const handleVisitDateChange = useCallback((date: string) => {
-    setFormData(prev => {
-      const newData = { ...prev, visitDate: date, valuationEffectiveDate: date }
-      updateData(newData)
-      return newData
-    })
-  }, [updateData])
 
   const handleSignatureUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -196,6 +152,13 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
         updateField('signaturePreview', base64)
         setFormData(prev => ({ ...prev, signature: base64 }))
         setSignatureUploading(false)
+        setFormData(prev => {
+          const newData = { ...prev, [field]: value }
+          // Skip auto-save for text inputs - only save on step navigation or explicit save
+          updateData(newData, { skipAutoSave: true })
+          console.log(`✅ Step1 - Updated data (no auto-save):`, newData)
+          return newData
+        })
       }
       reader.readAsDataURL(file)
     } catch (error) {
@@ -289,54 +252,6 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                תעודת זהות *
-              </label>
-              <input
-                type="text"
-                name="clientId"
-                autoComplete="off"
-                value={formData.clientId}
-                onChange={(e) => updateField('clientId', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="הזן תעודת זהות"
-                dir="rtl"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                טלפון
-              </label>
-              <input
-                type="tel"
-                name="clientPhone"
-                autoComplete="tel"
-                value={formData.clientPhone}
-                onChange={(e) => updateField('clientPhone', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="הזן מספר טלפון"
-                dir="rtl"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                אימייל
-              </label>
-              <input
-                type="email"
-                name="clientEmail"
-                autoComplete="email"
-                value={formData.clientEmail}
-                onChange={(e) => updateField('clientEmail', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="הזן כתובת אימייל"
-                dir="rtl"
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
                 הקשר לנכס
               </label>
               <select
@@ -358,97 +273,23 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
           </div>
         </div>
 
-        {/* מטרת השומה */}
-        <div className="bg-white p-6 rounded-lg border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">מטרת השומה</h3>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-              מטרת השומה *
-            </label>
-            <textarea
-              name="valuationPurpose"
-              value={formData.valuationPurpose}
-              onChange={(e) => updateField('valuationPurpose', e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="תאר את מטרת השומה"
-              rows={3}
-              dir="rtl"
-            />
-          </div>
-        </div>
 
         {/* המועד הקובע לשומה */}
         <div className="bg-white p-6 rounded-lg border border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">המועד הקובע לשומה</h3>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                מועד ביקור בנכס *
-              </label>
-              <input
-                type="date"
-                name="visitDate"
-                autoComplete="off"
-                value={formData.visitDate}
-                onChange={(e) => handleVisitDateChange(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                המועד הקובע לשומה *
-              </label>
-              <input
-                type="date"
-                name="valuationEffectiveDate"
-                autoComplete="off"
-                value={formData.valuationEffectiveDate}
-                onChange={(e) => updateField('valuationEffectiveDate', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* מועד ביקור הנכס וזהות המבקר */}
-        <div className="bg-white p-6 rounded-lg border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">מועד ביקור הנכס וזהות המבקר</h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                שם המבקר *
-              </label>
-              <input
-                type="text"
-                name="visitorName"
-                autoComplete="name"
-                value={formData.visitorName}
-                onChange={(e) => updateField('visitorName', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="הזן שם המבקר"
-                dir="rtl"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                תעודת זהות המבקר
-              </label>
-              <input
-                type="text"
-                name="visitorId"
-                autoComplete="off"
-                value={formData.visitorId}
-                onChange={(e) => updateField('visitorId', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="הזן תעודת זהות"
-                dir="rtl"
-              />
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+              המועד הקובע לשומה *
+            </label>
+            <input
+              type="date"
+              name="valuationEffectiveDate"
+              autoComplete="off"
+              value={formData.valuationEffectiveDate}
+              onChange={(e) => updateField('valuationEffectiveDate', e.target.value)}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
           </div>
         </div>
 
@@ -521,53 +362,6 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                גוש
-              </label>
-              <input
-                type="text"
-                name="block"
-                autoComplete="off"
-                value={formData.block}
-                onChange={(e) => updateField('block', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="הזן מספר גוש"
-                dir="rtl"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                חלקה
-              </label>
-              <input
-                type="text"
-                name="parcel"
-                autoComplete="off"
-                value={formData.parcel}
-                onChange={(e) => updateField('parcel', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="הזן מספר חלקה"
-                dir="rtl"
-              />
-          </div>
-          
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                תת-חלקה
-              </label>
-              <input
-                type="text"
-                name="subParcel"
-                autoComplete="off"
-                value={formData.subParcel}
-                onChange={(e) => updateField('subParcel', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="הזן מספר תת-חלקה"
-                dir="rtl"
-              />
-            </div>
           </div>
         </div>
 
@@ -664,55 +458,8 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 placeholder="הזן מספר רישיון"
                 dir="rtl"
               />
-        </div>
+            </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                מספר רישיון מקצועי
-              </label>
-              <input
-                type="text"
-                name="shamayLicense"
-                autoComplete="off"
-                value={formData.shamayLicense}
-                onChange={(e) => updateField('shamayLicense', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="הזן מספר רישיון מקצועי"
-                dir="rtl"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                טלפון שמאי
-              </label>
-              <input
-                type="tel"
-                name="shamayPhone"
-                autoComplete="tel"
-                value={formData.shamayPhone}
-                onChange={(e) => updateField('shamayPhone', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="הזן מספר טלפון"
-                dir="rtl"
-              />
-            </div>
-            
-              <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                אימייל שמאי
-                </label>
-              <input
-                type="email"
-                name="shamayEmail"
-                autoComplete="email"
-                value={formData.shamayEmail}
-                onChange={(e) => updateField('shamayEmail', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="הזן כתובת אימייל"
-                dir="rtl"
-              />
-              </div>
           </div>
         </div>
 
@@ -729,7 +476,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                     alt="חתימת שמאי" 
                     className="max-w-xs mx-auto border border-gray-300 rounded-lg shadow-sm"
                   />
-                </div>
+            </div>
                 <div className="flex gap-2 justify-center">
                   <button
                     type="button"
@@ -745,7 +492,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                   >
                     הסר חתימה
                   </button>
-                </div>
+            </div>
               </div>
             ) : (
               <div className="text-center">

@@ -720,17 +720,18 @@ export function generateDocumentHTML(data: ValuationData, isPreview: boolean = t
               <p style="font-size: 11pt;">${getShamayLicense()}</p>
             </div>
             <div style="text-align: center;">
-              ${data.signaturePreview ? `
-                <div>
+              ${(data.signaturePreview || data.signature) ? `
+                <div style="min-height: 80px;">
                   <img 
-                    src="${data.signaturePreview}" 
-                    alt="חתימת שמאי"
-                    style="max-width: 150px; max-height: 80px; border: 1px solid #ccc;"
+                    src="${data.signaturePreview || data.signature}" 
+                    alt="חתימת שמאי"  
+                    style="max-width: 150px; max-height: 80px; border: 1px solid #ccc; display: block; margin: 0 auto;"
+                    onerror="console.error('Failed to load signature image'); this.style.border='2px solid red';"
                   />
                   <p style="font-size: 10pt; margin-top: 4px;">חתימת שמאי</p>
                 </div>
               ` : `
-                <div style="width: 150px; height: 80px; border: 2px dashed #ccc; display: flex; align-items: center; justify-content: center; color: #666; font-size: 10pt;">
+                <div style="width: 150px; height: 80px; border: 2px dashed #ccc; display: flex; align-items: center; justify-content: center; color: #666; font-size: 10pt; margin: 0 auto;">
                   [חתימה]
                 </div>
               `}

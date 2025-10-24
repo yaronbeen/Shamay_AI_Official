@@ -11,7 +11,7 @@ export const useShumaDB = () => {
     setIsLoading(true)
     setError(null)
     try {
-      const response = await fetch('/api/valuation-session', {
+      const response = await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -44,7 +44,7 @@ export const useShumaDB = () => {
     setIsLoading(true)
     setError(null)
     try {
-      const response = await fetch('/api/valuation-session', {
+      const response = await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -74,7 +74,7 @@ export const useShumaDB = () => {
     setIsLoading(true)
     setError(null)
     try {
-      const response = await fetch('/api/valuation-session', {
+      const response = await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -104,7 +104,7 @@ export const useShumaDB = () => {
     setIsLoading(true)
     setError(null)
     try {
-      const response = await fetch('/api/valuation-session', {
+      const response = await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -134,7 +134,7 @@ export const useShumaDB = () => {
     setIsLoading(true)
     setError(null)
     try {
-      const response = await fetch('/api/valuation-session', {
+      const response = await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -165,7 +165,7 @@ export const useShumaDB = () => {
     setIsLoading(true)
     setError(null)
     try {
-      const response = await fetch('/api/valuation-session', {
+      const response = await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -196,7 +196,7 @@ export const useShumaDB = () => {
     setIsLoading(true)
     setError(null)
     try {
-      const response = await fetch('/api/valuation-session', {
+      const response = await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -227,7 +227,7 @@ export const useShumaDB = () => {
     setIsLoading(true)
     setError(null)
     try {
-      const response = await fetch('/api/valuation-session', {
+      const response = await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -256,7 +256,7 @@ export const useShumaDB = () => {
     setIsLoading(true)
     setError(null)
     try {
-      const response = await fetch('/api/valuation-session', {
+      const response = await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 

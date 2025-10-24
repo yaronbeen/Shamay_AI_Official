@@ -82,7 +82,7 @@ async function processDocument() {
     console.log(JSON.stringify({
       success: true,
       built_area: result.built_area?.value || 'לא נמצא',
-      construction_year: result.permit_date?.value || 'לא נמצא',
+      building_year: result.permit_date?.value || 'לא נמצא',
       permitted_use: result.permitted_description?.value || 'לא נמצא',
       confidence: result.overallConfidence || 0.0,
       extracted_at: new Date().toISOString()
@@ -92,7 +92,7 @@ async function processDocument() {
       success: false,
       error: error.message,
       built_area: 'לא נמצא',
-      construction_year: 'לא נמצא',
+      building_year: 'לא נמצא',
       permitted_use: 'לא נמצא'
     }));
   }
@@ -178,7 +178,7 @@ processDocument();
       error: 'Failed to analyze building permit documents',
       details: error instanceof Error ? error.message : 'Unknown error',
       built_area: 'לא נמצא',
-      construction_year: 'לא נמצא',
+      building_year: 'לא נמצא',
       permitted_use: 'לא נמצא'
     }, { status: 500 })
   }
