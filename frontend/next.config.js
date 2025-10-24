@@ -1,29 +1,29 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  images: {
-    domains: ['localhost'],
+  async rewrites() {
+    return [
+      // Proxy API calls to Express backend (except auth which stays in Next.js)
+      {
+        source: '/api/valuations/:path*',
+        destination: 'http://localhost:3001/api/valuations/:path*',
+      },
+      {
+        source: '/api/sessions/:path*',
+        destination: 'http://localhost:3001/api/sessions/:path*',
+      },
+      {
+        source: '/api/files/:path*',
+        destination: 'http://localhost:3001/api/files/:path*',
+      },
+      {
+        source: '/api/garmushka/:path*',
+        destination: 'http://localhost:3001/api/garmushka/:path*',
+      },
+    ];
   },
-  webpack: (config, { isServer }) => {
-    if (!isServer) {
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        fs: false,
-        net: false,
-        tls: false,
-        canvas: false,
-      };
-    }
-    
-    // Handle Konva imports
-    config.externals = config.externals || [];
-    if (!isServer) {
-      config.externals.push({
-        canvas: 'canvas',
-      });
-    }
-    
-    return config;
-  },
-}
+  // Keep existing configuration
+  reactStrictMode: true,
+  swcMinify: true,
+};
 
-export default nextConfig
+module.exports = nextConfig;

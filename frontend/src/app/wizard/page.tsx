@@ -32,6 +32,8 @@ export default function WizardPage() {
   const [sessionLoading, setSessionLoading] = useState(true)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const [valuationId, setValuationId] = useState<string | null>(null)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [lastSavedData, setLastSavedData] = useState<ValuationData | null>(null)
   
   // Database integration hook
   const { 
@@ -223,6 +225,8 @@ export default function WizardPage() {
           if (result.success) {
             console.log('✅ Data saved to database successfully')
             console.log('✅ Uploads with status saved:', dataToSave.uploads?.length || 0, 'uploads')
+            setHasUnsavedChanges(false)
+            setLastSavedData(dataToSave)
             if (result.shumaId && !valuationId) {
               setValuationId(result.shumaId)
               console.log('✅ New shuma created:', result.shumaId)
@@ -248,16 +252,115 @@ export default function WizardPage() {
   )
 
   // Memoize the updateData function to prevent infinite loops
-  const updateData = useCallback((updates: Partial<ValuationData>) => {
+  // Only trigger save on meaningful data additions (not every keystroke)
+  const updateData = useCallback((updates: Partial<ValuationData>, options?: { skipAutoSave?: boolean }) => {
     setData(prev => {
       const newData = { ...prev, ...updates }
       
-      // Debounced save to session
-      debouncedSave(newData)
+      // Check if data actually changed (deep comparison for objects/arrays)
+      const changedFields: string[] = []
+      const hasActualChanges = Object.keys(updates).some(key => {
+        const oldValue = prev[key as keyof ValuationData]
+        const newValue = updates[key as keyof ValuationData]
+        
+        // Simple comparison for primitives
+        if (typeof newValue !== 'object' || newValue === null) {
+          if (oldValue !== newValue) {
+            changedFields.push(key)
+            return true
+          }
+          return false
+        }
+        
+        // For objects/arrays, compare JSON strings (simple but effective)
+        const oldJSON = JSON.stringify(oldValue)
+        const newJSON = JSON.stringify(newValue)
+        if (oldJSON !== newJSON) {
+          changedFields.push(key)
+          console.log(`🔍 Change detected in ${key}:`, {
+            oldLength: oldJSON.length,
+            newLength: newJSON.length,
+            sample: newJSON.substring(0, 100)
+          })
+          return true
+        }
+        return false
+      })
+      
+      if (!hasActualChanges) {
+        console.log('⏭️ No actual changes detected in update, skipping')
+        return prev // Return unchanged data
+      }
+      
+      console.log('✅ Changes detected in fields:', changedFields)
+      
+      // Check if this is a meaningful update that should trigger save
+      const isMeaningfulUpdate = 
+        updates.uploads ||           // New file uploaded
+        updates.extractedData ||     // AI extraction completed
+        updates.gisScreenshots ||    // GIS screenshot captured
+        updates.garmushkaMeasurements || // Garmushka measurement added
+        updates.propertyImages ||    // Images added
+        updates.interiorImages ||    // Interior images added
+        updates.comparableData ||    // Comparable data added
+        updates.propertyAnalysis ||  // Analysis completed
+        updates.marketAnalysis ||    // Market analysis completed
+        updates.riskAssessment ||    // Risk assessment completed
+        updates.recommendations      // Recommendations added
+      
+      // Mark that we have unsaved changes
+      if (!options?.skipAutoSave) {
+        setHasUnsavedChanges(true)
+      }
+      
+      // Only save if it's a meaningful update and not explicitly skipped
+      if (isMeaningfulUpdate && !options?.skipAutoSave) {
+        console.log('💾 Triggering save for meaningful update:', Object.keys(updates))
+        debouncedSave(newData)
+        setHasUnsavedChanges(false) // Mark as saved after triggering save
+      } else if (options?.skipAutoSave) {
+        console.log('⏭️ Skipping auto-save (explicitly disabled)')
+      } else {
+        console.log('⏭️ Skipping auto-save for minor update:', Object.keys(updates))
+      }
       
       return newData
     })
   }, [debouncedSave])
+
+  // Manual save function (for explicit saves, like form submission or step navigation)
+  // Only saves if there are actual changes
+  const saveManually = useCallback(async () => {
+    if (sessionId && !isInitialLoad) {
+      // Check if there are unsaved changes
+      if (!hasUnsavedChanges) {
+        console.log('⏭️ [MANUAL SAVE] No changes detected, skipping save')
+        return { success: true, skipped: true }
+      }
+
+      const organizationId = session?.user?.primaryOrganizationId
+      const userId = session?.user?.id
+
+      if (!organizationId || !userId) {
+        console.warn('⚠️ Cannot save: missing authenticated user or organization')
+        return { success: false, error: 'Missing user or organization' }
+      }
+
+      console.log('💾 [MANUAL SAVE] Changes detected, saving to database...')
+      const result = await saveShumaToDatabase(sessionId, organizationId, userId, data)
+      
+      if (result.success) {
+        console.log('✅ Manual save successful')
+        setHasUnsavedChanges(false)
+        setLastSavedData(data)
+      } else {
+        console.error('❌ Manual save failed:', result.error)
+      }
+      
+      return result
+    }
+    return { success: false, error: 'No session or still loading' }
+  }, [sessionId, isInitialLoad, session?.user, data, saveShumaToDatabase, hasUnsavedChanges])
 
   // Save GIS data to database
   const saveGISDataToDB = useCallback(async (gisData: any) => {
@@ -306,16 +409,22 @@ export default function WizardPage() {
     })
   }, [])
 
-  const nextStep = () => {
+  const nextStep = async () => {
     if (currentStep < 5) {
+      // Save data before navigating (especially important for Step 1)
+      await saveManually()
+      
       const newStep = currentStep + 1
       setCurrentStep(newStep)
       router.push(`/wizard?step=${newStep}`)
     }
   }
 
-  const prevStep = () => {
+  const prevStep = async () => {
     if (currentStep > 1) {
+      // Save data before navigating
+      await saveManually()
+      
       const newStep = currentStep - 1
       setCurrentStep(newStep)
       router.push(`/wizard?step=${newStep}`)
@@ -323,8 +432,11 @@ export default function WizardPage() {
   }
 
   // Handle step click navigation
-  const handleStepClick = (step: number) => {
+  const handleStepClick = async (step: number) => {
     if (step <= currentStep || step === currentStep + 1) {
+      // Save data before navigating
+      await saveManually()
+      
       setCurrentStep(step)
       router.push(`/wizard?step=${step}`)
     }

@@ -27,10 +27,12 @@ console.log('📊 PDF Export - Session data:', {
   hasAddress: !!(data.street && data.buildingNumber && data.city),
   hasShamay: !!(data.shamayName && data.shamaySerialNumber),
   hasSignature: !!data.signaturePreview,
+  signatureLength: data.signaturePreview ? data.signaturePreview.length : 0,
+  signatureStart: data.signaturePreview ? data.signaturePreview.substring(0, 50) + '...' : 'Missing',
   hasPropertyImage: !!data.selectedImagePreview,
   shamayName: data.shamayName,
   shamaySerialNumber: data.shamaySerialNumber,
-  signaturePreview: data.signaturePreview ? 'Present' : 'Missing',
+  signaturePreview: data.signaturePreview ? `Present (${data.signaturePreview.length} chars)` : 'Missing',
   selectedImagePreview: data.selectedImagePreview ? 'Present' : 'Missing'
 })
 
@@ -85,6 +87,40 @@ if (!data || Object.keys(data).length === 0) {
     })
 
     await page.setContent(htmlContent, { waitUntil: 'networkidle0' })
+
+    // Wait for all images (including base64) to load
+    console.log('⏳ Waiting for images to load...')
+    await page.evaluate(() => {
+      return Promise.all(
+        Array.from(document.images)
+          .filter(img => !img.complete)
+          .map(img => new Promise((resolve) => {
+            img.addEventListener('load', resolve)
+            img.addEventListener('error', resolve)
+            // Timeout after 5 seconds
+            setTimeout(resolve, 5000)
+          }))
+      )
+    })
+    
+    // Additional wait to ensure rendering is complete
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    console.log('✅ Images loaded, generating PDF...')
+    
+    // Debug: Check if signature image exists in the rendered page
+    const signatureInfo = await page.evaluate(() => {
+      const imgs = Array.from(document.images)
+      const signatureImg = imgs.find(img => img.alt === 'חתימת שמאי')
+      return {
+        totalImages: imgs.length,
+        hasSignatureImg: !!signatureImg,
+        signatureSrc: signatureImg ? signatureImg.src.substring(0, 100) + '...' : 'Not found',
+        signatureComplete: signatureImg ? signatureImg.complete : false,
+        signatureWidth: signatureImg ? signatureImg.naturalWidth : 0,
+        signatureHeight: signatureImg ? signatureImg.naturalHeight : 0
+      }
+    })
+    console.log('🖼️ Signature image in rendered page:', signatureInfo)
 
     // Generate PDF with exact A4 specifications
     const pdfBuffer = await page.pdf({
