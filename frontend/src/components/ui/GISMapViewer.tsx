@@ -1073,34 +1073,67 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
           </div>
 
 
-          {/* Screenshot Buttons - Always available */}
-          <div className="space-y-2">
-            <div className="text-sm font-medium text-gray-700">העלה צילום מסך מהמפה:</div>
-            <div className="flex gap-2 flex-wrap">
-              {/* Manual Upload Buttons */}
-              <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer">
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => handleManualScreenshotUpload(e, '0')}
-                />
-                <Camera className="w-4 h-4" />
-                העלה צילום - מפה נקייה
-              </label>
-              <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer">
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => handleManualScreenshotUpload(e, '1')}
-                />
-                <Camera className="w-4 h-4" />
-                העלה צילום - מפת תצ"א
-              </label>
+          {/* Screenshot Buttons - Both automatic and manual options */}
+          <div className="space-y-3">
+            {/* Automatic Screenshot (may not work in cloud) */}
+            <div>
+              <div className="text-sm font-medium text-gray-700 mb-2">צילום אוטומטי:</div>
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={() => captureServerScreenshot('0')}
+                  disabled={isCapturingServer}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isCapturingServer ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Camera className="w-4 h-4" />
+                  )}
+                  {isCapturingServer ? 'צולם...' : 'צלם מפה נקייה'}
+                </button>
+                <button
+                  onClick={() => captureServerScreenshot('1')}
+                  disabled={isCapturingServer}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isCapturingServer ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Camera className="w-4 h-4" />
+                  )}
+                  {isCapturingServer ? 'צולם...' : 'צלם מפת תצ"א'}
+                </button>
+              </div>
             </div>
-            <div className="text-xs text-gray-500 mt-1">
-              💡 צלם את המפה בעצמך (Print Screen) והעלה את התמונה כאן
+
+            {/* Manual Upload (works everywhere) */}
+            <div>
+              <div className="text-sm font-medium text-gray-700 mb-2">או העלה צילום מסך ידנית:</div>
+              <div className="flex gap-2 flex-wrap">
+                <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => handleManualScreenshotUpload(e, '0')}
+                  />
+                  <Camera className="w-4 h-4" />
+                  העלה צילום - מפה נקייה
+                </label>
+                <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => handleManualScreenshotUpload(e, '1')}
+                  />
+                  <Camera className="w-4 h-4" />
+                  העלה צילום - מפת תצ"א
+                </label>
+              </div>
+              <div className="text-xs text-gray-500 mt-1">
+                💡 צלם את המפה בעצמך (Print Screen) והעלה כאן
+              </div>
             </div>
           </div>
 
