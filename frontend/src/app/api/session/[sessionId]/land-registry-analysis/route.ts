@@ -69,12 +69,32 @@ export async function POST(
     
     // Download the file from Vercel Blob
     console.log('📥 Downloading file from blob storage...')
-    const fileResponse = await fetch(fileUrl)
-    if (!fileResponse.ok) {
-      console.log('❌ Failed to download file from blob')
+    let fileResponse
+    try {
+      fileResponse = await fetch(fileUrl)
+      console.log('📥 Fetch response status:', fileResponse.status, fileResponse.statusText)
+      console.log('📥 Response headers:', Object.fromEntries(fileResponse.headers.entries()))
+    } catch (fetchError) {
+      console.error('❌ Fetch error:', fetchError)
       return NextResponse.json({
         success: false,
-        error: 'Failed to download file from blob storage',
+        error: `Failed to fetch file: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`,
+        registration_office: 'לא נמצא',
+        gush: 'לא נמצא',
+        chelka: 'לא נמצא',
+        ownership_type: 'לא נמצא',
+        attachments: 'לא נמצא'
+      }, { status: 500 })
+    }
+    
+    if (!fileResponse.ok) {
+      const errorText = await fileResponse.text()
+      console.log('❌ Failed to download file from blob, status:', fileResponse.status)
+      console.log('❌ Error response:', errorText)
+      return NextResponse.json({
+        success: false,
+        error: `Failed to download file from blob storage: ${fileResponse.status} ${fileResponse.statusText}`,
+        details: errorText,
         registration_office: 'לא נמצא',
         gush: 'לא נמצא',
         chelka: 'לא נמצא',
