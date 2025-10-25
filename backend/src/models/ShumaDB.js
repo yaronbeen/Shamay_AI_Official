@@ -14,12 +14,12 @@ try {
   const neonModule = require('@neondatabase/serverless')
   neonConfig = neonModule.neonConfig
   Pool = neonModule.Pool
-  console.log('✅ Backend: Using @neondatabase/serverless')
+  console.log('✅ Using @neondatabase/serverless')
 } catch (e) {
   // Fallback to pg for local development
   const pg = require('pg')
   Pool = pg.Pool
-  console.log('✅ Backend: Using pg (local development)')
+  console.log('✅ Using pg (local development)')
 }
 
 // Lazy pool initialization - only create when first used
@@ -30,7 +30,7 @@ function getDatabaseConfig() {
   const POSTGRES_URL = process.env.POSTGRES_URL
   const POSTGRES_URL_NON_POOLING = process.env.POSTGRES_URL_NON_POOLING
   
-  console.log('🔍 Backend DB Config: Checking environment variables...')
+  console.log('🔍 DB Config: Checking environment variables...')
   console.log('🔍 DATABASE_URL:', DATABASE_URL ? 'SET ✅' : 'NOT SET ❌')
   console.log('🔍 POSTGRES_URL:', POSTGRES_URL ? 'SET ✅' : 'NOT SET ❌')
   console.log('🔍 POSTGRES_URL_NON_POOLING:', POSTGRES_URL_NON_POOLING ? 'SET ✅' : 'NOT SET ❌')
@@ -60,7 +60,7 @@ function getDatabaseConfig() {
 
 function getPool() {
   if (!pool) {
-    console.log('🔍 Backend ShumaDB: Initializing connection pool...')
+    console.log('🔍 ShumaDB: Initializing connection pool...')
     
     if (!Pool) {
       console.error('❌ Pool constructor is not available!')
@@ -68,7 +68,7 @@ function getPool() {
     }
     
     const config = getDatabaseConfig()
-    console.log('🔍 Backend ShumaDB: Creating pool with config:', {
+    console.log('🔍 ShumaDB: Creating pool with config:', {
       hasConnectionString: !!config.connectionString,
       host: config.host,
       database: config.database
@@ -82,7 +82,7 @@ function getPool() {
     
     try {
       pool = new Pool(config)
-      console.log('✅ Backend Pool created successfully')
+      console.log('✅ Pool created successfully')
       
       // Test the connection
       pool.on('error', (err) => {
@@ -99,7 +99,7 @@ function getPool() {
 
 const db = {
   query: async (text, params) => {
-    console.log('🔍 Backend db.query called with:', text.substring(0, 50) + '...')
+    console.log('🔍 db.query called with:', text.substring(0, 50) + '...')
     
     // ALWAYS use Pool for parameterized queries (Neon sql client doesn't support $1, $2 syntax well)
     // The Neon sql client is best for tagged templates, which we're not using
@@ -110,18 +110,18 @@ const db = {
     return poolInstance.query(text, params)
   },
   client: async () => {
-    console.log('🔍 Backend db.client called')
+    console.log('🔍 db.client called')
     const poolInstance = getPool()
     if (!poolInstance) {
       throw new Error('Database pool is not initialized')
     }
-    console.log('🔍 Backend: Connecting to pool...')
+    console.log('🔍 Connecting to pool...')
     try {
       const client = await poolInstance.connect()
-      console.log('✅ Backend: Pool client connected')
+      console.log('✅ Pool client connected')
       return client
     } catch (error) {
-      console.error('❌ Backend: Failed to get pool client:', error)
+      console.error('❌ Failed to get pool client:', error)
       throw error
     }
   },
@@ -202,14 +202,14 @@ class ShumaDBEnhanced {
 
     // Check if shuma already exists for this session
     const existingShuma = await client.query(
-      'SELECT id FROM shuma WHERE session_id = $1',
+      'SELECT * FROM shuma WHERE session_id = $1',
       [sessionId]
     )
 
     let shumaId = existingShuma.rows[0]?.id
 
     if (!shumaId) {
-      // Create new shuma
+      // Create new shuma - use defaults for missing fields
       const result = await client.query(`
         INSERT INTO shuma (
           session_id, organization_id, user_id,
@@ -238,51 +238,128 @@ class ShumaDBEnhanced {
         ) RETURNING id
       `, [
         sessionId, organizationId, userId,
-        valuationData.street, valuationData.buildingNumber, valuationData.city,
-        valuationData.neighborhood, valuationData.fullAddress, valuationData.rooms,
-        valuationData.floor, valuationData.airDirections, valuationData.area,
-        valuationData.propertyEssence, valuationData.clientName, formatDateForDB(valuationData.visitDate),
-        formatDateForDB(valuationData.valuationDate), valuationData.referenceNumber, valuationData.shamayName,
-        valuationData.shamaySerialNumber, valuationData.gush, valuationData.parcel,
-        this._parseNumeric(valuationData.parcelArea), valuationData.parcelShape, valuationData.parcelSurface,
-        valuationData.subParcel, this._parseNumeric(valuationData.registeredArea), this._parseNumeric(valuationData.builtArea),
-        this._parseNumeric(valuationData.balconyArea), valuationData.buildingPermitNumber, formatDateForDB(valuationData.buildingPermitDate),
-        valuationData.buildingDescription, this._parseNumeric(valuationData.buildingFloors), this._parseNumeric(valuationData.buildingUnits),
-        valuationData.buildingDetails, valuationData.constructionSource, valuationData.attachments,
-        valuationData.ownershipRights, valuationData.notes, valuationData.registryOffice,
-        formatDateForDB(valuationData.extractDate), valuationData.internalLayout, valuationData.finishStandard,
-        valuationData.finishDetails, JSON.stringify(valuationData.propertyImages || []),
-        valuationData.selectedImageIndex, valuationData.selectedImagePreview,
-        JSON.stringify(valuationData.interiorImages || []), valuationData.signaturePreview,
+        valuationData.street || '', valuationData.buildingNumber || '', valuationData.city || '',
+        valuationData.neighborhood || '', valuationData.fullAddress || '', valuationData.rooms || '0.0',
+        valuationData.floor || '0', valuationData.airDirections || '', valuationData.area || 0,
+        valuationData.propertyEssence || '', valuationData.clientName || '', formatDateForDB(valuationData.visitDate),
+        formatDateForDB(valuationData.valuationDate), valuationData.referenceNumber || '', valuationData.shamayName || '',
+        valuationData.shamaySerialNumber || '', valuationData.gush || '', valuationData.parcel || '',
+        this._parseNumeric(valuationData.parcelArea), valuationData.parcelShape || '', valuationData.parcelSurface || '',
+        valuationData.subParcel || '', this._parseNumeric(valuationData.registeredArea), this._parseNumeric(valuationData.builtArea),
+        this._parseNumeric(valuationData.balconyArea), valuationData.buildingPermitNumber || '', formatDateForDB(valuationData.buildingPermitDate),
+        valuationData.buildingDescription || '', this._parseNumeric(valuationData.buildingFloors), this._parseNumeric(valuationData.buildingUnits),
+        valuationData.buildingDetails || '', valuationData.constructionSource || '', valuationData.attachments || '',
+        valuationData.ownershipRights || '', valuationData.notes || '', valuationData.registryOffice || '',
+        formatDateForDB(valuationData.extractDate), valuationData.internalLayout || '', valuationData.finishStandard || '',
+        valuationData.finishDetails || '', JSON.stringify(valuationData.propertyImages || []),
+        valuationData.selectedImageIndex || 0, valuationData.selectedImagePreview || null,
+        JSON.stringify(valuationData.interiorImages || []), valuationData.signaturePreview || null,
         JSON.stringify(valuationData.propertyAnalysis || {}), JSON.stringify(valuationData.marketAnalysis || {}),
         JSON.stringify(valuationData.riskAssessment || {}), JSON.stringify(valuationData.recommendations || []),
         JSON.stringify(valuationData.extractedData || {}), JSON.stringify(valuationData.comparableData || []),
-        valuationData.finalValuation, valuationData.pricePerSqm, valuationData.isComplete,
+        valuationData.finalValuation || 0, valuationData.pricePerSqm || 0, valuationData.isComplete || false,
         JSON.stringify(valuationData.uploads || []), JSON.stringify(valuationData.gisAnalysis || {}), JSON.stringify(valuationData.gisScreenshots || {}),
         JSON.stringify(valuationData.garmushkaMeasurements || {})
       ])
 
       shumaId = result.rows[0].id
     } else {
-      // Update existing shuma
+      // 🚨 CRITICAL: MERGE with existing data instead of overwriting!
+      const existingData = existingShuma.rows[0]
+      
+      // Helper function to safely merge values
+      const mergeValue = (newValue, existingValue, defaultValue = '') => {
+        // If new value is explicitly provided and not empty/null/undefined, use it
+        if (newValue !== undefined && newValue !== null && newValue !== '') {
+          return newValue
+        }
+        // Otherwise keep existing value
+        return existingValue !== undefined && existingValue !== null ? existingValue : defaultValue
+      }
+      
+      // Helper for JSON fields - deep merge
+      const mergeJSON = (newValue, existingValue, defaultValue = {}) => {
+        if (newValue && Object.keys(newValue).length > 0) {
+          // Merge new data with existing
+          return { ...existingValue, ...newValue }
+        }
+        return existingValue || defaultValue
+      }
+      
+      // Helper for arrays - concatenate or replace
+      const mergeArray = (newValue, existingValue, defaultValue = []) => {
+        if (newValue && newValue.length > 0) {
+          return newValue // Replace with new array if provided
+        }
+        return existingValue || defaultValue
+      }
+      
+      console.log('🔄 MERGING data for session:', sessionId)
+      console.log('📊 Existing data keys:', Object.keys(existingData))
+      console.log('📝 New data keys:', Object.keys(valuationData))
+      
+      // Update existing shuma with MERGED data
       await client.query(`
         UPDATE shuma SET
-          street = $1, building_number = $2, city = $3, neighborhood = $4,
-          full_address = $5, rooms = $6, floor = $7, air_directions = $8, area = $9,
-          property_essence = $10, client_name = $11, visit_date = $12, valuation_date = $13,
-          reference_number = $14, shamay_name = $15, shamay_serial_number = $16,
-          gush = $17, parcel = $18, parcel_area = $19, parcel_shape = $20, parcel_surface = $21,
-          sub_parcel = $22, registered_area = $23, built_area = $24, balcony_area = $25,
-          building_permit_number = $26, building_permit_date = $27, building_description = $28,
-          building_floors = $29, building_units = $30, building_details = $31,
-          construction_source = $32, attachments = $33, ownership_rights = $34, notes = $35,
-          registry_office = $36, extract_date = $37, internal_layout = $38, finish_standard = $39,
-          finish_details = $40, property_images = $41, selected_image_index = $42,
-          selected_image_preview = $43, interior_images = $44, signature_preview = $45,
-          property_analysis = $46, market_analysis = $47, risk_assessment = $48,
-          recommendations = $49, extracted_data = $50, comparable_data = $51,
-          final_valuation = $52, price_per_sqm = $53, is_complete = $54, uploads = $55,
-          gis_analysis = $56, gis_screenshots = $57, garmushka_measurements = $58, updated_at = NOW()
+          street = COALESCE(NULLIF($1, ''), street),
+          building_number = COALESCE(NULLIF($2, ''), building_number),
+          city = COALESCE(NULLIF($3, ''), city),
+          neighborhood = COALESCE(NULLIF($4, ''), neighborhood),
+          full_address = COALESCE(NULLIF($5, ''), full_address),
+          rooms = COALESCE(NULLIF($6, ''), rooms),
+          floor = COALESCE(NULLIF($7, ''), floor),
+          air_directions = COALESCE(NULLIF($8, ''), air_directions),
+          area = COALESCE(NULLIF($9, 0), area),
+          property_essence = COALESCE(NULLIF($10, ''), property_essence),
+          client_name = COALESCE(NULLIF($11, ''), client_name),
+          visit_date = COALESCE($12, visit_date),
+          valuation_date = COALESCE($13, valuation_date),
+          reference_number = COALESCE(NULLIF($14, ''), reference_number),
+          shamay_name = COALESCE(NULLIF($15, ''), shamay_name),
+          shamay_serial_number = COALESCE(NULLIF($16, ''), shamay_serial_number),
+          gush = COALESCE(NULLIF($17, ''), gush),
+          parcel = COALESCE(NULLIF($18, ''), parcel),
+          parcel_area = COALESCE(NULLIF($19, 0), parcel_area),
+          parcel_shape = COALESCE(NULLIF($20, ''), parcel_shape),
+          parcel_surface = COALESCE(NULLIF($21, ''), parcel_surface),
+          sub_parcel = COALESCE(NULLIF($22, ''), sub_parcel),
+          registered_area = COALESCE(NULLIF($23, 0), registered_area),
+          built_area = COALESCE(NULLIF($24, 0), built_area),
+          balcony_area = COALESCE(NULLIF($25, 0), balcony_area),
+          building_permit_number = COALESCE(NULLIF($26, ''), building_permit_number),
+          building_permit_date = COALESCE($27, building_permit_date),
+          building_description = COALESCE(NULLIF($28, ''), building_description),
+          building_floors = COALESCE(NULLIF($29, 0), building_floors),
+          building_units = COALESCE(NULLIF($30, 0), building_units),
+          building_details = COALESCE(NULLIF($31, ''), building_details),
+          construction_source = COALESCE(NULLIF($32, ''), construction_source),
+          attachments = COALESCE(NULLIF($33, ''), attachments),
+          ownership_rights = COALESCE(NULLIF($34, ''), ownership_rights),
+          notes = COALESCE(NULLIF($35, ''), notes),
+          registry_office = COALESCE(NULLIF($36, ''), registry_office),
+          extract_date = COALESCE($37, extract_date),
+          internal_layout = COALESCE(NULLIF($38, ''), internal_layout),
+          finish_standard = COALESCE(NULLIF($39, ''), finish_standard),
+          finish_details = COALESCE(NULLIF($40, ''), finish_details),
+          property_images = CASE WHEN $41::text != '[]' THEN $41 ELSE property_images END,
+          selected_image_index = COALESCE($42, selected_image_index),
+          selected_image_preview = COALESCE($43, selected_image_preview),
+          interior_images = CASE WHEN $44::text != '[]' THEN $44 ELSE interior_images END,
+          signature_preview = COALESCE($45, signature_preview),
+          property_analysis = CASE WHEN $46::text != '{}' THEN $46 ELSE property_analysis END,
+          market_analysis = CASE WHEN $47::text != '{}' THEN $47 ELSE market_analysis END,
+          risk_assessment = CASE WHEN $48::text != '{}' THEN $48 ELSE risk_assessment END,
+          recommendations = CASE WHEN $49::text != '[]' THEN $49 ELSE recommendations END,
+          extracted_data = CASE WHEN $50::text != '{}' THEN $50 ELSE extracted_data END,
+          comparable_data = CASE WHEN $51::text != '[]' THEN $51 ELSE comparable_data END,
+          final_valuation = COALESCE(NULLIF($52, 0), final_valuation),
+          price_per_sqm = COALESCE(NULLIF($53, 0), price_per_sqm),
+          is_complete = COALESCE($54, is_complete),
+          uploads = CASE WHEN $55::text != '[]' THEN $55 ELSE uploads END,
+          gis_analysis = CASE WHEN $56::text != '{}' THEN $56 ELSE gis_analysis END,
+          gis_screenshots = CASE WHEN $57::text != '{}' THEN $57 ELSE gis_screenshots END,
+          garmushka_measurements = CASE WHEN $58::text != '{}' THEN $58 ELSE garmushka_measurements END,
+          updated_at = NOW()
         WHERE id = $59
       `, [
         valuationData.street, valuationData.buildingNumber,
@@ -300,10 +377,12 @@ class ShumaDBEnhanced {
         JSON.stringify(valuationData.interiorImages || []), valuationData.signaturePreview, JSON.stringify(valuationData.propertyAnalysis || {}),
         JSON.stringify(valuationData.marketAnalysis || {}), JSON.stringify(valuationData.riskAssessment || {}),
         JSON.stringify(valuationData.recommendations || []), JSON.stringify(valuationData.extractedData || {}),
-        JSON.stringify(valuationData.comparableData || []), valuationData.finalValuation || null, valuationData.pricePerSqm || null,
-        valuationData.isComplete || false, JSON.stringify(valuationData.uploads || []), JSON.stringify(valuationData.gisAnalysis || {}), JSON.stringify(valuationData.gisScreenshots || {}),
+        JSON.stringify(valuationData.comparableData || []), valuationData.finalValuation, valuationData.pricePerSqm,
+        valuationData.isComplete, JSON.stringify(valuationData.uploads || []), JSON.stringify(valuationData.gisAnalysis || {}), JSON.stringify(valuationData.gisScreenshots || {}),
         JSON.stringify(valuationData.garmushkaMeasurements || {}), shumaId
       ])
+      
+      console.log('✅ Data merged successfully for session:', sessionId)
     }
 
     return { shumaId }
@@ -1050,7 +1129,7 @@ class ShumaDBEnhanced {
    * Search shumas by organization, search term, and status
    */
   static async searchShumas(organizationId, search, status) {
-    const client = await pool.connect()
+    const client = await db.client()
 
     try {
 
@@ -1130,7 +1209,7 @@ class ShumaDBEnhanced {
    * Get a single shuma by ID
    */
   static async getShumaById(shumaId) {
-    const client = await pool.connect()
+    const client = await db.client()
 
     try {
       const result = await client.query(`
