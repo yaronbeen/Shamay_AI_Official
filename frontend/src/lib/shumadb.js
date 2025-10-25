@@ -114,18 +114,9 @@ function getSqlClient() {
 const db = {
   query: async (text, params) => {
     console.log('🔍 db.query called with:', text.substring(0, 50) + '...')
-    // Try to use Neon serverless client for simple queries
-    const sql = getSqlClient()
-    if (sql && !text.toLowerCase().includes('begin') && !text.toLowerCase().includes('commit')) {
-      try {
-        const result = await sql(text, params || [])
-        console.log('✅ Neon query succeeded, rows:', result.length)
-        return { rows: result, rowCount: result.length }
-      } catch (e) {
-        console.warn('⚠️ Neon query failed, falling back to pool:', e.message)
-      }
-    }
-    // Fallback to pool for transactions and complex queries
+    
+    // ALWAYS use Pool for parameterized queries (Neon sql client doesn't support $1, $2 syntax well)
+    // The Neon sql client is best for tagged templates, which we're not using
     const poolInstance = getPool()
     if (!poolInstance) {
       throw new Error('Database pool is not initialized')
