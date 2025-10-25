@@ -1,6 +1,6 @@
 'use client'
 
-import { CheckCircle, XCircle, AlertTriangle, FileText, Building, Users, MapPin, Eye, Edit3, Save, Loader2, ChevronLeft, ChevronRight, Download, Maximize2, X, RotateCcw, History } from 'lucide-react'
+import { CheckCircle, XCircle, AlertTriangle, FileText, Building, Users, MapPin, Eye, Edit3, Save, Loader2, ChevronLeft, ChevronRight, Download, Maximize2, X, RotateCcw, History, ChevronRightCircleIcon } from 'lucide-react'
 import { ValuationData } from '../ValuationWizard'
 import { useState, useEffect } from 'react'
 import { DataSource } from '../ui/DataSource'
@@ -122,6 +122,11 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
   const [aiExtractions, setAIExtractions] = useState<any[]>([])
   const [showAIHistory, setShowAIHistory] = useState(false)
   const [isRestoringAI, setIsRestoringAI] = useState(false)
+
+  // Step 3 is optional - always allow proceeding
+  useEffect(() => {
+    onValidationChange(true)
+  }, [onValidationChange])
 
   // Processing is now handled in Step 2 - just display the results here
 
@@ -910,7 +915,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
                 disabled={currentFileIndex === 0}
                 className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                <ChevronRight className="w-4 h-4" />
+                <ChevronRightCircleIcon className="w-4 h-4" />
                 <span>הקודם</span>
               </button>
               

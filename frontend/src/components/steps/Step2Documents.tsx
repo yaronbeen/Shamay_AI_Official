@@ -800,19 +800,12 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
   }
 
   const validation = useCallback(() => {
-    const requiredTypes = Object.entries(DOCUMENT_TYPES)
-      .filter(([_, config]) => config.required)
-      .map(([type]) => type)
-    
-    const uploadedTypes = uploads
-      .filter(upload => upload.status === 'completed')
-      .map(upload => upload.type)
-    
-    const hasAllRequired = requiredTypes.every(type => uploadedTypes.includes(type as any))
-    onValidationChange(hasAllRequired)
-    
-    return hasAllRequired
-  }, [uploads, onValidationChange])
+    // Step 2 is optional - always allow proceeding to next step
+    // Users can skip document uploads if they want
+    console.log('Step 2 validation: Always valid (optional step)')
+    onValidationChange(true)
+    return true
+  }, [onValidationChange])
 
   // Update validation when uploads change
   useEffect(() => {

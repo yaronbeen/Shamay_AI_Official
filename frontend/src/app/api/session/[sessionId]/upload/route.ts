@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { writeFile, mkdir } from 'fs/promises'
-import { join } from 'path'
-import { existsSync } from 'fs'
+import { FileStorageService } from '../../../../../lib/file-storage'
 const { ShumaDB } = require('../../../../../lib/shumadb.js')
 
 export async function POST(
@@ -10,6 +8,7 @@ export async function POST(
 ) {
   try {
     console.log(`🚀 Upload request for session: ${params.sessionId}`)
+    console.log(`📍 Environment: ${FileStorageService.isProduction() ? 'PRODUCTION (Vercel Blob)' : 'DEVELOPMENT (Local FS)'}`)
     
     // Load session from database
     const loadResult = await ShumaDB.loadShumaForWizard(params.sessionId)
@@ -42,42 +41,24 @@ export async function POST(
       }
 
       console.log(`📁 Processing ${type} file: ${file.name} (${file.size} bytes)`)
-      console.log(`📁 File details:`, {
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        lastModified: file.lastModified
-      })
 
-      // Create uploads directory
-      const uploadsDir = join(process.cwd(), 'uploads', params.sessionId)
-      await mkdir(uploadsDir, { recursive: true })
-
-      // Save file
+      // Upload file using unified storage service
       const buffer = Buffer.from(await file.arrayBuffer())
-      let fileName = file.name // Keep original filename
-      let filePath = join(uploadsDir, fileName)
-      
-      // Handle filename conflicts by adding a counter
-      let counter = 1
-      while (existsSync(filePath)) {
-        const nameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.'))
-        const ext = file.name.substring(file.name.lastIndexOf('.'))
-        fileName = `${nameWithoutExt}_${counter}${ext}`
-        filePath = join(uploadsDir, fileName)
-        counter++
-      }
-      
-      await writeFile(filePath, buffer)
+      const uploadResult = await FileStorageService.uploadFile(
+        buffer,
+        params.sessionId,
+        file.name,
+        file.type
+      )
 
-      console.log(`✅ File saved to: ${filePath}`)
+      console.log(`✅ File uploaded:`, uploadResult)
 
       // For now, skip AI processing and just return success
       const extractedData = {
         success: true,
         message: 'File uploaded successfully (AI processing temporarily disabled)',
-        fileName: fileName,
-        filePath: filePath
+        fileName: file.name,
+        filePath: uploadResult.path
       }
 
       // Create upload entry for the uploads array
@@ -85,13 +66,13 @@ export async function POST(
         id: `${type}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         type: type,
         name: file.name,
-        fileName: fileName,
-        path: filePath,
-        size: file.size,
+        fileName: file.name,
+        path: uploadResult.path,
+        size: uploadResult.size,
         mimeType: file.type,
         status: 'completed',
-        preview: `/api/files/${params.sessionId}/${fileName}`,
-        url: `/api/files/${params.sessionId}/${fileName}`,
+        preview: uploadResult.url,
+        url: uploadResult.url,
         uploadedAt: new Date().toISOString(),
         extractedData: extractedData
       }
