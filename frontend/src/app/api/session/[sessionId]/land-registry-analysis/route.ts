@@ -164,13 +164,16 @@ async function processDocument() {
 processDocument();
       `
       
-      // Write temporary script
-      const tempScriptPath = join(projectRoot, 'temp-land-registry.js')
+      // Write temporary script to /tmp (serverless-compatible)
+      const tempScriptDir = process.env.VERCEL ? '/tmp' : join(process.cwd(), '..')
+      const tempScriptPath = join(tempScriptDir, `temp-land-registry-${params.sessionId}.js`)
+      console.log('📝 Writing temp script to:', tempScriptPath)
       fs.writeFileSync(tempScriptPath, tempScript)
+      console.log('✅ Temp script written successfully')
       
       const child = spawn('node', [tempScriptPath], {
         stdio: ['pipe', 'pipe', 'pipe'],
-        cwd: projectRoot,
+        cwd: tempScriptDir,
         env: {
           ...process.env,
           ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY
@@ -180,7 +183,7 @@ processDocument();
       console.log('🔍 Spawning child process with:', {
         command: 'node',
         args: [tempScriptPath],
-        cwd: projectRoot,
+        cwd: tempScriptDir,
         env: { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ? 'SET' : 'NOT_SET' }
       })
 
