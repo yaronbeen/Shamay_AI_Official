@@ -231,6 +231,13 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
       })
       
       if (!response.ok) {
+        // Handle 501 (Not Implemented) for serverless limitation
+        if (response.status === 501) {
+          const errorData = await response.json()
+          alert(errorData.message || 'צילום אוטומטי לא זמין בסביבת הענן. אנא השתמש בכלי החיתוך הידני.')
+          setIsCapturingServer(false)
+          return
+        }
         throw new Error(`Server screenshot failed: ${response.statusText}`)
       }
       
