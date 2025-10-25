@@ -1073,7 +1073,7 @@ class ShumaDBEnhanced {
    * Search shumas by organization, search term, and status
    */
   static async searchShumas(organizationId, search, status) {
-    const client = await pool.connect()
+    const client = await db.client()
 
     try {
 
@@ -1153,7 +1153,7 @@ class ShumaDBEnhanced {
    * Get a single shuma by ID
    */
   static async getShumaById(shumaId) {
-    const client = await pool.connect()
+    const client = await db.client()
 
     try {
       const result = await client.query(`
