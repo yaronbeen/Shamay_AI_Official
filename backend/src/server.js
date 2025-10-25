@@ -105,27 +105,32 @@ app.use((err, req, res, next) => {
 // START SERVER
 // ============================================
 
-app.listen(PORT, () => {
-  console.log('');
-  console.log('🚀 ============================================');
-  console.log('🚀 SHAMAY.AI Backend Server');
-  console.log('🚀 ============================================');
-  console.log(`🚀 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🚀 Server running on: http://localhost:${PORT}`);
-  console.log(`🚀 Health check: http://localhost:${PORT}/health`);
-  console.log(`🚀 Database: ${process.env.DB_NAME}@${process.env.DB_HOST}:${process.env.DB_PORT}`);
-  console.log('🚀 ============================================');
-  console.log('');
-});
-
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM signal received: closing HTTP server');
-  app.close(() => {
-    logger.info('HTTP server closed');
-    process.exit(0);
+// Only listen if not in Vercel (serverless) environment
+if (process.env.VERCEL !== '1') {
+  app.listen(PORT, () => {
+    console.log('');
+    console.log('🚀 ============================================');
+    console.log('🚀 SHAMAY.AI Backend Server');
+    console.log('🚀 ============================================');
+    console.log(`🚀 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`🚀 Server running on: http://localhost:${PORT}`);
+    console.log(`🚀 Health check: http://localhost:${PORT}/health`);
+    console.log(`🚀 Database: ${process.env.DB_NAME}@${process.env.DB_HOST}:${process.env.DB_PORT}`);
+    console.log('🚀 ============================================');
+    console.log('');
   });
-});
+}
+
+// Graceful shutdown (only in non-serverless environment)
+if (process.env.VERCEL !== '1') {
+  process.on('SIGTERM', () => {
+    logger.info('SIGTERM signal received: closing HTTP server');
+    app.close(() => {
+      logger.info('HTTP server closed');
+      process.exit(0);
+    });
+  });
+}
 
 module.exports = app;
 
