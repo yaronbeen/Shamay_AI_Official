@@ -1,14 +1,18 @@
 import { Pool } from 'pg'
 import { spawn } from 'child_process'
 
-
-const pool = new Pool({
-  user: 'postgres',
-  host: 'localhost',
-  database: 'shamay_db',
-  password: 'password',
-  port: 5432,
-})
+// Use DATABASE_URL from environment (Vercel Postgres) or fall back to local config
+const pool = new Pool(
+  process.env.DATABASE_URL 
+    ? { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } }
+    : {
+        user: process.env.DB_USER || 'postgres',
+        host: process.env.DB_HOST || 'localhost',
+        database: process.env.DB_NAME || 'shamay_land_registry',
+        password: process.env.DB_PASSWORD || 'password',
+        port: parseInt(process.env.DB_PORT || '5432'),
+      }
+)
 
 export async function setupDatabase() {
   try {

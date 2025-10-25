@@ -7,13 +7,21 @@
 
 const { Pool } = require('pg')
 
-const pool = new Pool({
-  host: 'localhost',
-  port: 5432,
-  database: 'shamay_land_registry',
-  user: 'postgres',
-  password: 'postgres123',
-})
+// Use DATABASE_URL from environment (Vercel Postgres) or fall back to local config
+const pool = new Pool(
+  process.env.DATABASE_URL 
+    ? { 
+        connectionString: process.env.DATABASE_URL, 
+        ssl: { rejectUnauthorized: false } 
+      }
+    : {
+        host: process.env.DB_HOST || 'localhost',
+        port: parseInt(process.env.DB_PORT || '5432'),
+        database: process.env.DB_NAME || 'shamay_land_registry',
+        user: process.env.DB_USER || 'postgres',
+        password: process.env.DB_PASSWORD || 'postgres123',
+      }
+)
 
 const db = {
   query: (text, params) => pool.query(text, params),
