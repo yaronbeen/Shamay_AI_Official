@@ -3,12 +3,29 @@
  * Saves data to BOTH:
  * 1. shuma table (for the valuation snapshot)
  * 2. Individual extraction tables (normalized with references)
+ * 
+ * Uses Neon serverless driver for Vercel deployment
  */
 
-const { Pool } = require('pg')
+// Import based on environment
+let Pool, neon, neonConfig
+try {
+  // Try to import Neon serverless (for production/Vercel)
+  const neonModule = require('@neondatabase/serverless')
+  neon = neonModule.neon
+  neonConfig = neonModule.neonConfig
+  Pool = neonModule.Pool
+  console.log('✅ Using @neondatabase/serverless')
+} catch (e) {
+  // Fallback to pg for local development
+  const pg = require('pg')
+  Pool = pg.Pool
+  console.log('✅ Using pg (local development)')
+}
 
 // Lazy pool initialization - only create when first used
 let pool = null
+let sqlClient = null // For Neon serverless queries
 
 function getDatabaseConfig() {
   const DATABASE_URL = process.env.DATABASE_URL
@@ -48,13 +65,45 @@ function getPool() {
     console.log('🔍 ShumaDB: Initializing connection pool...')
     const config = getDatabaseConfig()
     console.log('🔍 ShumaDB: Creating pool with config')
+    
+    // Use Neon serverless in production
+    if (process.env.VERCEL && neonConfig) {
+      console.log('🚀 Configuring Neon for WebSocket (Vercel)')
+      neonConfig.fetchConnectionCache = true
+    }
+    
     pool = new Pool(config)
   }
   return pool
 }
 
+// Get Neon SQL client (for simple queries)
+function getSqlClient() {
+  if (!sqlClient && neon) {
+    const config = getDatabaseConfig()
+    if (config.connectionString) {
+      console.log('🔍 Creating Neon SQL client')
+      sqlClient = neon(config.connectionString)
+    }
+  }
+  return sqlClient
+}
+
 const db = {
-  query: (text, params) => getPool().query(text, params),
+  query: async (text, params) => {
+    // Try to use Neon serverless client for simple queries
+    const sql = getSqlClient()
+    if (sql && !text.toLowerCase().includes('begin') && !text.toLowerCase().includes('commit')) {
+      try {
+        const result = await sql(text, params || [])
+        return { rows: result, rowCount: result.length }
+      } catch (e) {
+        console.warn('Neon query failed, falling back to pool:', e.message)
+      }
+    }
+    // Fallback to pool for transactions and complex queries
+    return getPool().query(text, params)
+  },
   client: () => getPool().connect(),
   end: () => getPool().end()
 }
