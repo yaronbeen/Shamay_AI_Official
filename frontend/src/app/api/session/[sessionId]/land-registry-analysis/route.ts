@@ -49,13 +49,14 @@ export async function POST(
     
     // Use the first land registry document
     const upload = landRegistryUploads[0]
-    const pdfPath = upload.path || upload.extractedData?.filePath
+    const fileUrl = upload.url || upload.blobUrl // Use blob URL
+    const fileName = upload.name || upload.fileName || 'land_registry.pdf'
     
-    if (!pdfPath || !fs.existsSync(pdfPath)) {
-      console.log('❌ Land registry PDF not found at path:', pdfPath)
+    if (!fileUrl) {
+      console.log('❌ Land registry file URL not found')
       return NextResponse.json({
         success: false,
-        error: 'Land registry PDF file not found',
+        error: 'Land registry file URL not found',
         registration_office: 'לא נמצא',
         gush: 'לא נמצא',
         chelka: 'לא נמצא',
@@ -64,7 +65,35 @@ export async function POST(
       }, { status: 404 })
     }
     
-    console.log('🔍 Using uploaded PDF:', pdfPath)
+    console.log('🔍 Using uploaded PDF from blob:', fileUrl)
+    
+    // Download the file from Vercel Blob
+    console.log('📥 Downloading file from blob storage...')
+    const fileResponse = await fetch(fileUrl)
+    if (!fileResponse.ok) {
+      console.log('❌ Failed to download file from blob')
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to download file from blob storage',
+        registration_office: 'לא נמצא',
+        gush: 'לא נמצא',
+        chelka: 'לא נמצא',
+        ownership_type: 'לא נמצא',
+        attachments: 'לא נמצא'
+      }, { status: 500 })
+    }
+    
+    const fileBuffer = Buffer.from(await fileResponse.arrayBuffer())
+    console.log('✅ File downloaded, size:', fileBuffer.length, 'bytes')
+    
+    // Save to temporary location for processing
+    const tempDir = join(process.cwd(), 'temp')
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true })
+    }
+    const tempPath = join(tempDir, `${params.sessionId}_${fileName}`)
+    fs.writeFileSync(tempPath, fileBuffer)
+    console.log('💾 Saved to temp location:', tempPath)
     
     // Call the real backend service
     const projectRoot = join(process.cwd(), '..')
@@ -80,7 +109,7 @@ dotenv.config();
 
 async function processDocument() {
   try {
-    const result = await processLandRegistryDocument('${pdfPath}', {
+    const result = await processLandRegistryDocument('${tempPath.replace(/\\/g, '\\\\')}', {
       useAI: true,
       saveToDatabase: false
     });
@@ -146,9 +175,10 @@ processDocument();
       })
 
       child.on('close', (code) => {
-        // Clean up temp file
+        // Clean up temp files
         try {
           fs.unlinkSync(tempScriptPath)
+          fs.unlinkSync(tempPath) // Clean up downloaded PDF
         } catch (e) {}
         
         console.log('🔍 Backend script exit code:', code)
