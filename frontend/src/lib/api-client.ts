@@ -120,7 +120,7 @@ const session = await callBackendAPI('/api/sessions/123')
 const newValuation = await callBackendAPI('/api/valuations', {
   method: 'POST',
   body: JSON.stringify({ address: '123 Main St' })
-})
+}) 
 
 // PUT request with query params
 const updated = await callBackendAPI('/api/sessions/123', {
