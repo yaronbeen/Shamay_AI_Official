@@ -117,9 +117,23 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
     console.log(`🔄 Step1 - Updating field: ${field} = ${value}`)
     setFormData(prev => {
       const newData = { ...prev, [field]: value }
+      
+      // Critical fields that should save immediately:
+      // - valuationType, valuationDate (required for document generation)
+      // - signaturePreview (large base64, needs to be persisted)
+      const criticalFields = ['valuationType', 'valuationDate', 'signaturePreview']
+      const shouldSaveImmediately = criticalFields.includes(field)
+      
       // Skip auto-save for text inputs - only save on step navigation or explicit save
-      updateData(newData, { skipAutoSave: true })
-      console.log(`✅ Step1 - Updated data (no auto-save):`, newData)
+      // BUT save immediately for critical fields
+      updateData(newData, { skipAutoSave: !shouldSaveImmediately })
+      
+      if (shouldSaveImmediately) {
+        console.log(`💾 Step1 - Critical field ${field} saved immediately`)
+      } else {
+        console.log(`✅ Step1 - Updated data (no auto-save):`, newData)
+      }
+      
       return newData
     })
   }, [updateData])
@@ -149,16 +163,10 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
       reader.onload = (e) => {
         const base64 = e.target?.result as string
         // Save as signaturePreview to match DocumentContent component
+        // This will trigger immediate save because signaturePreview is a critical field
         updateField('signaturePreview', base64)
         setFormData(prev => ({ ...prev, signature: base64 }))
         setSignatureUploading(false)
-        setFormData(prev => {
-          const newData = { ...prev, [field]: value }
-          // Skip auto-save for text inputs - only save on step navigation or explicit save
-          updateData(newData, { skipAutoSave: true })
-          console.log(`✅ Step1 - Updated data (no auto-save):`, newData)
-          return newData
-        })
       }
       reader.readAsDataURL(file)
     } catch (error) {

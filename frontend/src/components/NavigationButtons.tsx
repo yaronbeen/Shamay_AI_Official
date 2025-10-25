@@ -44,7 +44,7 @@ export function NavigationButtons({
           }
         `}
       >
-        <ChevronLeft className="w-5 h-5" />
+        <ChevronRight className="w-5 h-5" />
         <span>{previousLabel}</span>
       </button>
 
@@ -69,7 +69,7 @@ export function NavigationButtons({
         `}
       >
         <span>{isLoading ? 'מעבד...' : isLastStep ? 'סיום' : nextLabel}</span>
-        {!isLastStep && <ChevronRight className="w-5 h-5" />}
+        {!isLastStep && <ChevronLeft className="w-5 h-5" />}
       </button>
     </div>
   )

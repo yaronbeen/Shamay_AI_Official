@@ -20,7 +20,8 @@
     "clean": "./clean.sh",
     "fresh-start": "npm run clean && npm run install-all && npm run setup-db && npm run start-all",
     "setup-db": "./setup-database-complete.sh",
-    "setup-db-api": "curl -X POST http://localhost:3000/api/setup-sample-data"
+    "setup-db-api": "curl -X POST http://localhost:3000/api/setup-sample-data",
+    "setup-vercel-db": "node scripts/setup-vercel-db.js"
   },
   "keywords": [
     "property",

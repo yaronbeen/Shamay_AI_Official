@@ -44,6 +44,11 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
   const [gisMapFile, setGisMapFile] = useState<File | null>(null)
   const [gisMapPreview, setGisMapPreview] = useState<string | null>(null)
   
+  // Step 4 is optional - always allow proceeding
+  useEffect(() => {
+    onValidationChange(true)
+  }, [onValidationChange])
+  
   // Debug: Log uploads data when Step4 mounts or data changes
   useEffect(() => {
     console.log('🔍 Step4 - data.uploads:', data.uploads)
@@ -405,16 +410,6 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
           </div>
 
           {/* Navigation Buttons */}
-          <div className="flex justify-between items-center mt-8 pt-6 border-t border-gray-200">
-            <button className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
-              <ChevronRight className="w-4 h-4" />
-              חזור
-            </button>
-            <button className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-              המשך לייצוא
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-          </div>
         </div>
       </div>
     </div>
