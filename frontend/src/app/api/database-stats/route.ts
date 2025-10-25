@@ -82,9 +82,9 @@ getStats();
       })
     })
 
-    console.log('✅ Existing backend result:', result.success ? 'stats retrieved' : 'failed')
+    console.log('✅ Existing backend result:', result)
     
-    return NextResponse.json(result)
+    return NextResponse.json(result as any)
     
   } catch (error) {
     console.error('❌ Frontend API error:', error)
