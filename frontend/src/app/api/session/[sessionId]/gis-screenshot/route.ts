@@ -94,8 +94,9 @@ export async function POST(
       console.error('❌ Server-side screenshot not supported in serverless environment')
       return NextResponse.json({
         success: false,
-        error: 'Server-side screenshot not supported. Please use client-side cropping.',
-        details: 'Puppeteer/Chrome not available in serverless environment'
+        error: 'Server-side screenshot not available',
+        message: 'Please use the crop tool to capture the map area manually. Server-side screenshots are not supported in the cloud environment.',
+        hint: 'Click the crop button to select and capture the desired map area'
       }, { status: 501 })
     }
 
