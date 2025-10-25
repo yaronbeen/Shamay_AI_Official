@@ -64,7 +64,7 @@ export async function POST(
     
     // Download the file from Vercel Blob
     console.log('📥 Downloading file from blob storage...')
-    let fileResponse
+    let fileResponse: Response | undefined
     let retries = 3
     let lastError: any = null
     
@@ -107,6 +107,19 @@ export async function POST(
           }, { status: 500 })
         }
       }
+    }
+    
+    if (!fileResponse) {
+      console.log('❌ No response received after all retries')
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to fetch file after multiple retries',
+        registration_office: 'לא נמצא',
+        gush: 'לא נמצא',
+        chelka: 'לא נמצא',
+        ownership_type: 'לא נמצא',
+        attachments: 'לא נמצא'
+      }, { status: 500 })
     }
     
     if (!fileResponse.ok) {
