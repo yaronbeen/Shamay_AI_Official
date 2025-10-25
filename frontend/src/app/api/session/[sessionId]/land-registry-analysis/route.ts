@@ -107,7 +107,8 @@ export async function POST(
     console.log('✅ File downloaded, size:', fileBuffer.length, 'bytes')
     
     // Save to temporary location for processing
-    const tempDir = join(process.cwd(), 'temp')
+    // Use /tmp for serverless environments (Vercel)
+    const tempDir = process.env.VERCEL ? '/tmp' : join(process.cwd(), 'temp')
     if (!fs.existsSync(tempDir)) {
       fs.mkdirSync(tempDir, { recursive: true })
     }
