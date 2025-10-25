@@ -8,9 +8,14 @@
  * node scripts/setup-vercel-db.js
  */
 
-const { Client } = require('pg')
-const fs = require('fs')
-const path = require('path')
+import pkg from 'pg';
+const { Client } = pkg;
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 async function setupDatabase() {
   console.log('🔧 Setting up Vercel Postgres database...')
@@ -38,7 +43,23 @@ async function setupDatabase() {
     
     // Read and execute the initialization SQL
     console.log('📄 Reading initialization SQL...')
-    const sqlPath = path.join(__dirname, '../database/init_complete_database.sql')
+    const sqlPath = path.join(__dirname, '../database/init_vercel_neon.sql')
+    
+    if (!fs.existsSync(sqlPath)) {
+      console.log('⚠️ init_vercel_neon.sql not found, creating it...')
+      // Create clean SQL from original
+      const originalPath = path.join(__dirname, '../database/init_complete_database.sql')
+      const originalSql = fs.readFileSync(originalPath, 'utf8')
+      // Remove psql meta-commands and replace database name
+      const cleanSql = originalSql
+        .split('\n')
+        .filter(line => !line.startsWith('\\c ') && !line.trim().startsWith('-- CREATE DATABASE'))
+        .join('\n')
+        .replace(/shamay_land_registry/g, 'neondb')
+      fs.writeFileSync(sqlPath, cleanSql)
+      console.log('✅ Created init_vercel_neon.sql')
+    }
+    
     const sql = fs.readFileSync(sqlPath, 'utf8')
     
     console.log('⚙️ Executing SQL script (main tables)...')
