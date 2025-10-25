@@ -6,6 +6,7 @@
  */
 
 const { Pool } = require('pg')
+const { getDatabaseConfig } = require('./db-config.ts')
 
 // Lazy pool initialization - only create when first used
 let pool = null
@@ -13,26 +14,9 @@ let pool = null
 function getPool() {
   if (!pool) {
     console.log('🔍 ShumaDB: Initializing connection pool...')
-    console.log('🔍 ShumaDB: DATABASE_URL:', process.env.DATABASE_URL ? 'SET ✅' : 'NOT SET ❌')
-    console.log('🔍 ShumaDB: VERCEL:', process.env.VERCEL)
-    console.log('🔍 ShumaDB: NODE_ENV:', process.env.NODE_ENV)
-    
-    if (process.env.DATABASE_URL) {
-      console.log('✅ Using DATABASE_URL for connection')
-      pool = new Pool({
-        connectionString: process.env.DATABASE_URL,
-        ssl: { rejectUnauthorized: false }
-      })
-    } else {
-      console.log('⚠️ DATABASE_URL not set, using fallback config')
-      pool = new Pool({
-        host: process.env.DB_HOST || 'localhost',
-        port: parseInt(process.env.DB_PORT || '5432'),
-        database: process.env.DB_NAME || 'shamay_land_registry',
-        user: process.env.DB_USER || 'postgres',
-        password: process.env.DB_PASSWORD || 'postgres123',
-      })
-    }
+    const config = getDatabaseConfig()
+    console.log('🔍 ShumaDB: Got config from db-config.ts')
+    pool = new Pool(config)
   }
   return pool
 }
