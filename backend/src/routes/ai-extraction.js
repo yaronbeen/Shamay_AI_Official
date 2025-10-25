@@ -1,22 +1,26 @@
-// AI Processing Routes
-const express = require('express');
+/**
+ * AI Extraction Routes
+ * Handles AI-powered document extraction for land registry, building permits, etc.
+ */
+
+import express from 'express';
+import { processLandRegistryDocument } from '../../land-registry-management/index.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const router = express.Router();
-const fs = require('fs');
-const path = require('path');
-
-// Dynamically import the ESM module
-let processLandRegistryDocument;
-
-async function loadESMModule() {
-  if (!processLandRegistryDocument) {
-    const module = await import('../../land-registry-management/index.js');
-    processLandRegistryDocument = module.processLandRegistryDocument;
-  }
-}
 
 /**
  * POST /api/ai/land-registry
  * Process a land registry PDF with AI extraction
+ * 
+ * Expects JSON body with:
+ * - fileUrl: URL to the PDF file (Vercel Blob or other)
+ * - sessionId: Session identifier
  */
 router.post('/land-registry', async (req, res) => {
   let tempFilePath = null;
@@ -33,9 +37,6 @@ router.post('/land-registry', async (req, res) => {
     
     console.log(`🔍 Backend AI: Processing land registry for session: ${sessionId}`);
     console.log(`📥 Downloading from: ${fileUrl}`);
-    
-    // Load ESM module
-    await loadESMModule();
     
     // Download the file from the URL
     const response = await fetch(fileUrl);
@@ -116,22 +117,5 @@ router.post('/land-registry', async (req, res) => {
   }
 });
 
-router.post('/land-registry-analysis', (req, res) => {
-  // Legacy endpoint - redirect to new endpoint
-  res.json({ message: 'Please use /api/ai/land-registry instead' });
-});
-
-router.post('/building-permit-analysis', (req, res) => {
-  res.json({ message: 'AI route - to be migrated from Next.js' });
-});
-
-router.post('/shared-building-analysis', (req, res) => {
-  res.json({ message: 'AI route - to be migrated from Next.js' });
-});
-
-router.post('/image-analysis', (req, res) => {
-  res.json({ message: 'AI route - to be migrated from Next.js' });
-});
-
-module.exports = router;
+export default router;
 
