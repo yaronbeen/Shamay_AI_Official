@@ -1,257 +1,142 @@
 /**
- * Type-safe API Client for Shamay Valuation System
- * Generated from OpenAPI specification
+ * API Client for calling Express backend from Next.js frontend
+ * 
+ * In development: Calls localhost:3001
+ * In production: Calls deployed Vercel Express backend
  */
 
-export interface User {
-  id: string
-  email: string
-  name?: string
-  primaryOrganizationId: string
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
+
+export interface APIOptions extends RequestInit {
+  params?: Record<string, string | number | boolean>
 }
 
-export interface Organization {
-  id: string
-  name: string
-  role: 'owner' | 'admin' | 'appraiser' | 'viewer'
-}
-
-export type ValuationStatus = 'draft' | 'in_progress' | 'final' | 'archived'
-
-export interface Valuation {
-  id: string
-  organizationId: string
-  createdBy: string
-  status: ValuationStatus
-  address: string
-  block?: string
-  parcel?: string
-  subParcel?: string
-  formState: any
-  finalizedAt?: string
-  createdAt: string
-  updatedAt: string
-}
-
-export interface ValuationStep {
-  id: string
-  valuationId: string
-  stepNo: number
-  data: any
-  updatedAt: string
-}
-
-export interface Measurement {
-  id: string
-  valuationId: string
-  type: 'polyline' | 'polygon' | 'calibration'
-  points: Array<{ x: number; y: number }>
-  name: string
-  notes?: string
-  realWorldLength?: number
-  metersPerPixel?: number
-  unitMode: 'metric' | 'imperial'
-  color: string
-  createdAt: string
-}
-
-export interface ApiError {
-  error: string
-  details?: any
-}
-
-class ShamayApiClient {
-  private baseUrl: string
-
-  constructor(baseUrl: string = '/api') {
-    this.baseUrl = baseUrl
+/**
+ * Call Express backend API
+ * @param endpoint - API endpoint (e.g., '/api/sessions/123')
+ * @param options - Fetch options
+ */
+export async function callBackendAPI<T = any>(
+  endpoint: string,
+  options: APIOptions = {}
+): Promise<T> {
+  const { params, ...fetchOptions } = options
+  
+  // Build URL with query params
+  let url = `${BACKEND_URL}${endpoint}`
+  if (params) {
+    const queryString = new URLSearchParams(
+      Object.entries(params).reduce((acc, [key, value]) => {
+        acc[key] = String(value)
+        return acc
+      }, {} as Record<string, string>)
+    ).toString()
+    url = `${url}?${queryString}`
   }
+  
+  console.log(`📡 Calling backend: ${options.method || 'GET'} ${url}`)
+  
+  const response = await fetch(url, {
+    ...fetchOptions,
+    headers: {
+      'Content-Type': 'application/json',
+      ...fetchOptions.headers,
+    },
+  })
+  
+  if (!response.ok) {
+    const errorText = await response.text()
+    console.error(`❌ Backend API error: ${response.status} ${response.statusText}`, errorText)
+    throw new Error(`Backend API error: ${response.statusText}`)
+  }
+  
+  const data = await response.json()
+  console.log(`✅ Backend response received`)
+  
+  return data as T
+}
 
-  private async request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}`
-    
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-      credentials: 'include', // Include cookies
+/**
+ * Upload file to Express backend
+ * @param endpoint - Upload endpoint
+ * @param formData - FormData with file(s)
+ */
+export async function uploadToBackend<T = any>(
+  endpoint: string,
+  formData: FormData
+): Promise<T> {
+  const url = `${BACKEND_URL}${endpoint}`
+  
+  console.log(`📤 Uploading to backend: POST ${url}`)
+  
+  const response = await fetch(url, {
+    method: 'POST',
+    body: formData,
+    // Don't set Content-Type header - browser will set it with boundary for multipart/form-data
+  })
+  
+  if (!response.ok) {
+    const errorText = await response.text()
+    console.error(`❌ Upload error: ${response.status} ${response.statusText}`, errorText)
+    throw new Error(`Upload failed: ${response.statusText}`)
+  }
+  
+  const data = await response.json()
+  console.log(`✅ Upload successful`)
+  
+  return data as T
+}
+
+/**
+ * Get backend base URL
+ */
+export function getBackendURL(): string {
+  return BACKEND_URL
+}
+
+/**
+ * Check if backend is healthy
+ */
+export async function checkBackendHealth(): Promise<boolean> {
+  try {
+    const response = await fetch(`${BACKEND_URL}/health`, {
+      method: 'GET',
     })
-
-    if (!response.ok) {
-      const error: ApiError = await response.json()
-      throw new Error(error.error || 'API request failed')
-    }
-
-    return response.json()
-  }
-
-  // Auth endpoints
-  auth = {
-    register: async (data: {
-      email: string
-      password: string
-      name: string
-      organizationName?: string
-    }) => {
-      return this.request<{ success: boolean; user: User }>('/auth/register', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      })
-    },
-
-    login: async (email: string, password: string) => {
-      return this.request<{
-        success: boolean
-        user: User
-        organizations: Organization[]
-      }>('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-      })
-    },
-
-    logout: async () => {
-      return this.request<{ success: boolean }>('/auth/logout', {
-        method: 'POST',
-      })
-    },
-
-    me: async () => {
-      return this.request<{ user: User; organizations: Organization[] }>(
-        '/auth/me'
-      )
-    },
-
-    changePassword: async (oldPassword: string, newPassword: string) => {
-      return this.request<{ success: boolean }>('/auth/change-password', {
-        method: 'POST',
-        body: JSON.stringify({ oldPassword, newPassword }),
-      })
-    },
-  }
-
-  // Valuation endpoints
-  valuations = {
-    list: async (params?: {
-      status?: ValuationStatus
-      search?: string
-      cursor?: string
-      limit?: number
-    }) => {
-      const query = new URLSearchParams()
-      if (params?.status) query.set('status', params.status)
-      if (params?.search) query.set('search', params.search)
-      if (params?.cursor) query.set('cursor', params.cursor)
-      if (params?.limit) query.set('limit', params.limit.toString())
-
-      return this.request<{
-        items: Valuation[]
-        nextCursor: string | null
-      }>(`/valuations?${query}`)
-    },
-
-    create: async (data: {
-      address: string
-      block?: string
-      parcel?: string
-      subParcel?: string
-      initialData?: any
-    }) => {
-      return this.request<Valuation>('/valuations', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      })
-    },
-
-    get: async (id: string) => {
-      return this.request<Valuation>(`/valuations/${id}`)
-    },
-
-    delete: async (id: string) => {
-      return this.request<{ success: boolean }>(`/valuations/${id}`, {
-        method: 'DELETE',
-      })
-    },
-
-    finalize: async (
-      id: string,
-      data?: { signatureHash?: string; notes?: string }
-    ) => {
-      return this.request<{
-        valuation: Valuation
-        version: { id: string; createdAt: string }
-      }>(`/valuations/${id}/finalize`, {
-        method: 'POST',
-        body: JSON.stringify(data || {}),
-      })
-    },
-  }
-
-  // Step endpoints
-  steps = {
-    get: async (valuationId: string, stepNo: number) => {
-      return this.request<{
-        valuation: { id: string; status: ValuationStatus; address: string }
-        step: ValuationStep
-      }>(`/valuations/${valuationId}/steps/${stepNo}`)
-    },
-
-    update: async (valuationId: string, stepNo: number, data: any) => {
-      return this.request<{
-        valuation: Valuation
-        step: ValuationStep
-      }>(`/valuations/${valuationId}/steps/${stepNo}`, {
-        method: 'PUT',
-        body: JSON.stringify({ data }),
-      })
-    },
-  }
-
-  // Measurement endpoints
-  measurements = {
-    list: async (valuationId: string) => {
-      return this.request<{ measurements: Measurement[] }>(
-        `/valuations/${valuationId}/measurements`
-      )
-    },
-
-    save: async (
-      valuationId: string,
-      data: {
-        measurements: Array<{
-          type: 'polyline' | 'polygon' | 'calibration'
-          points: Array<{ x: number; y: number }>
-          name: string
-          notes?: string
-          realWorldLength?: number
-          metersPerPixel?: number
-          unitMode: 'metric' | 'imperial'
-          color: string
-        }>
-        metersPerPixel: number
-        unitMode: 'metric' | 'imperial'
-        fileName: string
-      }
-    ) => {
-      return this.request<{ measurements: Measurement[] }>(
-        `/valuations/${valuationId}/measurements`,
-        {
-          method: 'PUT',
-          body: JSON.stringify(data),
-        }
-      )
-    },
+    return response.ok
+  } catch (error) {
+    console.error('❌ Backend health check failed:', error)
+    return false
   }
 }
 
-// Export singleton instance
-export const api = new ShamayApiClient()
+// Example usage:
+/*
+import { callBackendAPI, uploadToBackend } from '@/lib/api-client'
 
-// Export class for custom instances
-export default ShamayApiClient
+// GET request
+const session = await callBackendAPI('/api/sessions/123')
 
+// POST request
+const newValuation = await callBackendAPI('/api/valuations', {
+  method: 'POST',
+  body: JSON.stringify({ address: '123 Main St' })
+})
+
+// PUT request with query params
+const updated = await callBackendAPI('/api/sessions/123', {
+  method: 'PUT',
+  body: JSON.stringify({ data: {...} }),
+  params: { action: 'save' }
+})
+
+// DELETE request
+await callBackendAPI('/api/valuations/123', {
+  method: 'DELETE'
+})
+
+// File upload
+const formData = new FormData()
+formData.append('file', file)
+formData.append('type', 'tabu')
+const result = await uploadToBackend('/api/sessions/123/upload', formData)
+*/
