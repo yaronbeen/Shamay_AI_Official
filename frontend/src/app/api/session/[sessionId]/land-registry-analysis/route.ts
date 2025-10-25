@@ -65,21 +65,48 @@ export async function POST(
     // Download the file from Vercel Blob
     console.log('📥 Downloading file from blob storage...')
     let fileResponse
-    try {
-      fileResponse = await fetch(fileUrl)
-      console.log('📥 Fetch response status:', fileResponse.status, fileResponse.statusText)
-      console.log('📥 Response headers:', Object.fromEntries(fileResponse.headers.entries()))
-    } catch (fetchError) {
-      console.error('❌ Fetch error:', fetchError)
-      return NextResponse.json({
-        success: false,
-        error: `Failed to fetch file: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`,
-        registration_office: 'לא נמצא',
-        gush: 'לא נמצא',
-        chelka: 'לא נמצא',
-        ownership_type: 'לא נמצא',
-        attachments: 'לא נמצא'
-      }, { status: 500 })
+    let retries = 3
+    let lastError: any = null
+    
+    // Retry logic for blob CDN propagation delay
+    while (retries > 0) {
+      try {
+        fileResponse = await fetch(fileUrl)
+        console.log('📥 Fetch response status:', fileResponse.status, fileResponse.statusText)
+        console.log('📥 Response headers:', Object.fromEntries(fileResponse.headers.entries()))
+        
+        if (fileResponse.ok) {
+          break // Success!
+        }
+        
+        if (fileResponse.status === 404 && retries > 1) {
+          console.log(`⏳ File not found, waiting 2 seconds before retry (${retries - 1} retries left)...`)
+          await new Promise(resolve => setTimeout(resolve, 2000))
+          retries--
+          continue
+        }
+        
+        // For other errors, don't retry
+        break
+      } catch (fetchError) {
+        lastError = fetchError
+        console.error('❌ Fetch error:', fetchError)
+        if (retries > 1) {
+          console.log(`⏳ Retrying in 2 seconds (${retries - 1} retries left)...`)
+          await new Promise(resolve => setTimeout(resolve, 2000))
+          retries--
+        } else {
+          return NextResponse.json({
+            success: false,
+            error: `Failed to fetch file: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`,
+            registration_office: 'לא נמצא',
+            gush: 'לא נמצא',
+            chelka: 'לא נמצא',
+            ownership_type: 'לא נמצא',
+            attachments: 'לא נמצא'
+          }, { status: 500 })
+        }
+      }
     }
     
     if (!fileResponse.ok) {
