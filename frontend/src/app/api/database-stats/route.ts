@@ -3,6 +3,14 @@ import { spawn } from 'child_process'
 import { join } from 'path'
 
 export async function GET() {
+  // Skip during build time
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    return NextResponse.json({ 
+      success: false,
+      message: 'Skipped during build'
+    })
+  }
+  
   try {
     console.log('📊 Frontend: Getting database statistics via EXISTING backend')
 

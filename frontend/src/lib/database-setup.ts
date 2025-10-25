@@ -1,4 +1,6 @@
 import { Pool } from 'pg'
+import { spawn } from 'child_process'
+
 
 const pool = new Pool({
   user: 'postgres',
@@ -81,13 +83,13 @@ export { pool }
 export async function checkDatabaseConnection() {
   try {
     return new Promise((resolve, reject) => {
-      const process = spawn('psql', [
+      const checkProcess = spawn('psql' as any, [
         '-U', 'postgres',
         '-d', 'shamay_land_registry',
         '-c', 'SELECT 1;'
       ])
       
-      process.on('close', (code) => {
+      checkProcess.on('close', (code: any) => {
         if (code === 0) {
           resolve({ connected: true })
         } else {

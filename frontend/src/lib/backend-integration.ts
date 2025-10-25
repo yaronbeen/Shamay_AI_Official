@@ -4,22 +4,22 @@ import { join } from 'path'
 export class BackendIntegration {
   private static async runBackendModule(modulePath: string, filePath: string): Promise<any> {
     return new Promise((resolve, reject) => {
-      const process = spawn('node', [modulePath, filePath], {
+      const backendProcess = spawn('node', [modulePath, filePath], {
         cwd: join(process.cwd(), '..')
       })
 
       let output = ''
       let errorOutput = ''
 
-      process.stdout.on('data', (data) => {
+      backendProcess.stdout.on('data', (data) => {
         output += data.toString()
       })
 
-      process.stderr.on('data', (data) => {
+      backendProcess.stderr.on('data', (data) => {
         errorOutput += data.toString()
       })
 
-      process.on('close', (code) => {
+      backendProcess.on('close', (code) => {
         if (code === 0) {
           try {
             const result = JSON.parse(output)

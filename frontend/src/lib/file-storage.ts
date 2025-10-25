@@ -3,6 +3,7 @@
  * Automatically uses Vercel Blob in production and local filesystem in development
  */
 
+// @ts-ignore - @vercel/blob might not be installed in development
 import { put, del, list } from '@vercel/blob'
 import * as fs from 'fs/promises'
 import * as path from 'path'
@@ -54,7 +55,7 @@ export class FileStorageService {
       return {
         url: blob.url,
         path: blob.pathname,
-        size: blob.size
+        size: (blob as any).size || 0
       }
     } catch (error: any) {
       console.error('❌ [BLOB] Upload error:', error)
@@ -164,7 +165,7 @@ export class FileStorageService {
         prefix: `${sessionId}/`,
       })
       
-      return blobs.map(blob => ({
+      return blobs.map((blob: any) => ({
         url: blob.url,
         pathname: blob.pathname,
         size: blob.size,

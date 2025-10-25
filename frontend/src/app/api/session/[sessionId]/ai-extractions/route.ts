@@ -46,7 +46,7 @@ export async function GET(
 
     const result = await ShumaDB.getAIExtractions(
       params.sessionId,
-      extractionType
+      (extractionType as any) || undefined
     )
 
     if (result.success) {

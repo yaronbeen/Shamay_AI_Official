@@ -164,7 +164,7 @@ export const QC_RULES: QCRule[] = [
     fieldRefs: ['תכניות'],
     check: (data) => {
       if (!data.תכניות || !Array.isArray(data.תכניות)) return true
-      return data.תכניות.every(plan => isDateBeforeToday(plan.תאריך))
+      return data.תכניות.every((plan: any) => isDateBeforeToday(plan.תאריך))
     }
   },
   {
@@ -192,7 +192,7 @@ export const QC_RULES: QCRule[] = [
     fieldRefs: ['היתרים'],
     check: (data) => {
       if (!data.היתרים || !Array.isArray(data.היתרים)) return false
-      return data.היתרים.some(permit => permit.מספר && permit.תאריך)
+      return data.היתרים.some((permit: any) => permit.מספר && permit.תאריך)
     }
   },
   {
@@ -201,7 +201,7 @@ export const QC_RULES: QCRule[] = [
     fieldRefs: ['היתרים'],
     check: (data) => {
       if (!data.היתרים || !Array.isArray(data.היתרים)) return true
-      return data.היתרים.every(permit => isDateBeforeToday(permit.תאריך))
+      return data.היתרים.every((permit: any)  => isDateBeforeToday(permit.תאריך))
     }
   },
   {

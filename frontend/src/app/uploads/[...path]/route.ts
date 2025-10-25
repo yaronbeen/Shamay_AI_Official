@@ -27,7 +27,7 @@ export async function GET(
                       filePath.endsWith('.jpg') || filePath.endsWith('.jpeg') ? 'image/jpeg' :
                       'application/octet-stream'
     
-    return new NextResponse(fileBuffer, {
+    return new NextResponse(fileBuffer as any, {
       headers: {
         'Content-Type': contentType,
         'Cache-Control': 'public, max-age=31536000', // Cache for 1 year

@@ -84,9 +84,9 @@ export async function GET(
       })
     })
 
-    console.log('✅ Existing backend result:', result.success ? `${result.data?.length || 0} records` : 'failed')
+    console.log('✅ Existing backend result:', (result as any).success ? `${(result as any).data?.length || 0} records` : 'failed')
     
-    return NextResponse.json(result)
+    return NextResponse.json(result as any)
     
   } catch (error) {
     console.error('❌ Frontend API error:', error)
@@ -193,9 +193,9 @@ addComparableData();
       })
     })
 
-    console.log('✅ Existing backend result:', result.success ? 'added' : 'failed')
+    console.log('✅ Existing backend result:', (result as any).success ? 'added' : 'failed')
     
-    return NextResponse.json(result)
+    return NextResponse.json(result as any)
     
   } catch (error) {
     console.error('❌ Frontend API error:', error)

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { FileStorageService } from '../../../../../lib/file-storage'
+import { join } from 'path'
+import { mkdir, writeFile } from 'fs/promises'
+import { existsSync } from 'fs'
 const { ShumaDB } = require('../../../../../lib/shumadb.js')
 
 export async function POST(
@@ -106,7 +109,7 @@ export async function POST(
         uploadEntry: uploadEntry, // Return the complete upload entry
         file: {
           name: file.name,
-          fileName: fileName,
+          fileName: file.name,
           size: file.size,
           type: file.type,
           uploadedAt: new Date().toISOString()

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 
 interface Step1InitialDataProps {
   data: any
-  updateData: (updates: Partial<any>) => void
+  updateData: (updates: Partial<any>, options?: { skipAutoSave?: boolean }) => void
   onValidationChange: (isValid: boolean) => void
 }
 
@@ -126,7 +126,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
       
       // Skip auto-save for text inputs - only save on step navigation or explicit save
       // BUT save immediately for critical fields
-      updateData(newData, { skipAutoSave: !shouldSaveImmediately })
+      updateData(newData as any, { skipAutoSave: !shouldSaveImmediately } as any)
       
       if (shouldSaveImmediately) {
         console.log(`💾 Step1 - Critical field ${field} saved immediately`)

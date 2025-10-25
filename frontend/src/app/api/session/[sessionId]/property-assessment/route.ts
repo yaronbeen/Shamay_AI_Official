@@ -7,6 +7,14 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { sessionId: string } }
 ) {
+  // Skip during build time
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    return NextResponse.json({ 
+      success: false,
+      message: 'Skipped during build'
+    })
+  }
+  
   try {
     const body = await request.json()
     console.log('💾 Frontend: Saving property assessment via EXISTING backend')
@@ -96,7 +104,7 @@ saveAssessment();
       })
     })
 
-    if (result.success) {
+    if ((result as any).success) {
       // ✅ ALSO UPDATE SESSION: Keep session in sync
       const session = sessionStore.getSession(params.sessionId)
       if (session) {
@@ -106,9 +114,9 @@ saveAssessment();
       }
     }
 
-    console.log('✅ Existing backend result:', result.success ? 'saved' : 'failed')
+    console.log('✅ Existing backend result:', (result as any).success ? 'saved' : 'failed')
     
-    return NextResponse.json(result)
+    return NextResponse.json(result as any)
     
   } catch (error) {
     console.error('❌ Frontend API error:', error)

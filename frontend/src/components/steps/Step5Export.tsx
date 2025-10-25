@@ -6,6 +6,7 @@ import { ValuationData } from '../ValuationWizard'
 
 interface Step5ExportProps {
   data: ValuationData
+  onSaveFinalResults?: (finalValuation: number, pricePerSqm: number, comparableData: any, propertyAnalysis: any) => Promise<void>
 }
 
 export function Step5Export({ data }: Step5ExportProps) {

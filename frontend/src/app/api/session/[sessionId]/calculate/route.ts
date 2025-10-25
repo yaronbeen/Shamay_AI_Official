@@ -20,7 +20,7 @@ export async function POST(
     const comparableData = await getComparableDataFromDatabase(calculationData)
     
     // Perform calculations using real data
-    const calculations = await performCalculations(calculationData, comparableData)
+    const calculations = await performCalculations(calculationData, comparableData as any)
     
     // Update session with calculations
     session.calculations = {
@@ -44,7 +44,7 @@ export async function POST(
 
 async function getComparableDataFromDatabase(filters: any) {
   return new Promise((resolve, reject) => {
-    const process = spawn('node', [
+    const childProcess = spawn('node', [
       '-e',
       `
         import { ComparableDataDatabaseClient } from './comparable-data-management/database-client.js';
@@ -64,15 +64,15 @@ async function getComparableDataFromDatabase(filters: any) {
     let output = ''
     let errorOutput = ''
     
-    process.stdout.on('data', (data) => {
+    childProcess.stdout.on('data', (data) => {
       output += data.toString()
     })
     
-    process.stderr.on('data', (data) => {
+    childProcess.stderr.on('data', (data) => {
       errorOutput += data.toString()
     })
     
-    process.on('close', (code) => {
+    childProcess.on('close', (code) => {
       if (code === 0) {
         try {
           const result = JSON.parse(output)

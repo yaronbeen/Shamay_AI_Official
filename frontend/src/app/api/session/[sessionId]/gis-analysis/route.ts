@@ -246,8 +246,8 @@ export async function POST(
         '',
       
       // Coordinates (only include if they exist)
-      ...(sessionData.lat && sessionData.lng ? { lat: sessionData.lat, lng: sessionData.lng } : {}),
-      ...(sessionData.coordinates ? { coordinates: sessionData.coordinates } : {})
+      ...((sessionData as any).lat && (sessionData as any).lng ? { lat: (sessionData as any).lat, lng: (sessionData as any).lng } : {}),
+      ...((sessionData as any).coordinates ? { coordinates: (sessionData as any).coordinates } : {})
     }
 
     console.log('📍 Property data for GovMap analysis:', propertyData)

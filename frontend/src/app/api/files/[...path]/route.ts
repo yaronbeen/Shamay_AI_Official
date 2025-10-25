@@ -17,7 +17,7 @@ export async function GET(
     const filePath = join(process.cwd(), 'uploads', params.path.join('/'))
     const fileBuffer = await readFile(filePath)
     
-    return new NextResponse(fileBuffer, {
+    return new NextResponse(fileBuffer as any, {
       headers: {
         'Content-Type': 'application/octet-stream',
       },

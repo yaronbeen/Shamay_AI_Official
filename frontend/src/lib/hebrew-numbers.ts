@@ -113,4 +113,6 @@ export class HebrewNumberConverter {
    * Format number with Hebrew text in parentheses
    */
   static formatWithHebrew(num: number, options: HebrewNumberOptions = {}): string {
-  
+    return `(${this.convert(num, options)})`
+  }
+}

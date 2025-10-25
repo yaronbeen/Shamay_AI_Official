@@ -7,7 +7,7 @@ import { DataSource } from '../ui/DataSource'
 
 interface Step3ValidationProps {
   data: ValuationData
-  updateData: (updates: Partial<ValuationData>) => void
+  updateData: (updates: Partial<ValuationData>, options?: { skipAutoSave?: boolean }) => void
   onValidationChange: (isValid: boolean) => void
   sessionId?: string
 }

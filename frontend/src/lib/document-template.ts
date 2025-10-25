@@ -335,7 +335,7 @@ export function generateDocumentHTML(data: ValuationData, isPreview: boolean = t
               ${data.airDirections ? `פונה לכיוונים ${data.airDirections}` : ''}.
             </p>
             <p>
-              הדירה בשטח רשום של <span data-field="registeredArea" data-editable="true">${data.registeredArea || '[שטח רשום]'}</span> מ"ר 
+              הדירה בשטח רשום של <span data-field="registeredArea" data-editable="true">${(data as any).registeredArea || '[שטח רשום]'}</span> מ"ר 
               (נשלף אוטומטית מנסח הטאבו), 
               ובשטח בנוי רישוי של כ-<span data-field="builtArea" data-editable="true">${data.extractedData?.builtArea || data.builtArea || '[שטח בנוי]'}</span> מ"ר 
               (נשלף אוטומטית מהיתר הבנייה). 
@@ -374,7 +374,7 @@ export function generateDocumentHTML(data: ValuationData, isPreview: boolean = t
             </p>
             <p>
               חלקה ${data.extractedData?.parcel || data.parcel || '[מספר חלקה]'} בגוש ${data.extractedData?.gush || data.gush || '[מספר גוש]'}, 
-              בשטח קרקע רשום של ${data.parcelArea || data.extractedData?.registeredArea || data.registeredArea || '[שטח חלקה]'} מ"ר 
+              בשטח קרקע רשום של ${data.parcelArea || ((data.extractedData as any)?.registeredArea) || ((data as any).registeredArea) || '[שטח חלקה]'} מ"ר 
               (כל הערכים נשלפים אוטומטית מהנסח).
             </p>
             
@@ -662,11 +662,11 @@ export function generateDocumentHTML(data: ValuationData, isPreview: boolean = t
               <tbody>
                 <tr>
                   <td style="border: 1px solid #ccc; padding: 8px;">${data.propertyEssence || '[תיאור הנכס]'}</td>
-                  <td style="border: 1px solid #ccc; padding: 8px;">${data.extractedData?.builtArea || data.builtArea || data.registeredArea || '[שטח בנוי]'}</td>
-                  <td style="border: 1px solid #ccc; padding: 8px;">${data.extractedData?.balconyArea || data.balconyArea || '0'}</td>
+                  <td style="border: 1px solid #ccc; padding: 8px;">${data.extractedData?.builtArea || data.builtArea || (data as any).registeredArea || '[שטח בנוי]'}</td>
+                  <td style="border: 1px solid #ccc; padding: 8px;">${(data.extractedData as any)?.balconyArea || (data as any).balconyArea || '0'}</td>
                   <td style="border: 1px solid #ccc; padding: 8px;">
-                    ${data.extractedData?.builtArea || data.builtArea || data.registeredArea ? 
-                      (parseFloat(String(data.extractedData?.builtArea || data.builtArea || data.registeredArea || '0')) + parseFloat(String(data.extractedData?.balconyArea || data.balconyArea || '0')) * 0.5).toFixed(1) : 
+                    ${data.extractedData?.builtArea || data.builtArea || (data as any).registeredArea ? 
+                      (parseFloat(String(data.extractedData?.builtArea || data.builtArea || (data as any).registeredArea || '0')) + parseFloat(String((data.extractedData as any)?.balconyArea || (data as any).balconyArea || '0')) * 0.5).toFixed(1) : 
                       '[חישוב]'
                     }
                   </td>

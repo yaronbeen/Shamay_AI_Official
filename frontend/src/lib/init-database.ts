@@ -28,13 +28,13 @@ export async function initializeDatabase() {
 
 async function createDatabase() {
   return new Promise((resolve, reject) => {
-    const process = spawn('psql', [
+    const dbProcess = spawn('psql', [
       '-U', 'postgres',
       '-d', 'postgres',
       '-c', 'CREATE DATABASE shamay_land_registry;'
     ])
     
-    process.on('close', (code) => {
+    dbProcess.on('close', (code) => {
       if (code === 0 || code === 1) { // 1 means database already exists
         resolve({ success: true })
       } else {
@@ -48,7 +48,7 @@ async function runComprehensiveSchema() {
   const schemaPath = join(process.cwd(), 'database', 'comprehensive_schema.sql')
   
   return new Promise((resolve, reject) => {
-    const process = spawn('psql', [
+    const schemaProcess = spawn('psql', [
       '-U', 'postgres',
       '-d', 'shamay_land_registry',
       '-f', schemaPath
@@ -57,15 +57,15 @@ async function runComprehensiveSchema() {
     let output = ''
     let errorOutput = ''
     
-    process.stdout.on('data', (data) => {
+    schemaProcess.stdout.on('data', (data) => {
       output += data.toString()
     })
     
-    process.stderr.on('data', (data) => {
+    schemaProcess.stderr.on('data', (data) => {
       errorOutput += data.toString()
     })
     
-    process.on('close', (code) => {
+    schemaProcess.on('close', (code) => {
       if (code === 0) {
         resolve({ success: true, output })
       } else {
@@ -79,13 +79,13 @@ async function setupHebrewSupport() {
   const hebrewPath = join(process.cwd(), 'setup-hebrew-psql.sql')
   
   return new Promise((resolve, reject) => {
-    const process = spawn('psql', [
+    const hebrewProcess = spawn('psql', [
       '-U', 'postgres',
       '-d', 'shamay_land_registry',
       '-f', hebrewPath
     ])
     
-    process.on('close', (code) => {
+    hebrewProcess.on('close', (code) => {
       if (code === 0) {
         resolve({ success: true })
       } else {

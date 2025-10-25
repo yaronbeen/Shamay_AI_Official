@@ -134,9 +134,9 @@ export function DocumentContent({ data, isPreview = true }: DocumentContentProps
     backgroundColor: '#ffffff',
     margin: '0 auto',
     padding: '25mm 20mm', // 2.5cm top/bottom, 2cm left/right margins
-    boxSizing: 'border-box',
-    direction: 'rtl',
-    textAlign: 'right'
+    boxSizing: 'border-box' as const,
+    direction: 'rtl' as const,
+    textAlign: 'right' as const
   } : {
     width: '210mm',
     minHeight: '297mm',
@@ -147,9 +147,9 @@ export function DocumentContent({ data, isPreview = true }: DocumentContentProps
     backgroundColor: '#ffffff',
     margin: '0',
     padding: '25mm 20mm',
-    boxSizing: 'border-box',
-    direction: 'rtl',
-    textAlign: 'right'
+    boxSizing: 'border-box' as const,
+    direction: 'rtl' as const,
+    textAlign: 'right' as const
   }
 
   return (
@@ -301,7 +301,7 @@ export function DocumentContent({ data, isPreview = true }: DocumentContentProps
           </h3>
           <div className="bg-blue-50 p-3 rounded" style={{ fontSize: '11pt' }}>
             <p>
-              חלקה {data.parcel || '[מספר חלקה]'} בגוש {data.block || '[מספר גוש]'}, 
+              חלקה {data.parcel || '[מספר חלקה]'} בגוש {(data as any).block || data.gush || '[מספר גוש]'}, 
               בשטח קרקע רשום של {data.parcelArea || '[שטח חלקה]'} מ"ר, 
               צורתה {data.parcelShape || '[צורת החלקה]'}, 
               פני הקרקע {data.parcelSurface || '[פני הקרקע]'}.
@@ -351,12 +351,12 @@ export function DocumentContent({ data, isPreview = true }: DocumentContentProps
             </p>
             <p>
               הדירה כוללת {data.rooms || '[מספר חדרים]'} חדרים, 
-              {data.balcony ? `מרפסת בשטח ${data.balcony} מ"ר, ` : ''}
-              {data.parking ? 'חניה, ' : ''}
-              {data.elevator ? 'מעלית, ' : ''}
-              {data.buildingYear ? `בניין משנת ${data.buildingYear}, ` : ''}
-              {data.buildingFloors ? `בניין בן ${data.buildingFloors} קומות, ` : ''}
-              {data.buildingUnits ? `כולל ${data.buildingUnits} יח"ד.` : ''}
+              {(data as any).balcony || data.balconyArea ? `מרפסת בשטח ${(data as any).balcony || data.balconyArea} מ"ר, ` : ''}
+              {(data as any).parking ? 'חניה, ' : ''}
+              {(data as any).elevator ? 'מעלית, ' : ''}
+              {(data as any).buildingYear ? `בניין משנת ${(data as any).buildingYear}, ` : ''}
+              {(data as any).buildingFloors ? `בניין בן ${(data as any) .buildingFloors} קומות, ` : ''}
+              {(data as any).buildingUnits ? `כולל ${(data as any).buildingUnits} יח"ד.` : ''}
             </p>
           </div>
         </div>
@@ -379,7 +379,7 @@ export function DocumentContent({ data, isPreview = true }: DocumentContentProps
               בתאריך {formatDate(data.extractDate || '')} (נשלף אוטומטית מהנסח).
             </p>
             <p>
-              חלקה {data.parcel || '[מספר חלקה]'} בגוש {data.block || '[מספר גוש]'}, 
+              חלקה {data.parcel || '[מספר חלקה]'} בגוש {(data as any).block || data.gush || '[מספר גוש]'}, 
               בשטח קרקע רשום של {data.parcelArea || '[שטח חלקה]'} מ"ר 
               (כל הערכים נשלפים אוטומטית מהנסח).
             </p>
@@ -387,16 +387,16 @@ export function DocumentContent({ data, isPreview = true }: DocumentContentProps
             {/* ✅ TODO: Add ownership rights, attachments, and notes extraction */}
             <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#fff3cd', borderRadius: '4px' }}>
               <p><strong>בעלויות:</strong> {data.ownershipRights || '[פירוט בעלויות - נשלף אוטומטית מהנסח]'}</p>
-              {data.attachments && (
+              {(data as any).attachments || data.attachments && (
                 <div>
                   <p><strong>הצמדות:</strong></p>
-                  <p>{data.attachments}</p>
+                  <p>{(data as any).attachments || data.attachments}</p>
                 </div>
               )}
-              {data.notes && (
+              {(data as any).notes || data.notes && (
                 <div>
                   <p><strong>הערות:</strong></p>
-                  <p>{data.notes}</p>
+                  <p>{(data as any).notes || data.notes}</p>
                 </div>
               )}
             </div>
@@ -411,7 +411,7 @@ export function DocumentContent({ data, isPreview = true }: DocumentContentProps
         </h2>
         
         {/* Property Analysis */}
-        {data.propertyAnalysis && (
+        {(data as any).propertyAnalysis && (
           <div className="mb-4">
             <h3 className="text-base font-semibold text-gray-900 mb-2" style={{ fontSize: '12pt' }}>
               3.1 ניתוח הנכס
@@ -419,14 +419,14 @@ export function DocumentContent({ data, isPreview = true }: DocumentContentProps
             <div className="bg-blue-50 p-3 rounded" style={{ fontSize: '11pt' }}>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p><strong>גיל הבניין:</strong> {data.propertyAnalysis.buildingAge}</p>
-                  <p><strong>מצב הבניין:</strong> {data.propertyAnalysis.buildingCondition}</p>
-                  <p><strong>דירוג השכונה:</strong> {data.propertyAnalysis.neighborhoodRating}</p>
+                  <p><strong>גיל הבניין:</strong> {(data as any).propertyAnalysis?.buildingAge || 'לא זמין'}</p>
+                  <p><strong>מצב הבניין:</strong> {(data as any).propertyAnalysis?.buildingCondition || 'לא זמין'}</p>
+                  <p><strong>דירוג השכונה:</strong> {(data as any).propertyAnalysis?.neighborhoodRating || 'לא זמין'}</p> 
                 </div>
                 <div>
-                  <p><strong>נגישות:</strong> {data.propertyAnalysis.accessibility}</p>
-                  <p><strong>תחבורה ציבורית:</strong> {data.propertyAnalysis.publicTransport}</p>
-                  <p><strong>בתי ספר:</strong> {data.propertyAnalysis.schools}</p>
+                  <p><strong>נגישות:</strong> {(data as any).propertyAnalysis?.accessibility || 'לא זמין'}</p>
+                  <p><strong>תחבורה ציבורית:</strong> {(data as any).propertyAnalysis?.publicTransport || 'לא זמין'}</p>
+                  <p><strong>בתי ספר:</strong> {(data as any).propertyAnalysis?.schools || 'לא זמין'}</p>
                 </div>
               </div>
             </div>
@@ -434,7 +434,7 @@ export function DocumentContent({ data, isPreview = true }: DocumentContentProps
         )}
 
         {/* Market Analysis */}
-        {data.marketAnalysis && (
+        {(data as any).marketAnalysis && (
           <div className="mb-4">
             <h3 className="text-base font-semibold text-gray-900 mb-2" style={{ fontSize: '12pt' }}>
               3.2 ניתוח שוק
@@ -442,13 +442,13 @@ export function DocumentContent({ data, isPreview = true }: DocumentContentProps
             <div className="bg-green-50 p-3 rounded" style={{ fontSize: '11pt' }}>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p><strong>מחיר ממוצע למ"ר:</strong> ₪{data.marketAnalysis.averagePricePerSqm.toLocaleString()}</p>
-                  <p><strong>טווח מחירים:</strong> {data.marketAnalysis.priceRange}</p>
-                  <p><strong>מגמת שוק:</strong> {data.marketAnalysis.marketTrend}</p>
+                  <p><strong>מחיר ממוצע למ"ר:</strong> ₪{(data as any).marketAnalysis.averagePricePerSqm.toLocaleString()}</p>
+                  <p><strong>טווח מחירים:</strong> {(data as any).marketAnalysis.priceRange}</p>
+                  <p><strong>מגמת שוק:</strong> {(data as any).marketAnalysis.marketTrend}</p>
                 </div>
                 <div>
-                  <p><strong>רמת ביקוש:</strong> {data.marketAnalysis.demandLevel}</p>
-                  <p><strong>תחרות:</strong> {data.marketAnalysis.competition}</p>
+                  <p><strong>רמת ביקוש:</strong> {(data as any).marketAnalysis.demandLevel}</p>
+                  <p><strong>תחרות:</strong> {(data as any).marketAnalysis.competition}</p>
                 </div>
               </div>
             </div>
@@ -456,7 +456,7 @@ export function DocumentContent({ data, isPreview = true }: DocumentContentProps
         )}
 
         {/* Risk Assessment */}
-        {data.riskAssessment && (
+        {(data as any).riskAssessment && (
           <div className="mb-4">
             <h3 className="text-base font-semibold text-gray-900 mb-2" style={{ fontSize: '12pt' }}>
               3.3 הערכת סיכונים
@@ -464,12 +464,12 @@ export function DocumentContent({ data, isPreview = true }: DocumentContentProps
             <div className="bg-yellow-50 p-3 rounded" style={{ fontSize: '11pt' }}>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p><strong>סיכונים משפטיים:</strong> {data.riskAssessment.legalRisks}</p>
-                  <p><strong>סיכוני שוק:</strong> {data.riskAssessment.marketRisks}</p>
+                  <p><strong>סיכונים משפטיים:</strong> {(data as any).riskAssessment.legalRisks}</p>
+                  <p><strong>סיכוני שוק:</strong> {(data as any).riskAssessment.marketRisks}</p>
                 </div>
                 <div>
-                  <p><strong>סיכונים סביבתיים:</strong> {data.riskAssessment.environmentalRisks}</p>
-                  <p><strong>סיכון כולל:</strong> {data.riskAssessment.overallRisk}</p>
+                  <p><strong>סיכונים סביבתיים:</strong> {(data as any).riskAssessment.environmentalRisks}</p>
+                  <p><strong>סיכון כולל:</strong> {(data as any).riskAssessment.overallRisk}</p>
                 </div>
               </div>
             </div>
@@ -477,14 +477,14 @@ export function DocumentContent({ data, isPreview = true }: DocumentContentProps
         )}
 
         {/* Recommendations */}
-        {data.recommendations && data.recommendations.length > 0 && (
+        {(data as any).recommendations && (data as any).recommendations.length > 0 && (
           <div className="mb-4">
             <h3 className="text-base font-semibold text-gray-900 mb-2" style={{ fontSize: '12pt' }}>
               3.4 המלצות מקצועיות
             </h3>
             <div className="bg-purple-50 p-3 rounded" style={{ fontSize: '11pt' }}>
               <ul className="space-y-1">
-                {data.recommendations.map((rec, index) => (
+                {(data as any).recommendations.map((rec: any, index: any) => (
                   <li key={index} className="flex items-start">
                     <span className="text-purple-600 mr-2">•</span>
                     <span>{rec}</span>
@@ -496,7 +496,7 @@ export function DocumentContent({ data, isPreview = true }: DocumentContentProps
         )}
 
         {/* Fallback for when no analysis data is available */}
-        {!data.propertyAnalysis && !data.marketAnalysis && !data.riskAssessment && (
+        {!(data as any).propertyAnalysis && !(data as any).marketAnalysis && !(data as any).riskAssessment && (
           <div className="space-y-2">
             <h3 className="text-base font-semibold text-gray-900 mb-1" style={{ fontSize: '12pt' }}>
               3.1 עקרונות גורמים ושיקולים
@@ -530,14 +530,14 @@ export function DocumentContent({ data, isPreview = true }: DocumentContentProps
             <div>
               <h4 className="font-semibold mb-1">מצב הזכויות</h4>
               <p>• הזכויות בנכס – בעלות פרטית</p>
-              <p>• הדירה מזוהה בתשריט כ"{data.subParcel || '[תת חלקה]'}"</p>
-              <p>• {data.attachments ? `כולל ${data.attachments}` : 'ללא הצמדות מיוחדות'}</p>
+              <p>• הדירה מזוהה בתשריט כ"{(data as any).subParcel || '[תת חלקה]'}"</p>
+              <p>• {(data as any).attachments ? `כולל ${(data as any).attachments}` : 'ללא הצמדות מיוחדות'}</p>
             </div>
             
             <div>
               <h4 className="font-semibold mb-1">מצב תכנוני ורישוי</h4>
               <p>• זכויות הבניה עפ"י תכניות בניין עיר בתוקף</p>
-              <p>• {data.buildingPermitNumber ? `היתר בניה מס' ${data.buildingPermitNumber} מיום ${formatDate(data.buildingPermitDate || '')}` : 'היתר בניה רלוונטי'}</p>
+              <p>• {(data as any).buildingPermitNumber ? `היתר בניה מס' ${(data as any).buildingPermitNumber} מיום ${formatDate((data as any).buildingPermitDate || '')}` : 'היתר בניה רלוונטי'}</p>
               <p>• תשריט היתר ואישור מדידה צורפו למידע התכנוני</p>
             </div>
             
@@ -568,7 +568,7 @@ export function DocumentContent({ data, isPreview = true }: DocumentContentProps
               עפ״י דיווחים במערכת מידע-נדל״ן של רשות המיסים ומידע משלים מתוך היתרי הבניה.
             </p>
             
-            {data.comparableData && data.comparableData.length > 0 ? (
+            {(data as any).comparableData && (data as any).comparableData.length > 0 ? (
               <div>
                 <table className="w-full border-collapse border border-gray-300" style={{ fontSize: '10pt' }}>
                   <thead>
@@ -597,7 +597,7 @@ export function DocumentContent({ data, isPreview = true }: DocumentContentProps
                   </tbody>
                 </table>
                 <p className="mt-2 text-sm">
-                  ממוצע מחיר למ"ר: ₪{data.pricePerSqm?.toLocaleString() || '[חישוב]'}
+                  ממוצע מחיר למ"ר: ₪{(data as any).pricePerSqm || data.pricePerSqm?.toLocaleString() || '[חישוב]'}
                 </p>
               </div>
             ) : (
@@ -614,7 +614,7 @@ export function DocumentContent({ data, isPreview = true }: DocumentContentProps
           <div className="bg-green-50 p-3 rounded" style={{ fontSize: '11pt' }}>
             <p className="mb-3">
               <strong>בשים לב לנתוני השוואה שלעיל, תוך כדי ביצוע התאמות נדרשות לנכס נשוא השומה, 
-              שווי מ"ר בנוי אקו' לנכס נשוא השומה מוערך כ-₪{data.pricePerSqm?.toLocaleString() || '[חישוב]'}.</strong>
+              שווי מ"ר בנוי אקו' לנכס נשוא השומה מוערך כ-₪{(data as any).pricePerSqm || data.pricePerSqm?.toLocaleString() || '[חישוב]'}.</strong>
             </p>
             
             <table className="w-full border-collapse border border-gray-300" style={{ fontSize: '10pt' }}>
@@ -630,17 +630,17 @@ export function DocumentContent({ data, isPreview = true }: DocumentContentProps
               </thead>
               <tbody>
                 <tr>
-                  <td className="border border-gray-300 p-2">{data.propertyEssence || '[תיאור הנכס]'}</td>
-                  <td className="border border-gray-300 p-2">{data.builtArea || '[שטח בנוי]'}</td>
-                  <td className="border border-gray-300 p-2">{data.balcony || '0'}</td>
+                  <td className="border border-gray-300 p-2">{(data as any).propertyEssence || data.propertyEssence || '[תיאור הנכס]'}</td>
+                  <td className="border border-gray-300 p-2">{(data as any).builtArea || data.builtArea || '[שטח בנוי]'}</td>
+                  <td className="border border-gray-300 p-2">{(data as any).balcony || data.balconyArea || '0'}</td>
                   <td className="border border-gray-300 p-2">
-                    {data.builtArea && data.balcony ? 
-                      (parseFloat(data.builtArea) + (parseFloat(data.balcony) * 0.5)).toFixed(1) : 
+                    {(data as any).builtArea && ((data as any).balcony || data.balconyArea) ? 
+                      (parseFloat(data.builtArea as any) + (parseFloat(((data as any).balcony || data.balconyArea) as any) * 0.5)).toFixed(1) : 
                       '[חישוב]'
                     }
                   </td>
-                  <td className="border border-gray-300 p-2">{data.pricePerSqm?.toLocaleString() || '[חישוב]'}</td>
-                  <td className="border border-gray-300 p-2">{data.finalValuation?.toLocaleString() || '[חישוב]'}</td>
+                  <td className="border border-gray-300 p-2">{(data as any).pricePerSqm || data.pricePerSqm?.toLocaleString() || '[חישוב]'}</td>
+                  <td className="border border-gray-300 p-2">{(data as any).finalValuation || data.finalValuation?.toLocaleString() || '[חישוב]'}</td>
                 </tr>
               </tbody>
             </table>
@@ -658,7 +658,7 @@ export function DocumentContent({ data, isPreview = true }: DocumentContentProps
           <p className="mb-4">
             בשים לב למיקומו של הנכס, לשטחו, ולכל שאר הנתונים כאמור וכמפורט לעיל,
             ובהביאי בחשבון שווים של נכסים דומים רלוונטיים,
-            <strong> שווי הנכס בגבולות ₪{data.finalValuation?.toLocaleString() || '[חישוב]'} ({numberToHebrewText(data.finalValuation || 0)} שקל).</strong>
+            <strong> שווי הנכס בגבולות ₪{(data as any).finalValuation || data.finalValuation?.toLocaleString() || '[חישוב]'} ({numberToHebrewText((data as any).finalValuation || data.finalValuation || 0)} שקל).</strong>
           </p>
           <p className="mb-4">
             השווי כולל מע"מ.
@@ -693,10 +693,10 @@ export function DocumentContent({ data, isPreview = true }: DocumentContentProps
               <p className="text-sm">{getShamayLicense()}</p>
             </div>
             <div className="text-center">
-              {data.signaturePreview ? (
+              {(data as any).signaturePreview || data.signaturePreview ? (
                 <div>
                   <img 
-                    src={data.signaturePreview} 
+                    src={(data as any).signaturePreview || data.signaturePreview} 
                     alt="חתימת שמאי"
                     style={{
                       maxWidth: '150px',

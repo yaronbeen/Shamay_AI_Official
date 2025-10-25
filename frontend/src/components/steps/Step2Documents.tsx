@@ -829,15 +829,15 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
       const uploadsForDB = uploads.map(upload => ({
         id: upload.id,
         type: upload.type,
-        name: upload.name,
-        fileName: upload.fileName,
-        path: upload.path,
-        size: upload.size,
-        mimeType: upload.mimeType,
+        name: upload.file?.name || (upload as any).name,
+        fileName: (upload as any).fileName || upload.file?.name,
+        path: (upload as any).path || '',
+        size: (upload as any).size || upload.file?.size || 0,
+        mimeType: (upload as any).mimeType || upload.file?.type,
         status: upload.status,
         error: upload.error, // Include error message if any
-        url: upload.url,
-        uploadedAt: upload.uploadedAt,
+        url: (upload as any).url || upload.preview,
+        uploadedAt: (upload as any).uploadedAt || new Date().toISOString(),
         extractedData: upload.extractedData
       }))
       
@@ -1189,7 +1189,7 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
         </div>
       </div>
                 <button
-                  onClick={processDocuments}
+                  onClick={() => processDocuments()}
                   disabled={!sessionId}
                   className="flex items-center gap-2 px-6 py-3 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                 >

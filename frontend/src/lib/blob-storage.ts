@@ -33,7 +33,7 @@ export class BlobStorageService {
         url: blob.url,
         pathname: blob.pathname
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error uploading to Blob:', error)
       throw new Error(`Failed to upload file: ${error.message}`)
     }
@@ -47,7 +47,7 @@ export class BlobStorageService {
     try {
       await del(url)
       console.log('✅ File deleted from Blob:', url)
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error deleting from Blob:', error)
       throw new Error(`Failed to delete file: ${error.message}`)
     }
@@ -65,7 +65,7 @@ export class BlobStorageService {
       })
       
       return blobs
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error listing Blob files:', error)
       throw new Error(`Failed to list files: ${error.message}`)
     }
@@ -84,7 +84,7 @@ export class BlobStorageService {
       )
       
       console.log(`✅ Deleted ${blobs.length} files for session ${sessionId}`)
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error deleting session files:', error)
       throw new Error(`Failed to delete session files: ${error.message}`)
     }

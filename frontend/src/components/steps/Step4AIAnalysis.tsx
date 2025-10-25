@@ -24,9 +24,12 @@ import GarmushkaMeasurementViewer from '../ui/GarmushkaMeasurementViewer'
 
 interface Step4AIAnalysisProps {
   data: ValuationData
-  updateData: (updates: Partial<ValuationData>) => void
+  updateData: (updates: Partial<ValuationData>, options?: { skipAutoSave?: boolean }) => void
   onValidationChange: (isValid: boolean) => void
   sessionId?: string
+  onSaveGISData?: (gisData: any) => Promise<void>
+  onSaveGarmushkaData?: (garmushkaData: any) => Promise<void>
+  onSaveFinalResults?: (finalResults: any) => Promise<void>
 }
 
 interface AIAnalysisSection {

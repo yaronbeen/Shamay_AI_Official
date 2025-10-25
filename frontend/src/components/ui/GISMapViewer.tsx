@@ -114,7 +114,7 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
       // Load GIS analysis from ValuationData prop
       if (data.gisScreenshots) {
         console.log('📊 Setting GovMap data from props:', data.gisScreenshots)
-        setGisData(data.gisScreenshots)
+        setGisData(data.gisScreenshots as GovMapData)
       }
       
       // Load screenshots from ValuationData
@@ -317,7 +317,7 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
         
         alert(`תמונת מפה ערוכה נשמרה בהצלחה! (מצב ${selectedCropMode === '0' ? 'נקייה' : 'תצ"א'})`)
       } else {
-        const errorData = await response.json()
+        const errorData = await result.error as string
         console.error('❌ Failed to save edited image:', errorData)
         alert('שגיאה בשמירת התמונה הערוכה')
       }
