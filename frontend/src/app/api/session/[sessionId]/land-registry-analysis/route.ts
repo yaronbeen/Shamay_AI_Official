@@ -28,23 +28,18 @@ export async function POST(
     
     // Find uploaded land registry documents
     const uploads = data.uploads || []
+    console.log('🔍 All uploads:', JSON.stringify(uploads, null, 2))
     const landRegistryUploads = uploads.filter((upload: any) => upload.type === 'land_registry' || upload.type === 'tabu')
+    console.log('🔍 Filtered land registry uploads:', JSON.stringify(landRegistryUploads, null, 2))
     
     if (landRegistryUploads.length === 0) {
-      console.log('❌ No land registry documents found, using mock data')
-      return NextResponse.json({
-        success: true,
-        registration_office: 'לשכת רישום מקרקעין תל אביב',
-        gush: '12345',
-        chelka: '67',
-        ownership_type: 'בעלות פרטית',
-        attachments: 'תצלום אוויר, מפה טופוגרפית',
-        shared_areas: 'מעלית, חדר כביסה, מחסן',
-        building_rights: 'בנייה למגורים',
-        permitted_use: 'מגורים',
-        confidence: 0.85,
-        extracted_at: new Date().toISOString()
-      })
+      console.log('❌ No land registry documents found')
+      console.log('❌ Available upload types:', uploads.map((u: any) => u.type).join(', '))
+      return NextResponse.json({ 
+        success: false,
+        error: 'No land registry documents found. Please upload a land registry (Tabu) document first.',
+        availableTypes: uploads.map((u: any) => u.type)
+      }, { status: 400 })
     }
     
     // Use the first land registry document

@@ -363,8 +363,8 @@ class ShumaDBEnhanced {
         WHERE id = $59
       `, [
         valuationData.street, valuationData.buildingNumber,
-        valuationData.city, valuationData.neighborhood, valuationData.fullAddress, valuationData.rooms,
-        valuationData.floor, valuationData.airDirections, valuationData.area, valuationData.propertyEssence,
+        valuationData.city, valuationData.neighborhood, valuationData.fullAddress, valuationData.rooms || '0.0',
+        valuationData.floor, valuationData.airDirections, valuationData.area || 0, valuationData.propertyEssence,
         valuationData.clientName, formatDateForDB(valuationData.visitDate), formatDateForDB(valuationData.valuationDate), valuationData.referenceNumber,
         valuationData.shamayName, valuationData.shamaySerialNumber, valuationData.gush, valuationData.parcel,
         this._parseNumeric(valuationData.parcelArea), valuationData.parcelShape, valuationData.parcelSurface, valuationData.subParcel,
