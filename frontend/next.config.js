@@ -24,6 +24,17 @@ const nextConfig = {
   // Keep existing configuration
   reactStrictMode: true,
   swcMinify: true,
+  
+  // Exclude puppeteer from client-side bundle
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        'puppeteer-core': false,
+      };
+    }
+    return config;
+  },
 };
 
 module.exports = nextConfig;
