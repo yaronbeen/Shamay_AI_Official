@@ -43,6 +43,17 @@ export class FileStorageService {
     filename: string
   ): Promise<{ url: string; path: string; size: number }> {
     try {
+      console.log('🔍 [BLOB] Uploading file:', {
+        sessionId,
+        filename,
+        fileSize: file instanceof Buffer ? file.length : (file as any).size,
+        hasToken: !!process.env.BLOB_READ_WRITE_TOKEN
+      })
+      
+      if (!process.env.BLOB_READ_WRITE_TOKEN) {
+        console.warn('⚠️ [BLOB] No BLOB_READ_WRITE_TOKEN found! Upload may fail.')
+      }
+      
       const pathname = `${sessionId}/${filename}`
       
       const blob = await put(pathname, file, {
@@ -50,7 +61,11 @@ export class FileStorageService {
         addRandomSuffix: false,
       })
       
-      console.log('✅ [BLOB] File uploaded:', blob.url)
+      console.log('✅ [BLOB] File uploaded successfully:', {
+        url: blob.url,
+        pathname: blob.pathname,
+        size: (blob as any).size
+      })
       
       return {
         url: blob.url,
@@ -58,7 +73,11 @@ export class FileStorageService {
         size: (blob as any).size || 0
       }
     } catch (error: any) {
-      console.error('❌ [BLOB] Upload error:', error)
+      console.error('❌ [BLOB] Upload error:', {
+        error: error.message,
+        stack: error.stack,
+        hasToken: !!process.env.BLOB_READ_WRITE_TOKEN
+      })
       throw new Error(`Blob upload failed: ${error.message}`)
     }
   }

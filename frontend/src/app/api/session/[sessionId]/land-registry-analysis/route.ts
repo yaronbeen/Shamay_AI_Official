@@ -108,32 +108,13 @@ export async function POST(
     
     // Save to temporary location for processing
     // Use /tmp for serverless environments (Vercel)
-    let tempDir
-    let tempPath
-    try {
-      tempDir = process.env.VERCEL ? '/tmp' : join(process.cwd(), 'temp')
-      console.log('🔍 Using temp directory:', tempDir)
-      
-      if (!fs.existsSync(tempDir)) {
-        console.log('📁 Creating temp directory:', tempDir)
-        fs.mkdirSync(tempDir, { recursive: true })
-      }
-      
-      tempPath = join(tempDir, `${params.sessionId}_${fileName}`)
-      console.log('📁 Writing file to:', tempPath)
-      fs.writeFileSync(tempPath, fileBuffer)
-      console.log('💾 Saved to temp location:', tempPath)
-    } catch (fsError) {
-      console.error('❌ Filesystem error:', fsError)
-      // Try /tmp directly as fallback
-      tempDir = '/tmp'
-      if (!fs.existsSync(tempDir)) {
-        fs.mkdirSync(tempDir, { recursive: true })
-      }
-      tempPath = join(tempDir, `${params.sessionId}_${fileName}`)
-      fs.writeFileSync(tempPath, fileBuffer)
-      console.log('💾 Saved to fallback /tmp:', tempPath)
+    const tempDir = process.env.VERCEL ? '/tmp' : join(process.cwd(), 'temp')
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true })
     }
+    const tempPath = join(tempDir, `${params.sessionId}_${fileName}`)
+    fs.writeFileSync(tempPath, fileBuffer)
+    console.log('💾 Saved to temp location:', tempPath)
     
     // Call the real backend service
     const projectRoot = join(process.cwd(), '..')
