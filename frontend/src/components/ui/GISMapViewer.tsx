@@ -271,6 +271,34 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
     }
   }
 
+  // Manual screenshot upload handler
+  const handleManualScreenshotUpload = async (event: React.ChangeEvent<HTMLInputElement>, cropMode: '0' | '1') => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Check if it's an image
+    if (!file.type.startsWith('image/')) {
+      alert('נא להעלות קובץ תמונה בלבד')
+      return
+    }
+
+    try {
+      // Convert to base64 for preview
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const base64Data = e.target?.result as string
+        setServerScreenshot(base64Data)
+        setSelectedCropMode(cropMode)
+        setShowEditModal(true)
+        setAnnotations([])
+      }
+      reader.readAsDataURL(file)
+    } catch (error) {
+      console.error('❌ Error uploading screenshot:', error)
+      alert('שגיאה בהעלאת התמונה')
+    }
+  }
+
   const saveEditedImage = async (editedImageData: string) => {
     if (!selectedCropMode) return
 
@@ -1046,32 +1074,35 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
 
 
           {/* Screenshot Buttons - Always available */}
-          <div className="flex gap-2">
-            <button
-                onClick={() => captureServerScreenshot('1')}
-                disabled={isCapturingServer}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isCapturingServer ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Camera className="w-4 h-4" />
-                )}
-                {isCapturingServer ? 'צלם...' : 'צלם מפה נקייה'}
-              </button>
-              <button
-                onClick={() => captureServerScreenshot('0')}
-                disabled={isCapturingServer}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isCapturingServer ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Camera className="w-4 h-4" />
-                )}
-                {isCapturingServer ? 'צלם...' : 'צלם מפת תצ"א'}
-              </button>
+          <div className="space-y-2">
+            <div className="text-sm font-medium text-gray-700">העלה צילום מסך מהמפה:</div>
+            <div className="flex gap-2 flex-wrap">
+              {/* Manual Upload Buttons */}
+              <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => handleManualScreenshotUpload(e, '0')}
+                />
+                <Camera className="w-4 h-4" />
+                העלה צילום - מפה נקייה
+              </label>
+              <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => handleManualScreenshotUpload(e, '1')}
+                />
+                <Camera className="w-4 h-4" />
+                העלה צילום - מפת תצ"א
+              </label>
             </div>
+            <div className="text-xs text-gray-500 mt-1">
+              💡 צלם את המפה בעצמך (Print Screen) והעלה את התמונה כאן
+            </div>
+          </div>
 
           {/* GovMap Iframe */}
           <div className="border border-gray-300 rounded-lg overflow-hidden">
