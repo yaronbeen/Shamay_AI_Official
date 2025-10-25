@@ -7,32 +7,40 @@
 
 const { Pool } = require('pg')
 
-// Use DATABASE_URL from environment (Vercel Postgres) or fall back to local config
-console.log('🔍 ShumaDB: Checking DATABASE_URL:', process.env.DATABASE_URL ? 'SET ✅' : 'NOT SET ❌')
-console.log('🔍 ShumaDB: VERCEL env:', process.env.VERCEL)
-console.log('🔍 ShumaDB: NODE_ENV:', process.env.NODE_ENV)
+// Lazy pool initialization - only create when first used
+let pool = null
 
-const pool = new Pool(
-  process.env.DATABASE_URL 
-    ? { 
-        connectionString: process.env.DATABASE_URL, 
-        ssl: { rejectUnauthorized: false } 
-      }
-    : {
+function getPool() {
+  if (!pool) {
+    console.log('🔍 ShumaDB: Initializing connection pool...')
+    console.log('🔍 ShumaDB: DATABASE_URL:', process.env.DATABASE_URL ? 'SET ✅' : 'NOT SET ❌')
+    console.log('🔍 ShumaDB: VERCEL:', process.env.VERCEL)
+    console.log('🔍 ShumaDB: NODE_ENV:', process.env.NODE_ENV)
+    
+    if (process.env.DATABASE_URL) {
+      console.log('✅ Using DATABASE_URL for connection')
+      pool = new Pool({
+        connectionString: process.env.DATABASE_URL,
+        ssl: { rejectUnauthorized: false }
+      })
+    } else {
+      console.log('⚠️ DATABASE_URL not set, using fallback config')
+      pool = new Pool({
         host: process.env.DB_HOST || 'localhost',
         port: parseInt(process.env.DB_PORT || '5432'),
         database: process.env.DB_NAME || 'shamay_land_registry',
         user: process.env.DB_USER || 'postgres',
         password: process.env.DB_PASSWORD || 'postgres123',
-      }
-)
-
-console.log('🔍 ShumaDB: Pool configured with:', process.env.DATABASE_URL ? 'DATABASE_URL' : 'fallback config')
+      })
+    }
+  }
+  return pool
+}
 
 const db = {
-  query: (text, params) => pool.query(text, params),
-  client: () => pool.connect(),
-  end: () => pool.end()
+  query: (text, params) => getPool().query(text, params),
+  client: () => getPool().connect(),
+  end: () => getPool().end()
 }
 
 // Helper function to format dates for PostgreSQL
