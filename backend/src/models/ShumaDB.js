@@ -3,22 +3,134 @@
  * Saves data to BOTH:
  * 1. shuma table (for the valuation snapshot)
  * 2. Individual extraction tables (normalized with references)
+ * 
+ * Uses Neon serverless driver for Vercel deployment
  */
 
-const { Pool } = require('pg')
+// Import based on environment
+let Pool, neonConfig
+try {
+  // Try to import Neon serverless (for production/Vercel)
+  const neonModule = require('@neondatabase/serverless')
+  neonConfig = neonModule.neonConfig
+  Pool = neonModule.Pool
+  console.log('✅ Backend: Using @neondatabase/serverless')
+} catch (e) {
+  // Fallback to pg for local development
+  const pg = require('pg')
+  Pool = pg.Pool
+  console.log('✅ Backend: Using pg (local development)')
+}
 
-const pool = new Pool({
-  host: 'localhost',
-  port: 5432,
-  database: 'shamay_land_registry',
-  user: 'postgres',
-  password: 'postgres123',
-})
+// Lazy pool initialization - only create when first used
+let pool = null
+
+function getDatabaseConfig() {
+  const DATABASE_URL = process.env.DATABASE_URL
+  const POSTGRES_URL = process.env.POSTGRES_URL
+  const POSTGRES_URL_NON_POOLING = process.env.POSTGRES_URL_NON_POOLING
+  
+  console.log('🔍 Backend DB Config: Checking environment variables...')
+  console.log('🔍 DATABASE_URL:', DATABASE_URL ? 'SET ✅' : 'NOT SET ❌')
+  console.log('🔍 POSTGRES_URL:', POSTGRES_URL ? 'SET ✅' : 'NOT SET ❌')
+  console.log('🔍 POSTGRES_URL_NON_POOLING:', POSTGRES_URL_NON_POOLING ? 'SET ✅' : 'NOT SET ❌')
+  console.log('🔍 VERCEL:', process.env.VERCEL ? 'YES' : 'NO')
+  console.log('🔍 NODE_ENV:', process.env.NODE_ENV)
+  
+  // Prefer DATABASE_URL, then POSTGRES_URL, then POSTGRES_URL_NON_POOLING, then fallback to local
+  const connectionString = DATABASE_URL || POSTGRES_URL || POSTGRES_URL_NON_POOLING
+  
+  if (connectionString) {
+    console.log('✅ Using connection string from env:', connectionString.substring(0, 20) + '...')
+    return {
+      connectionString,
+      ssl: { rejectUnauthorized: false }
+    }
+  }
+  
+  console.log('⚠️ No connection string found, using fallback local config')
+  return {
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '5432'),
+    database: process.env.DB_NAME || 'shamay_land_registry',
+    user: process.env.DB_USER || 'postgres',
+    password: process.env.DB_PASSWORD || 'postgres123',
+  }
+}
+
+function getPool() {
+  if (!pool) {
+    console.log('🔍 Backend ShumaDB: Initializing connection pool...')
+    
+    if (!Pool) {
+      console.error('❌ Pool constructor is not available!')
+      throw new Error('Database Pool is not initialized. Make sure pg or @neondatabase/serverless is installed.')
+    }
+    
+    const config = getDatabaseConfig()
+    console.log('🔍 Backend ShumaDB: Creating pool with config:', {
+      hasConnectionString: !!config.connectionString,
+      host: config.host,
+      database: config.database
+    })
+    
+    // Use Neon serverless in production
+    if (process.env.VERCEL && neonConfig) {
+      console.log('🚀 Configuring Neon for WebSocket (Vercel)')
+      neonConfig.fetchConnectionCache = true
+    }
+    
+    try {
+      pool = new Pool(config)
+      console.log('✅ Backend Pool created successfully')
+      
+      // Test the connection
+      pool.on('error', (err) => {
+        console.error('❌ Unexpected pool error:', err)
+      })
+      
+    } catch (error) {
+      console.error('❌ Failed to create pool:', error)
+      throw error
+    }
+  }
+  return pool
+}
 
 const db = {
-  query: (text, params) => pool.query(text, params),
-  client: () => pool.connect(),
-  end: () => pool.end()
+  query: async (text, params) => {
+    console.log('🔍 Backend db.query called with:', text.substring(0, 50) + '...')
+    
+    // ALWAYS use Pool for parameterized queries (Neon sql client doesn't support $1, $2 syntax well)
+    // The Neon sql client is best for tagged templates, which we're not using
+    const poolInstance = getPool()
+    if (!poolInstance) {
+      throw new Error('Database pool is not initialized')
+    }
+    return poolInstance.query(text, params)
+  },
+  client: async () => {
+    console.log('🔍 Backend db.client called')
+    const poolInstance = getPool()
+    if (!poolInstance) {
+      throw new Error('Database pool is not initialized')
+    }
+    console.log('🔍 Backend: Connecting to pool...')
+    try {
+      const client = await poolInstance.connect()
+      console.log('✅ Backend: Pool client connected')
+      return client
+    } catch (error) {
+      console.error('❌ Backend: Failed to get pool client:', error)
+      throw error
+    }
+  },
+  end: () => {
+    const poolInstance = getPool()
+    if (poolInstance) {
+      return poolInstance.end()
+    }
+  }
 }
 
 // Helper function to format dates for PostgreSQL
