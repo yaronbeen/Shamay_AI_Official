@@ -6,16 +6,48 @@
  */
 
 const { Pool } = require('pg')
-const { getDatabaseConfig } = require('./db-config.ts')
 
 // Lazy pool initialization - only create when first used
 let pool = null
+
+function getDatabaseConfig() {
+  const DATABASE_URL = process.env.DATABASE_URL
+  const POSTGRES_URL = process.env.POSTGRES_URL
+  const POSTGRES_URL_NON_POOLING = process.env.POSTGRES_URL_NON_POOLING
+  
+  console.log('🔍 DB Config: Checking environment variables...')
+  console.log('🔍 DATABASE_URL:', DATABASE_URL ? 'SET ✅' : 'NOT SET ❌')
+  console.log('🔍 POSTGRES_URL:', POSTGRES_URL ? 'SET ✅' : 'NOT SET ❌')
+  console.log('🔍 POSTGRES_URL_NON_POOLING:', POSTGRES_URL_NON_POOLING ? 'SET ✅' : 'NOT SET ❌')
+  console.log('🔍 VERCEL:', process.env.VERCEL ? 'YES' : 'NO')
+  console.log('🔍 NODE_ENV:', process.env.NODE_ENV)
+  
+  // Prefer DATABASE_URL, then POSTGRES_URL, then POSTGRES_URL_NON_POOLING, then fallback to local
+  const connectionString = DATABASE_URL || POSTGRES_URL || POSTGRES_URL_NON_POOLING
+  
+  if (connectionString) {
+    console.log('✅ Using connection string from env:', connectionString.substring(0, 20) + '...')
+    return {
+      connectionString,
+      ssl: { rejectUnauthorized: false }
+    }
+  }
+  
+  console.log('⚠️ No connection string found, using fallback local config')
+  return {
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '5432'),
+    database: process.env.DB_NAME || 'shamay_land_registry',
+    user: process.env.DB_USER || 'postgres',
+    password: process.env.DB_PASSWORD || 'postgres123',
+  }
+}
 
 function getPool() {
   if (!pool) {
     console.log('🔍 ShumaDB: Initializing connection pool...')
     const config = getDatabaseConfig()
-    console.log('🔍 ShumaDB: Got config from db-config.ts')
+    console.log('🔍 ShumaDB: Creating pool with config')
     pool = new Pool(config)
   }
   return pool
