@@ -8,11 +8,10 @@
  */
 
 // Import based on environment
-let Pool, neon, neonConfig
+let Pool, neonConfig
 try {
   // Try to import Neon serverless (for production/Vercel)
   const neonModule = require('@neondatabase/serverless')
-  neon = neonModule.neon
   neonConfig = neonModule.neonConfig
   Pool = neonModule.Pool
   console.log('✅ Using @neondatabase/serverless')
@@ -25,7 +24,6 @@ try {
 
 // Lazy pool initialization - only create when first used
 let pool = null
-let sqlClient = null // For Neon serverless queries
 
 function getDatabaseConfig() {
   const DATABASE_URL = process.env.DATABASE_URL
@@ -97,18 +95,6 @@ function getPool() {
     }
   }
   return pool
-}
-
-// Get Neon SQL client (for simple queries)
-function getSqlClient() {
-  if (!sqlClient && neon) {
-    const config = getDatabaseConfig()
-    if (config.connectionString) {
-      console.log('🔍 Creating Neon SQL client')
-      sqlClient = neon(config.connectionString)
-    }
-  }
-  return sqlClient
 }
 
 const db = {
