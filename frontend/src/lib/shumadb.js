@@ -63,8 +63,18 @@ function getDatabaseConfig() {
 function getPool() {
   if (!pool) {
     console.log('🔍 ShumaDB: Initializing connection pool...')
+    
+    if (!Pool) {
+      console.error('❌ Pool constructor is not available!')
+      throw new Error('Database Pool is not initialized. Make sure pg or @neondatabase/serverless is installed.')
+    }
+    
     const config = getDatabaseConfig()
-    console.log('🔍 ShumaDB: Creating pool with config')
+    console.log('🔍 ShumaDB: Creating pool with config:', {
+      hasConnectionString: !!config.connectionString,
+      host: config.host,
+      database: config.database
+    })
     
     // Use Neon serverless in production
     if (process.env.VERCEL && neonConfig) {
@@ -72,7 +82,19 @@ function getPool() {
       neonConfig.fetchConnectionCache = true
     }
     
-    pool = new Pool(config)
+    try {
+      pool = new Pool(config)
+      console.log('✅ Pool created successfully')
+      
+      // Test the connection
+      pool.on('error', (err) => {
+        console.error('❌ Unexpected pool error:', err)
+      })
+      
+    } catch (error) {
+      console.error('❌ Failed to create pool:', error)
+      throw error
+    }
   }
   return pool
 }
@@ -91,21 +113,47 @@ function getSqlClient() {
 
 const db = {
   query: async (text, params) => {
+    console.log('🔍 db.query called with:', text.substring(0, 50) + '...')
     // Try to use Neon serverless client for simple queries
     const sql = getSqlClient()
     if (sql && !text.toLowerCase().includes('begin') && !text.toLowerCase().includes('commit')) {
       try {
         const result = await sql(text, params || [])
+        console.log('✅ Neon query succeeded, rows:', result.length)
         return { rows: result, rowCount: result.length }
       } catch (e) {
-        console.warn('Neon query failed, falling back to pool:', e.message)
+        console.warn('⚠️ Neon query failed, falling back to pool:', e.message)
       }
     }
     // Fallback to pool for transactions and complex queries
-    return getPool().query(text, params)
+    const poolInstance = getPool()
+    if (!poolInstance) {
+      throw new Error('Database pool is not initialized')
+    }
+    return poolInstance.query(text, params)
   },
-  client: () => getPool().connect(),
-  end: () => getPool().end()
+  client: async () => {
+    console.log('🔍 db.client called')
+    const poolInstance = getPool()
+    if (!poolInstance) {
+      throw new Error('Database pool is not initialized')
+    }
+    console.log('🔍 Connecting to pool...')
+    try {
+      const client = await poolInstance.connect()
+      console.log('✅ Pool client connected')
+      return client
+    } catch (error) {
+      console.error('❌ Failed to get pool client:', error)
+      throw error
+    }
+  },
+  end: () => {
+    const poolInstance = getPool()
+    if (poolInstance) {
+      return poolInstance.end()
+    }
+  }
 }
 
 // Helper function to format dates for PostgreSQL
