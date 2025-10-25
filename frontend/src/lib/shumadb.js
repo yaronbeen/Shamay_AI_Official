@@ -8,6 +8,10 @@
 const { Pool } = require('pg')
 
 // Use DATABASE_URL from environment (Vercel Postgres) or fall back to local config
+console.log('🔍 ShumaDB: Checking DATABASE_URL:', process.env.DATABASE_URL ? 'SET ✅' : 'NOT SET ❌')
+console.log('🔍 ShumaDB: VERCEL env:', process.env.VERCEL)
+console.log('🔍 ShumaDB: NODE_ENV:', process.env.NODE_ENV)
+
 const pool = new Pool(
   process.env.DATABASE_URL 
     ? { 
@@ -22,6 +26,8 @@ const pool = new Pool(
         password: process.env.DB_PASSWORD || 'postgres123',
       }
 )
+
+console.log('🔍 ShumaDB: Pool configured with:', process.env.DATABASE_URL ? 'DATABASE_URL' : 'fallback config')
 
 const db = {
   query: (text, params) => pool.query(text, params),
