@@ -89,15 +89,76 @@ export async function POST(
         message: 'Cropped image saved successfully'
       })
     } else {
-      // Server-side screenshot NOT supported on Vercel serverless
-      // Puppeteer requires Chrome binary which is not available
-      console.error('❌ Server-side screenshot not supported in serverless environment')
-      return NextResponse.json({
-        success: false,
-        error: 'Server-side screenshot not available',
-        message: 'Please use the crop tool to capture the map area manually. Server-side screenshots are not supported in the cloud environment.',
-        hint: 'Click the crop button to select and capture the desired map area'
-      }, { status: 501 })
+      // Server-side screenshot - try Puppeteer (works locally, not on Vercel)
+      console.log(`📸 Attempting server-side screenshot with Puppeteer...`)
+      
+      try {
+        // Try to import puppeteer (may fail on Vercel)
+        const puppeteer = await import('puppeteer')
+        const canvas = await import('canvas')
+        
+        // Launch Puppeteer
+        const browser = await puppeteer.default.launch({
+          headless: true,
+          args: ['--no-sandbox', '--disable-setuid-sandbox']
+        })
+        
+        try {
+          const page = await browser.newPage()
+          
+          // Set viewport
+          await page.setViewport({ width: 1200, height: 800 })
+          
+          // Navigate to GovMap URL
+          await page.goto(govmapUrl, { 
+            waitUntil: 'networkidle0',
+            timeout: 30000 
+          })
+          
+          // Wait for map to load
+          await new Promise(resolve => setTimeout(resolve, 3000))
+          
+          // Take screenshot
+          const screenshotBuffer = await page.screenshot({
+            type: 'png',
+            fullPage: false
+          })
+          
+          // Upload to storage
+          const uploadResult = await FileStorageService.uploadFile(
+            screenshotBuffer,
+            sessionId,
+            filename,
+            'image/png'
+          )
+          
+          filePath = uploadResult.path
+          fileUrl = uploadResult.url
+          
+          console.log(`✅ Puppeteer screenshot successful:`, uploadResult)
+          
+          return NextResponse.json({
+            success: true,
+            screenshotUrl: fileUrl,
+            cropMode,
+            filePath
+          })
+          
+        } finally {
+          await browser.close()
+        }
+        
+      } catch (puppeteerError) {
+        // Puppeteer not available or failed (e.g., on Vercel)
+        console.warn('⚠️ Puppeteer failed, falling back to manual upload:', puppeteerError)
+        
+        return NextResponse.json({
+          success: false,
+          error: 'Server-side screenshot not available',
+          message: 'צילום אוטומטי לא זמין. נא להשתמש בהעלאה ידנית של צילום מסך.',
+          hint: 'השתמש בכפתורים הכחולים להעלאת צילום מסך'
+        }, { status: 501 })
+      }
     }
 
   } catch (error) {
