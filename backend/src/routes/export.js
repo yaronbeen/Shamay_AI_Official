@@ -149,9 +149,9 @@ router.post('/pdf', async (req, res) => {
       displayHeaderFooter: false,
       margin: {
         top: '15mm',
-        right: '15mm',
+        right: '30mm',
         bottom: '15mm',
-        left: '15mm'
+        left: '45mm'
       }
     });
 
