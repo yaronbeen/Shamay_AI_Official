@@ -39,34 +39,15 @@ export function Step5Export({ data }: Step5ExportProps) {
       const contentType = response.headers.get('content-type')
       console.log('📄 Response content type:', contentType)
 
-      if (contentType?.includes('text/html')) {
-        // HTML response - open in new window for printing/saving as PDF
-        const html = await response.text()
-        console.log('✅ HTML document received, opening print dialog...')
-        
-        // Open HTML in new window
-        const printWindow = window.open('', '_blank')
-        if (printWindow) {
-          printWindow.document.write(html)
-          printWindow.document.close()
-          
-          // Trigger print dialog after a short delay (let content load)
-          setTimeout(() => {
-            printWindow.print()
-          }, 500)
-        }
-        
-        setExportStatus('success')
-
-      } else if (contentType === 'application/pdf') {
-        // Handle PDF response (if backend implements it later)
+      if (contentType?.includes('application/pdf')) {
+        // PDF response - download directly
         const pdfBlob = await response.blob()
         console.log('✅ PDF blob created:', pdfBlob.size, 'bytes')
         
         setPdfBlob(pdfBlob)
         setExportStatus('success')
 
-        // Create download link and trigger download
+        // Create download link and trigger automatic download
         const url = URL.createObjectURL(pdfBlob)
         const link = document.createElement('a')
         link.href = url
@@ -74,7 +55,24 @@ export function Step5Export({ data }: Step5ExportProps) {
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
-        URL.revokeObjectURL(url)
+        
+        // Keep the URL for re-download button
+        // Don't revoke immediately so user can re-download
+        setTimeout(() => URL.revokeObjectURL(url), 60000) // Clean up after 1 minute
+        
+      } else if (contentType?.includes('text/html')) {
+        // Fallback: HTML response (shouldn't happen with new backend)
+        const html = await response.text()
+        console.warn('⚠️ Received HTML instead of PDF, opening print dialog...')
+        
+        const printWindow = window.open('', '_blank')
+        if (printWindow) {
+          printWindow.document.write(html)
+          printWindow.document.close()
+          setTimeout(() => printWindow.print(), 500)
+        }
+        
+        setExportStatus('success')
 
       } else {
         // Handle JSON response (error)

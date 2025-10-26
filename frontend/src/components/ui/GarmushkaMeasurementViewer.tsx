@@ -65,10 +65,10 @@ const loadPdfJs = async () => {
       const pdfjsModule = await import('pdfjs-dist')
       pdfjs = pdfjsModule.default || pdfjsModule
       
-      // Use CDN for worker - use legacy build path for better compatibility
+      // Use CDN for worker - match the installed version
       if (pdfjs && pdfjs.GlobalWorkerOptions) {
-        // Force using a known working version (v3) instead of v5 which has CDN issues
-        pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
+        // Use v4.10.38 - matches package.json version and available on CDN
+        pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs'
       }
     } catch (error) {
       console.error('Failed to load PDF.js:', error)

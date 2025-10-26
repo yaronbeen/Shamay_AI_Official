@@ -29,16 +29,41 @@ export async function POST(
     // Cast to ValuationData type (signature field may be missing from DB but template handles it)
     const htmlContent = generateDocumentHTML(valuationData as any, false)
 
-    // For PDF generation, we need to use a library like jsPDF or html2pdf
-    // OR return the HTML and let the frontend handle it with window.print()
-    // Since this is complex, return the HTML for now and let Step5 handle it
-
-    console.log(`⚠️ Returning HTML - PDF conversion should be done client-side`)
+    // Send to backend for PDF generation using Puppeteer
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
+    console.log(`📤 Sending HTML to backend for PDF generation...`)
     
-    return new NextResponse(htmlContent, {
+    const response = await fetch(`${backendUrl}/api/export/pdf`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        sessionId,
+        htmlContent
+      })
+    })
+
+    if (!response.ok) {
+      const error = await response.text()
+      console.error('❌ Backend PDF generation failed:', error)
+      return NextResponse.json({ 
+        error: 'PDF generation failed',
+        details: error 
+      }, { status: 500 })
+    }
+
+    // Get the PDF buffer from backend
+    const pdfBuffer = await response.arrayBuffer()
+    console.log(`✅ PDF received from backend: ${pdfBuffer.byteLength} bytes`)
+
+    // Return the PDF with proper headers for download
+    return new NextResponse(pdfBuffer, {
       status: 200,
       headers: {
-        'Content-Type': 'text/html; charset=utf-8',
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="shamay-valuation-${sessionId}.pdf"`,
+        'Content-Length': pdfBuffer.byteLength.toString()
       }
     })
 

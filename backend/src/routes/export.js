@@ -4,36 +4,105 @@ const { ShumaDB } = require('../models/ShumaDB');
 
 /**
  * POST /api/export/pdf
- * Generate PDF using Puppeteer to render the HTML template
- * This is delegated back to frontend which has the template
+ * Generate PDF from HTML template using Puppeteer
  */
 router.post('/pdf', async (req, res) => {
+  let browser = null;
+  
   try {
-    const { sessionId, valuationData } = req.body;
+    const { sessionId, htmlContent } = req.body;
 
-    if (!sessionId) {
+    if (!sessionId || !htmlContent) {
       return res.status(400).json({
         success: false,
-        error: 'Missing sessionId'
+        error: 'Missing sessionId or htmlContent'
       });
     }
 
-    console.log(`📄 PDF export requested for session: ${sessionId}`);
-    console.log(`⚠️ Backend PDF generation not implemented - use frontend template`);
+    console.log(`📄 Generating PDF for session: ${sessionId}`);
 
-    // Return error - PDF should be generated in frontend using the document template
-    return res.status(501).json({
-      success: false,
-      error: 'PDF generation should use frontend template',
-      message: 'Please use the frontend /wizard route for PDF export with proper HTML template'
+    // Use Puppeteer to convert HTML to PDF
+    const puppeteer = require('puppeteer');
+    
+    browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
 
+    const page = await browser.newPage();
+    
+    // Set the HTML content with full-width styling
+    const fullHtml = `
+      <!DOCTYPE html>
+      <html dir="rtl" lang="he">
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          @page {
+            size: A4;
+            margin: 20mm;
+          }
+          body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            max-width: none !important;
+            float: none !important;
+          }
+          .document-container {
+            width: 100% !important;
+            max-width: none !important;
+            float: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+        </style>
+      </head>
+      <body>
+        ${htmlContent}
+      </body>
+      </html>
+    `;
+    
+    await page.setContent(fullHtml, { waitUntil: 'networkidle0' });
+    
+    // Generate PDF
+    const pdfBuffer = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: {
+        top: '20mm',
+        right: '20mm',
+        bottom: '20mm',
+        left: '20mm'
+      }
+    });
+
+    await browser.close();
+    browser = null;
+
+    console.log(`✅ PDF generated successfully - ${pdfBuffer.length} bytes`);
+
+    // Send PDF as response
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="shamay-valuation-${sessionId}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
+
   } catch (error) {
-    console.error('❌ Error in PDF export route:', error);
+    console.error('❌ Error generating PDF:', error);
+    
+    if (browser) {
+      try {
+        await browser.close();
+      } catch (e) {
+        console.error('Error closing browser:', e);
+      }
+    }
     
     return res.status(500).json({
       success: false,
-      error: 'Failed to process PDF export request',
+      error: 'Failed to generate PDF',
       details: error.message
     });
   }

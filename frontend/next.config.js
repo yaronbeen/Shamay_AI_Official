@@ -41,6 +41,22 @@ const nextConfig = {
       }
     });
 
+    // Exclude canvas binaries (native module from pdfjs-dist v3)
+    config.module.rules.push({
+      test: /\.node$/,
+      use: 'node-loader',
+    });
+
+    // Mark canvas as external for both client and server
+    config.externals = config.externals || {};
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        canvas: false,
+        fs: false,
+      };
+    }
+
     return config;
   },
 };
