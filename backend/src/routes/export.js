@@ -95,10 +95,13 @@ router.post('/pdf', async (req, res) => {
             line-height: 1.6;
             direction: rtl;
             text-align: right;
-            padding: 10px;
+            padding: 5px;
+            margin: 0;
           }
           .document-container {
             width: 100%;
+            margin: 0 auto;
+            padding: 0;
           }
           h1, h2, h3, h4 {
             margin-bottom: 10px;
@@ -145,10 +148,10 @@ router.post('/pdf', async (req, res) => {
       printBackground: true,
       displayHeaderFooter: false,
       margin: {
-        top: '10mm',
-        right: '10mm',
-        bottom: '10mm',
-        left: '10mm'
+        top: '15mm',
+        right: '15mm',
+        bottom: '15mm',
+        left: '15mm'
       }
     });
 
