@@ -160,13 +160,6 @@ router.post('/pdf', async (req, res) => {
     if (!pdfBuffer || pdfBuffer.length === 0) {
       throw new Error('PDF generation resulted in empty buffer');
     }
-    
-    // Check if it's a valid PDF (should start with %PDF)
-    const pdfHeader = pdfBuffer.slice(0, 5).toString();
-    if (!pdfHeader.startsWith('%PDF')) {
-      console.error('❌ Invalid PDF header:', pdfHeader);
-      throw new Error('Generated content is not a valid PDF');
-    }
 
     // Send PDF as response with proper headers
     res.setHeader('Content-Type', 'application/pdf');
