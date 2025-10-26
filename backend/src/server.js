@@ -72,6 +72,7 @@ app.use('/api/sessions', require('./routes/sessions'));
 app.use('/api/files', require('./routes/files'));
 app.use('/api/ai', require('./routes/ai'));
 app.use('/api/gis', require('./routes/gis'));
+app.use('/api/gis-screenshot', require('./routes/gis-screenshot'));
 app.use('/api/garmushka', require('./routes/garmushka'));
 
 // Static file serving for uploads

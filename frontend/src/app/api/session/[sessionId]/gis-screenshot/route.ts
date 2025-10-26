@@ -89,75 +89,73 @@ export async function POST(
         message: 'Cropped image saved successfully'
       })
     } else {
-      // Server-side screenshot - try Puppeteer (works locally, not on Vercel)
-      console.log(`📸 Attempting server-side screenshot with Puppeteer...`)
+      // Server-side screenshot - delegate to Express backend
+      console.log(`📸 Requesting screenshot from backend...`)
       
       try {
-        // Try to import puppeteer (may fail on Vercel)
-        const puppeteer = await import('puppeteer')
-        const canvas = await import('canvas')
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
         
-        // Launch Puppeteer
-        const browser = await puppeteer.default.launch({
-          headless: true,
-          args: ['--no-sandbox', '--disable-setuid-sandbox']
+        // Call backend screenshot API
+        const response = await fetch(`${backendUrl}/api/gis-screenshot`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            govmapUrl,
+            cropMode
+          })
         })
         
-        try {
-          const page = await browser.newPage()
-          
-          // Set viewport
-          await page.setViewport({ width: 1200, height: 800 })
-          
-          // Navigate to GovMap URL
-          await page.goto(govmapUrl, { 
-            waitUntil: 'networkidle0',
-            timeout: 30000 
-          })
-          
-          // Wait for map to load
-          await new Promise(resolve => setTimeout(resolve, 3000))
-          
-          // Take screenshot
-          const screenshotBuffer = await page.screenshot({
-            type: 'png',
-            fullPage: false
-          })
-          
-          // Upload to storage
-          const uploadResult = await FileStorageService.uploadFile(
-            screenshotBuffer,
-            sessionId,
-            filename,
-            'image/png'
-          )
-          
-          filePath = uploadResult.path
-          fileUrl = uploadResult.url
-          
-          console.log(`✅ Puppeteer screenshot successful:`, uploadResult)
+        const result = await response.json()
+        
+        if (!response.ok || !result.success) {
+          console.error('❌ Backend screenshot failed:', result)
           
           return NextResponse.json({
-            success: true,
-            screenshotUrl: fileUrl,
-            cropMode,
-            filePath
-          })
-          
-        } finally {
-          await browser.close()
+            success: false,
+            error: result.error || 'Screenshot failed',
+            message: result.message || 'צילום אוטומטי נכשל. נא להשתמש בהעלאה ידנית של צילום מסך.',
+            hint: result.hint || 'השתמש בכפתורים הכחולים להעלאת צילום מסך'
+          }, { status: response.status })
         }
         
-      } catch (puppeteerError) {
-        // Puppeteer not available or failed (e.g., on Vercel)
-        console.warn('⚠️ Puppeteer failed, falling back to manual upload:', puppeteerError)
+        // Convert base64 screenshot to buffer
+        const screenshotBuffer = Buffer.from(result.screenshot, 'base64')
+        
+        console.log(`✅ Screenshot received from backend - ${screenshotBuffer.length} bytes`)
+        
+        // Upload to storage
+        console.log(`☁️ Uploading to storage...`)
+        const uploadResult = await FileStorageService.uploadFile(
+          screenshotBuffer,
+          sessionId,
+          filename,
+          'image/png'
+        )
+        
+        filePath = uploadResult.path
+        fileUrl = uploadResult.url
+        
+        console.log(`✅ Screenshot uploaded successfully:`, uploadResult)
+        
+        return NextResponse.json({
+          success: true,
+          screenshotUrl: fileUrl,
+          cropMode,
+          filePath
+        })
+        
+      } catch (backendError) {
+        console.error('❌ Error calling backend screenshot:', backendError)
         
         return NextResponse.json({
           success: false,
-          error: 'Server-side screenshot not available',
-          message: 'צילום אוטומטי לא זמין. נא להשתמש בהעלאה ידנית של צילום מסך.',
-          hint: 'השתמש בכפתורים הכחולים להעלאת צילום מסך'
-        }, { status: 501 })
+          error: 'Failed to capture screenshot',
+          message: 'צילום אוטומטי נכשל. נא להשתמש בהעלאה ידנית של צילום מסך.',
+          hint: 'השתמש בכפתורים הכחולים להעלאת צילום מסך',
+          details: backendError instanceof Error ? backendError.message : 'Unknown error'
+        }, { status: 500 })
       }
     }
 
