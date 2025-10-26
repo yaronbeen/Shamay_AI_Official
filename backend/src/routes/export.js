@@ -49,28 +49,29 @@ router.post('/pdf', async (req, res) => {
 
     const page = await browser.newPage();
     
-    // Process HTML content - handle large images
+    // Use original HTML without removing images - just log for debugging
     let optimizedHtml = htmlContent;
     
     // Count and log base64 images for debugging
     const base64Matches = optimizedHtml.match(/data:image\/(png|jpeg|jpg);base64,/g);
     if (base64Matches) {
       console.log(`📸 Found ${base64Matches.length} base64 images in HTML`);
+      
+      // Log sizes of base64 images
+      const imageSizes = [];
+      optimizedHtml.replace(
+        /data:image\/(png|jpeg|jpg);base64,([A-Za-z0-9+/]+=*)/g,
+        (match, type, base64Data) => {
+          const sizeKB = Math.round(base64Data.length / 1024);
+          imageSizes.push(`${type}: ${sizeKB}KB`);
+          return match;
+        }
+      );
+      console.log(`📊 Image sizes: ${imageSizes.join(', ')}`);
     }
     
-    // Replace very large base64 images with placeholders to reduce size
-    optimizedHtml = optimizedHtml.replace(
-      /data:image\/(png|jpeg|jpg);base64,([A-Za-z0-9+/]+=*)/g,
-      (match, type, base64Data) => {
-        // If base64 string is too large (>100KB encoded)
-        if (base64Data.length > 100000) {
-          console.log(`🔄 Replacing large ${type} image (${Math.round(base64Data.length/1024)}KB) with placeholder`);
-          // Return a small placeholder image
-          return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
-        }
-        return match;
-      }
-    );
+    // Don't replace images - keep them all for proper PDF size
+    // The PDF compression should handle size optimization
     
     // Set the HTML content with full-width styling and image optimization
     const fullHtml = `
