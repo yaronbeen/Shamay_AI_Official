@@ -88,7 +88,6 @@ router.post('/pdf', async (req, res) => {
           }
           @page {
             size: A4;
-            margin: 20mm;
           }
           body {
             font-family: Arial, sans-serif;
@@ -96,6 +95,7 @@ router.post('/pdf', async (req, res) => {
             line-height: 1.6;
             direction: rtl;
             text-align: right;
+            padding: 10px;
           }
           .document-container {
             width: 100%;
@@ -145,10 +145,10 @@ router.post('/pdf', async (req, res) => {
       printBackground: true,
       displayHeaderFooter: false,
       margin: {
-        top: '20mm',
-        right: '20mm',
-        bottom: '20mm',
-        left: '20mm'
+        top: '10mm',
+        right: '10mm',
+        bottom: '10mm',
+        left: '10mm'
       }
     });
 
