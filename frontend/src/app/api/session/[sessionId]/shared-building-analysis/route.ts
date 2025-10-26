@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ShumaDB } from '../../../../../lib/shumadb.js'
-import { spawn } from 'child_process'
-import { join } from 'path'
-import fs from 'fs'
 
 export async function POST(
   request: NextRequest,
@@ -31,157 +28,51 @@ export async function POST(
     const sharedBuildingUploads = uploads.filter((upload: any) => upload.type === 'condo' || upload.type === 'condominium_order')
     
     if (sharedBuildingUploads.length === 0) {
-      console.log('❌ No shared building documents found, using mock data')
+      console.log('❌ No shared building documents found')
+      console.log('Available upload types:', uploads.map((u: any) => u.type))
       return NextResponse.json({
-        success: true,
-        order_issue_date: '2020-01-15',
-        building_description: 'בניין מגורים בן 4 קומות',
-        building_floors: '4',
-        building_sub_plots_count: '8',
-        building_address: 'רחוב הרצל 15, תל אביב',
-        total_sub_plots: '8',
-        confidence: 0.90,
-        extracted_at: new Date().toISOString()
-      })
+        success: false,
+        error: 'No shared building documents found in session'
+      }, { status: 400 })
     }
     
     // Use the first shared building document
     const upload = sharedBuildingUploads[0]
-    const pdfPath = upload.path || upload.extractedData?.filePath
+    const fileUrl = upload.url || upload.path
     
-    if (!pdfPath || !fs.existsSync(pdfPath)) {
-      console.log('❌ Shared building PDF not found at path:', pdfPath)
-      return NextResponse.json({
+    if (!fileUrl) {
+      console.log('❌ No file URL found in upload data')
+      return NextResponse.json({ 
         success: false,
-        error: 'Shared building PDF file not found',
-        order_issue_date: 'לא נמצא',
-        building_description: 'לא נמצא',
-        building_floors: 'לא נמצא',
-        building_sub_plots_count: 'לא נמצא',
-        building_address: 'לא נמצא',
-        total_sub_plots: 'לא נמצא'
-      }, { status: 404 })
+        error: 'No file URL found for shared building document' 
+      }, { status: 400 })
     }
     
-    console.log('🔍 Using uploaded PDF:', pdfPath)
+    console.log('📄 Processing file URL:', fileUrl)
     
-    // Call the real backend service
-    const projectRoot = join(process.cwd(), '..')
+    // Call backend AI API
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3002'
+    console.log('🔄 Calling backend AI API:', `${backendUrl}/api/ai/shared-building`)
     
-    const result = await new Promise((resolve, reject) => {
-      // Create a temporary script to process the PDF
-      const tempScript = `
-import { processSharedBuildingDocument } from './backend/shared-building-order/index.js';
-import dotenv from 'dotenv';
-
-dotenv.config();
-
-async function processDocument() {
-  try {
-    const result = await processSharedBuildingDocument('${pdfPath}', 'output', {
-      useAI: true,
-      saveToDatabase: false
-    });
-    
-    // Extract fields from the backend response structure
-    const fields = result.fields || {};
-    
-    console.log(JSON.stringify({
-      success: true,
-      building_description: fields.building_description?.value || 'לא נמצא',
-      common_areas: fields.common_areas?.value || 'לא נמצא',
-      confidence: fields.overallConfidence || 0.0,
-      extracted_at: new Date().toISOString()
-    }));
-  } catch (error) {
-    console.log(JSON.stringify({
-      success: false,
-      error: error.message,
-      building_description: 'לא נמצא',
-      common_areas: 'לא נמצא'
-    }));
-  }
-}
-
-processDocument();
-      `
-      
-      // Write temporary script
-      const tempScriptPath = join(projectRoot, 'temp-shared-building.js')
-      fs.writeFileSync(tempScriptPath, tempScript)
-      
-      const child = spawn('node', [tempScriptPath], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        cwd: projectRoot,
-        env: {
-          ...process.env,
-          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY
-        }
-      })
-
-      console.log('🔍 Spawning child process with:', {
-        command: 'node',
-        args: [tempScriptPath],
-        cwd: projectRoot,
-        env: { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ? 'SET' : 'NOT_SET' }
-      })
-
-      let output = ''
-      let errorOutput = ''
-
-      child.stdout.on('data', (data) => {
-        output += data.toString()
-      })
-
-      child.stderr.on('data', (data) => {
-        errorOutput += data.toString()
-      })
-
-      child.on('close', (code) => {
-        // Clean up temp file
-        try {
-          fs.unlinkSync(tempScriptPath)
-        } catch (e) {}
-        
-        console.log('🔍 Backend script exit code:', code)
-        console.log('🔍 Backend stdout length:', output.length)
-        console.log('🔍 Backend stdout:', output)
-        console.log('🔍 Backend stderr length:', errorOutput.length)
-        console.log('🔍 Backend stderr:', errorOutput)
-        
-        if (code === 0) {
-          try {
-            // Extract JSON from output
-            const lines = output.split('\n')
-            let jsonLine = ''
-            for (let i = lines.length - 1; i >= 0; i--) {
-              if (lines[i].trim().startsWith('{') && lines[i].trim().endsWith('}')) {
-                jsonLine = lines[i].trim()
-                break
-              }
-            }
-            
-            if (jsonLine) {
-              const result = JSON.parse(jsonLine)
-              resolve(result)
-            } else {
-              console.error('❌ No JSON found in output:', output)
-              reject(new Error('No JSON response from backend'))
-            }
-          } catch (parseError) {
-            console.error('❌ Failed to parse backend output:', parseError)
-            console.error('❌ Raw output:', output)
-            reject(new Error('Failed to parse backend response'))
-          }
-        } else {
-          console.error('❌ Backend script failed with code:', code)
-          console.error('❌ Error output:', errorOutput)
-          reject(new Error('Backend script failed'))
-        }
+    const aiResponse = await fetch(`${backendUrl}/api/ai/shared-building`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        fileUrl,
+        sessionId: params.sessionId
       })
     })
-
-    console.log('✅ Shared building order analysis result:', result)
+    
+    if (!aiResponse.ok) {
+      const errorData = await aiResponse.json().catch(() => ({ error: 'Unknown error' }))
+      console.error('❌ Backend AI error:', errorData)
+      throw new Error(errorData.error || `Backend AI failed with status ${aiResponse.status}`)
+    }
+    
+    const result = await aiResponse.json()
+    console.log('✅ Received AI extraction result:', result)
     
     return NextResponse.json(result)
     
@@ -189,10 +80,8 @@ processDocument();
     console.error('❌ Frontend API error:', error)
     return NextResponse.json({ 
       success: false,
-      error: 'Failed to analyze shared building order documents',
-      details: error instanceof Error ? error.message : 'Unknown error',
-      building_description: 'לא נמצא',
-      common_areas: 'לא נמצא'
+      error: 'Failed to analyze shared building documents',
+      details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 })
   }
 }

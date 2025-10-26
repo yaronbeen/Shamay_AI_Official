@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ShumaDB } from '../../../../../lib/shumadb.js'
-import { spawn } from 'child_process'
-import { join } from 'path'
-import fs from 'fs'
 
 export async function POST(
   request: NextRequest,
@@ -31,143 +28,51 @@ export async function POST(
     const buildingPermitUploads = uploads.filter((upload: any) => upload.type === 'building_permit' || upload.type === 'permit')
     
     if (buildingPermitUploads.length === 0) {
-      console.log('❌ No building permit documents found, using mock data')
+      console.log('❌ No building permit documents found')
+      console.log('Available upload types:', uploads.map((u: any) => u.type))
       return NextResponse.json({
-        success: true,
-        building_year: '2015',
-        permitted_description: 'בניית דירת מגורים בקומה 3',
-        permitted_use: 'מגורים',
-        built_area: '85',
-        building_description: 'דירת 3 חדרים בקומה 3',
-        confidence: 0.90,
-        extracted_at: new Date().toISOString()
-      })
+        success: false,
+        error: 'No building permit documents found in session'
+      }, { status: 400 })
     }
     
     // Use the first building permit document
     const upload = buildingPermitUploads[0]
-    const pdfPath = upload.path || upload.extractedData?.filePath
+    const fileUrl = upload.url || upload.path
     
-    if (!pdfPath || !fs.existsSync(pdfPath)) {
-      console.log('❌ Building permit PDF not found at path:', pdfPath)
-      return NextResponse.json({
+    if (!fileUrl) {
+      console.log('❌ No file URL found in upload data')
+      return NextResponse.json({ 
         success: false,
-        error: 'Building permit PDF file not found',
-        building_year: 'לא נמצא',
-        permitted_description: 'לא נמצא',
-        permitted_use: 'לא נמצא',
-        built_area: 'לא נמצא',
-        building_description: 'לא נמצא'
-      }, { status: 404 })
+        error: 'No file URL found for building permit document' 
+      }, { status: 400 })
     }
     
-    console.log('🔍 Using uploaded PDF:', pdfPath)
+    console.log('📄 Processing file URL:', fileUrl)
     
-    // Call the real backend service
-    const projectRoot = join(process.cwd(), '..')
+    // Call backend AI API
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3002'
+    console.log('🔄 Calling backend AI API:', `${backendUrl}/api/ai/building-permit`)
     
-    const result = await new Promise((resolve, reject) => {
-      // Create a temporary script to process the PDF
-      const tempScript = `
-import { BuildingPermitAIExtractor } from './backend/building-permits/ai-field-extractor.js';
-import dotenv from 'dotenv';
-
-dotenv.config();
-
-async function processDocument() {
-  try {
-    const extractor = new BuildingPermitAIExtractor();
-    const result = await extractor.extractAllFields('${pdfPath}', { isPdf: true });
-    
-    console.log(JSON.stringify({
-      success: true,
-      built_area: result.built_area?.value || 'לא נמצא',
-      building_year: result.permit_date?.value || 'לא נמצא',
-      permitted_use: result.permitted_description?.value || 'לא נמצא',
-      confidence: result.overallConfidence || 0.0,
-      extracted_at: new Date().toISOString()
-    }));
-  } catch (error) {
-    console.log(JSON.stringify({
-      success: false,
-      error: error.message,
-      built_area: 'לא נמצא',
-      building_year: 'לא נמצא',
-      permitted_use: 'לא נמצא'
-    }));
-  }
-}
-
-processDocument();
-      `
-      
-      // Write temporary script
-      const tempScriptPath = join(projectRoot, 'temp-building-permit.js')
-      fs.writeFileSync(tempScriptPath, tempScript)
-      
-      const child = spawn('node', [tempScriptPath], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        cwd: projectRoot,
-        env: {
-          ...process.env,
-          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY
-        }
-      })
-
-      let output = ''
-      let errorOutput = ''
-
-      child.stdout.on('data', (data) => {
-        output += data.toString()
-      })
-
-      child.stderr.on('data', (data) => {
-        errorOutput += data.toString()
-      })
-
-      child.on('close', (code) => {
-        // Clean up temp file
-        try {
-          fs.unlinkSync(tempScriptPath)
-        } catch (e) {}
-        
-        console.log('🔍 Backend script exit code:', code)
-        console.log('🔍 Backend stdout:', output)
-        console.log('🔍 Backend stderr:', errorOutput)
-        
-        if (code === 0) {
-          try {
-            // Extract JSON from output
-            const lines = output.split('\n')
-            let jsonLine = ''
-            for (let i = lines.length - 1; i >= 0; i--) {
-              if (lines[i].trim().startsWith('{') && lines[i].trim().endsWith('}')) {
-                jsonLine = lines[i].trim()
-                break
-              }
-            }
-            
-            if (jsonLine) {
-              const result = JSON.parse(jsonLine)
-              resolve(result)
-            } else {
-              console.error('❌ No JSON found in output:', output)
-              reject(new Error('No JSON response from backend'))
-            }
-          } catch (parseError) {
-            console.error('❌ Failed to parse backend output:', parseError)
-            console.error('❌ Raw output:', output)
-            reject(new Error('Failed to parse backend response'))
-          }
-        } else {
-          console.error('❌ Backend script failed with code:', code)
-          console.error('❌ Error output:', errorOutput)
-          reject(new Error('Backend script failed'))
-        }
+    const aiResponse = await fetch(`${backendUrl}/api/ai/building-permit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        fileUrl,
+        sessionId: params.sessionId
       })
     })
-
-    console.log('✅ Building permit analysis result:', result)
+    
+    if (!aiResponse.ok) {
+      const errorData = await aiResponse.json().catch(() => ({ error: 'Unknown error' }))
+      console.error('❌ Backend AI error:', errorData)
+      throw new Error(errorData.error || `Backend AI failed with status ${aiResponse.status}`)
+    }
+    
+    const result = await aiResponse.json()
+    console.log('✅ Received AI extraction result:', result)
     
     return NextResponse.json(result)
     
@@ -176,10 +81,7 @@ processDocument();
     return NextResponse.json({ 
       success: false,
       error: 'Failed to analyze building permit documents',
-      details: error instanceof Error ? error.message : 'Unknown error',
-      built_area: 'לא נמצא',
-      building_year: 'לא נמצא',
-      permitted_use: 'לא נמצא'
+      details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 })
   }
 }
