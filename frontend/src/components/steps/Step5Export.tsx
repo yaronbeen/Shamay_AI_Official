@@ -35,12 +35,31 @@ export function Step5Export({ data }: Step5ExportProps) {
         throw new Error(`PDF export failed: ${response.status}`)
       }
 
-      // Check if response is PDF
+      // Check response type
       const contentType = response.headers.get('content-type')
       console.log('📄 Response content type:', contentType)
 
-      if (contentType === 'application/pdf') {
-        // Handle PDF response
+      if (contentType?.includes('text/html')) {
+        // HTML response - open in new window for printing/saving as PDF
+        const html = await response.text()
+        console.log('✅ HTML document received, opening print dialog...')
+        
+        // Open HTML in new window
+        const printWindow = window.open('', '_blank')
+        if (printWindow) {
+          printWindow.document.write(html)
+          printWindow.document.close()
+          
+          // Trigger print dialog after a short delay (let content load)
+          setTimeout(() => {
+            printWindow.print()
+          }, 500)
+        }
+        
+        setExportStatus('success')
+
+      } else if (contentType === 'application/pdf') {
+        // Handle PDF response (if backend implements it later)
         const pdfBlob = await response.blob()
         console.log('✅ PDF blob created:', pdfBlob.size, 'bytes')
         
@@ -58,14 +77,10 @@ export function Step5Export({ data }: Step5ExportProps) {
         URL.revokeObjectURL(url)
 
       } else {
-        // Handle JSON response (fallback)
+        // Handle JSON response (error)
         const result = await response.json()
-        console.log('✅ PDF export successful:', result)
-
-        if (result.pdfUrl) {
-          window.open(result.pdfUrl, '_blank')
-        }
-        setExportStatus('success')
+        console.error('❌ PDF export error:', result)
+        throw new Error(result.error || 'PDF export failed')
       }
 
     } catch (error) {
