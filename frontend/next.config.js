@@ -30,7 +30,19 @@ const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
   
-  // No special webpack config needed - screenshots handled by backend
+  // Webpack configuration
+  webpack: (config, { isServer }) => {
+    // Exclude PDF.js worker from bundling (it's loaded separately)
+    config.module.rules.push({
+      test: /pdf\.worker\.(min\.)?mjs$/,
+      type: 'asset/resource',
+      generator: {
+        filename: 'static/worker/[name].[hash][ext]'
+      }
+    });
+
+    return config;
+  },
 };
 
 module.exports = nextConfig;

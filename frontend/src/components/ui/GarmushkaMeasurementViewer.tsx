@@ -65,28 +65,15 @@ const loadPdfJs = async () => {
       const pdfjsModule = await import('pdfjs-dist')
       pdfjs = pdfjsModule.default || pdfjsModule
       
-      // Set worker source to use local file from node_modules
-      // This works both in development and production (Next.js handles it)
+      // Use CDN for worker (simpler and works in all environments)
+      // jsdelivr is more reliable than unpkg
       if (pdfjs && pdfjs.GlobalWorkerOptions) {
-        pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-          'pdfjs-dist/build/pdf.worker.min.mjs',
-          import.meta.url
-        ).toString()
+        const version = pdfjs.version || '3.11.174'
+        pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${version}/build/pdf.worker.min.js`
       }
     } catch (error) {
       console.error('Failed to load PDF.js:', error)
-      // Fallback to CDN with working version
-      try {
-        const pdfjsLib = await import('pdfjs-dist')
-        pdfjs = pdfjsLib.default || pdfjsLib
-        if (pdfjs && pdfjs.GlobalWorkerOptions) {
-          // Use jsdelivr CDN as fallback (more reliable than unpkg)
-          pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
-        }
-      } catch (fallbackError) {
-        console.error('Fallback PDF.js loading failed:', fallbackError)
-        throw new Error('PDF.js failed to load. Please try uploading an image file instead.')
-      }
+      throw new Error('PDF.js failed to load. Please try uploading an image file instead.')
     }
   }
   return pdfjs
