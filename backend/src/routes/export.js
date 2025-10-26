@@ -49,18 +49,24 @@ router.post('/pdf', async (req, res) => {
 
     const page = await browser.newPage();
     
-    // Optimize HTML content - reduce image sizes
+    // Process HTML content - handle large images
     let optimizedHtml = htmlContent;
     
-    // Replace base64 images with compressed versions or remove large ones
-    // Match base64 images and limit their size
+    // Count and log base64 images for debugging
+    const base64Matches = optimizedHtml.match(/data:image\/(png|jpeg|jpg);base64,/g);
+    if (base64Matches) {
+      console.log(`📸 Found ${base64Matches.length} base64 images in HTML`);
+    }
+    
+    // Replace very large base64 images with placeholders to reduce size
     optimizedHtml = optimizedHtml.replace(
-      /data:image\/(png|jpeg|jpg);base64,[A-Za-z0-9+/]+=*/g,
-      (match) => {
-        // If base64 string is too large (>500KB encoded = ~375KB decoded)
-        if (match.length > 500000) {
-          // Return a placeholder or smaller version
-          return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='; // 1x1 transparent pixel
+      /data:image\/(png|jpeg|jpg);base64,([A-Za-z0-9+/]+=*)/g,
+      (match, type, base64Data) => {
+        // If base64 string is too large (>100KB encoded)
+        if (base64Data.length > 100000) {
+          console.log(`🔄 Replacing large ${type} image (${Math.round(base64Data.length/1024)}KB) with placeholder`);
+          // Return a small placeholder image
+          return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
         }
         return match;
       }
@@ -72,37 +78,47 @@ router.post('/pdf', async (req, res) => {
       <html dir="rtl" lang="he">
       <head>
         <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-          @page {
-            size: A4;
-            margin: 15mm;
-          }
-          body {
+          * {
             margin: 0;
             padding: 0;
-            width: 100%;
-            max-width: none !important;
-            float: none !important;
+            box-sizing: border-box;
+          }
+          @page {
+            size: A4;
+            margin: 20mm;
+          }
+          body {
             font-family: Arial, sans-serif;
-            font-size: 11pt;
+            font-size: 12pt;
+            line-height: 1.6;
+            direction: rtl;
+            text-align: right;
           }
           .document-container {
-            width: 100% !important;
-            max-width: none !important;
-            float: none !important;
-            margin: 0 !important;
-            padding: 0 !important;
+            width: 100%;
           }
-          /* Optimize images */
+          h1, h2, h3, h4 {
+            margin-bottom: 10px;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+          }
+          td, th {
+            padding: 8px;
+            border: 1px solid #ddd;
+          }
           img {
             max-width: 100%;
             height: auto;
-            image-rendering: optimizeQuality;
           }
-          /* Reduce large images */
-          img[src*="base64"] {
-            max-width: 500px !important;
-            max-height: 400px !important;
+          /* Limit base64 images */
+          img[src^="data:"] {
+            max-width: 400px;
+            max-height: 300px;
           }
         </style>
       </head>
@@ -112,35 +128,53 @@ router.post('/pdf', async (req, res) => {
       </html>
     `;
     
-    await page.setContent(fullHtml, { waitUntil: 'networkidle0' });
+    // Set content and wait for it to fully load
+    await page.setContent(fullHtml, { 
+      waitUntil: ['load', 'domcontentloaded', 'networkidle0'],
+      timeout: 30000 
+    });
     
-    // Generate PDF with optimized settings
+    // Wait a bit more to ensure all content is rendered
+    await page.evaluateHandle('document.fonts.ready');
+    
+    // Generate PDF with proper settings
+    console.log('📄 Generating PDF...');
     const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,
-      preferCSSPageSize: false,
       displayHeaderFooter: false,
       margin: {
-        top: '15mm',
-        right: '15mm',
-        bottom: '15mm',
-        left: '15mm'
-      },
-      // Reduce quality for smaller file size
-      quality: 75, // For JPEG compression
-      scale: 0.9  // Slightly reduce scale to save space
+        top: '20mm',
+        right: '20mm',
+        bottom: '20mm',
+        left: '20mm'
+      }
     });
 
     await browser.close();
     browser = null;
 
     console.log(`✅ PDF generated successfully - ${pdfBuffer.length} bytes`);
+    
+    // Verify the buffer is valid
+    if (!pdfBuffer || pdfBuffer.length === 0) {
+      throw new Error('PDF generation resulted in empty buffer');
+    }
+    
+    // Check if it's a valid PDF (should start with %PDF)
+    const pdfHeader = pdfBuffer.slice(0, 5).toString();
+    if (!pdfHeader.startsWith('%PDF')) {
+      console.error('❌ Invalid PDF header:', pdfHeader);
+      throw new Error('Generated content is not a valid PDF');
+    }
 
-    // Send PDF as response
+    // Send PDF as response with proper headers
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="shamay-valuation-${sessionId}.pdf"`);
-    res.setHeader('Content-Length', pdfBuffer.length);
-    res.send(pdfBuffer);
+    res.setHeader('Content-Length', pdfBuffer.length.toString());
+    
+    // Send as Buffer to ensure binary data is preserved
+    res.status(200).end(pdfBuffer, 'binary');
 
   } catch (error) {
     console.error('❌ Error generating PDF:', error);
