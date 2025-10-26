@@ -198,7 +198,10 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
 
   const getCurrentIframeUrl = () => {
     if (!gisData?.govmapUrls) return undefined
-    return currentCropMode === '1' ? gisData.govmapUrls.cropMode1 : gisData.govmapUrls.cropMode0
+    const url = currentCropMode === '1' ? gisData.govmapUrls.cropMode1 : gisData.govmapUrls.cropMode0
+    console.log(`🗺️ getCurrentIframeUrl - cropMode: ${currentCropMode}, URL length: ${url?.length || 0}`)
+    console.log(`🗺️ Full URL:`, url)
+    return url
   }
 
   const formatCoordinates = () => {

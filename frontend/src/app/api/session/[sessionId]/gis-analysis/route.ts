@@ -125,9 +125,11 @@ function wgs84ToITM(lat: number, lon: number) {
 
 function buildGovMapUrl(easting: number, northing: number, options: { address?: string, showTazea?: boolean } = {}) {
   const GOVMAP_BASE_URL = 'https://www.govmap.gov.il/'
+  // Offset to center the view properly (marker will be at easting, northing)
+  // Center should be slightly offset so marker balloon doesn't cover important info
   const GOVMAP_CENTER_OFFSET = {
-    easting: -45,
-    northing: +180
+    easting: -53,    // Center 53m west of marker
+    northing: +122   // Center 122m north of marker
   }
 
   const { address, showTazea = true } = options
