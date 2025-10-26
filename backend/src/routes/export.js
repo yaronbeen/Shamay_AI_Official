@@ -21,13 +21,31 @@ router.post('/pdf', async (req, res) => {
 
     console.log(`📄 Generating PDF for session: ${sessionId}`);
 
-    // Use Puppeteer to convert HTML to PDF
-    const puppeteer = require('puppeteer');
+    // Detect environment and use appropriate Puppeteer setup
+    const isVercel = !!process.env.VERCEL || !!process.env.VERCEL_ENV;
     
-    browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
+    if (isVercel) {
+      // Vercel: Use puppeteer-core with @sparticuz/chromium
+      console.log(`🚀 Using serverless Chromium for PDF generation...`);
+      const puppeteerCore = require('puppeteer-core');
+      const chromium = require('@sparticuz/chromium');
+      
+      browser = await puppeteerCore.launch({
+        args: chromium.args,
+        defaultViewport: chromium.defaultViewport,
+        executablePath: await chromium.executablePath(),
+        headless: chromium.headless,
+      });
+    } else {
+      // Local: Use regular puppeteer
+      console.log(`🚀 Using local Puppeteer for PDF generation...`);
+      const puppeteer = require('puppeteer');
+      
+      browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+      });
+    }
 
     const page = await browser.newPage();
     
