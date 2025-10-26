@@ -20,33 +20,63 @@ router.post('/', async (req, res) => {
 
   let browser;
   try {
-    // Check if Puppeteer is available (won't be on some serverless platforms)
-    let puppeteer;
-    try {
-      puppeteer = require('puppeteer');
-    } catch (error) {
-      console.warn('⚠️ Puppeteer not available:', error.message);
-      return res.status(501).json({
-        success: false,
-        error: 'Server-side screenshot not available',
-        message: 'Puppeteer is not available in this environment. Please use manual screenshot upload.',
-        hint: 'Use the manual upload buttons to capture and upload your own screenshot'
+    const isVercel = !!process.env.VERCEL || !!process.env.VERCEL_ENV;
+    
+    console.log(`🔍 Environment: ${isVercel ? 'Vercel/Serverless' : 'Local'}`);
+    
+    if (isVercel) {
+      // Vercel: Use puppeteer-core with @sparticuz/chromium
+      let puppeteerCore, chromium;
+      
+      try {
+        puppeteerCore = require('puppeteer-core');
+        chromium = require('@sparticuz/chromium');
+      } catch (error) {
+        console.warn('⚠️ Serverless Chromium not available:', error.message);
+        return res.status(501).json({
+          success: false,
+          error: 'Server-side screenshot not available',
+          message: 'Screenshot service unavailable in this environment. Please use manual upload.',
+          hint: 'Use the manual upload buttons (blue) to capture and upload your own screenshot'
+        });
+      }
+
+      console.log(`🚀 Launching serverless Chromium...`);
+      browser = await puppeteerCore.launch({
+        args: chromium.args,
+        defaultViewport: chromium.defaultViewport,
+        executablePath: await chromium.executablePath(),
+        headless: chromium.headless,
+      });
+    } else {
+      // Local: Use regular puppeteer
+      let puppeteer;
+      try {
+        puppeteer = require('puppeteer');
+      } catch (error) {
+        console.warn('⚠️ Puppeteer not available:', error.message);
+        return res.status(501).json({
+          success: false,
+          error: 'Server-side screenshot not available',
+          message: 'Puppeteer is not available. Please use manual screenshot upload.',
+          hint: 'Use the manual upload buttons to capture and upload your own screenshot'
+        });
+      }
+
+      console.log(`🚀 Launching local Puppeteer...`);
+      browser = await puppeteer.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--disable-gpu'
+        ]
       });
     }
-
-    console.log(`🚀 Launching Puppeteer...`);
-    browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--disable-gpu'
-      ]
-    });
 
     const page = await browser.newPage();
 

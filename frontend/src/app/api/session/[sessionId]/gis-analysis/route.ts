@@ -187,7 +187,9 @@ async function addressToGovMap(address: string) {
     const govmapUrlWithoutTazea = buildGovMapUrl(easting, northing, { address, showTazea: false })
     const govmapUrlWithTazea = buildGovMapUrl(easting, northing, { address, showTazea: true })
 
-    console.log(`[3/3] ✓ GovMap URLs generated`)
+    console.log(`[3/3] ✓ GovMap URLs generated:`)
+    console.log(`  - Without Tazea: ${govmapUrlWithoutTazea}`)
+    console.log(`  - With Tazea: ${govmapUrlWithTazea}`)
 
     return {
       success: true,
@@ -306,6 +308,10 @@ export async function POST(
         confidence: result.confidence,
         address: typeof result.address === 'string' ? result.address : result.address?.normalized || ''
       }
+
+      console.log('📊 Formatted measurements for storage:')
+      console.log(`  - cropMode0 URL: ${measurements.govmapUrls.cropMode0}`)
+      console.log(`  - cropMode1 URL: ${measurements.govmapUrls.cropMode1}`)
 
       // Update session with GovMap analysis results in database
       const updateResult = await ShumaDB.saveShumaFromSession(
