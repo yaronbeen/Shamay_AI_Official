@@ -74,6 +74,7 @@ app.use('/api/ai', require('./routes/ai'));
 app.use('/api/gis', require('./routes/gis'));
 app.use('/api/gis-screenshot', require('./routes/gis-screenshot'));
 app.use('/api/garmushka', require('./routes/garmushka'));
+app.use('/api/export', require('./routes/export'));
 
 // Static file serving for uploads
 app.use('/uploads', express.static('uploads'));

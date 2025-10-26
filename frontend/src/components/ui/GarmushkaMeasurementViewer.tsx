@@ -65,26 +65,23 @@ const loadPdfJs = async () => {
       const pdfjsModule = await import('pdfjs-dist')
       pdfjs = pdfjsModule.default || pdfjsModule
       
-      // Set worker source to use a CDN version
+      // Set worker source to use local file from node_modules
+      // This works both in development and production (Next.js handles it)
       if (pdfjs && pdfjs.GlobalWorkerOptions) {
-        pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`
+        pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+          'pdfjs-dist/build/pdf.worker.min.mjs',
+          import.meta.url
+        ).toString()
       }
     } catch (error) {
       console.error('Failed to load PDF.js:', error)
-      // Try alternative loading method
+      // Fallback to CDN with working version
       try {
-        const script = document.createElement('script')
-        script.src = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js'
-        document.head.appendChild(script)
-        
-        await new Promise((resolve, reject) => {
-          script.onload = resolve
-          script.onerror = reject
-        })
-        
-        pdfjs = (window as any).pdfjsLib
+        const pdfjsLib = await import('pdfjs-dist')
+        pdfjs = pdfjsLib.default || pdfjsLib
         if (pdfjs && pdfjs.GlobalWorkerOptions) {
-          pdfjs.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
+          // Use jsdelivr CDN as fallback (more reliable than unpkg)
+          pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
         }
       } catch (fallbackError) {
         console.error('Fallback PDF.js loading failed:', fallbackError)
