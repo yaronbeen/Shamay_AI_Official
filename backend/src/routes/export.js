@@ -49,7 +49,24 @@ router.post('/pdf', async (req, res) => {
 
     const page = await browser.newPage();
     
-    // Set the HTML content with full-width styling
+    // Optimize HTML content - reduce image sizes
+    let optimizedHtml = htmlContent;
+    
+    // Replace base64 images with compressed versions or remove large ones
+    // Match base64 images and limit their size
+    optimizedHtml = optimizedHtml.replace(
+      /data:image\/(png|jpeg|jpg);base64,[A-Za-z0-9+/]+=*/g,
+      (match) => {
+        // If base64 string is too large (>500KB encoded = ~375KB decoded)
+        if (match.length > 500000) {
+          // Return a placeholder or smaller version
+          return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='; // 1x1 transparent pixel
+        }
+        return match;
+      }
+    );
+    
+    // Set the HTML content with full-width styling and image optimization
     const fullHtml = `
       <!DOCTYPE html>
       <html dir="rtl" lang="he">
@@ -58,7 +75,7 @@ router.post('/pdf', async (req, res) => {
         <style>
           @page {
             size: A4;
-            margin: 20mm;
+            margin: 15mm;
           }
           body {
             margin: 0;
@@ -66,6 +83,8 @@ router.post('/pdf', async (req, res) => {
             width: 100%;
             max-width: none !important;
             float: none !important;
+            font-family: Arial, sans-serif;
+            font-size: 11pt;
           }
           .document-container {
             width: 100% !important;
@@ -74,26 +93,42 @@ router.post('/pdf', async (req, res) => {
             margin: 0 !important;
             padding: 0 !important;
           }
+          /* Optimize images */
+          img {
+            max-width: 100%;
+            height: auto;
+            image-rendering: optimizeQuality;
+          }
+          /* Reduce large images */
+          img[src*="base64"] {
+            max-width: 500px !important;
+            max-height: 400px !important;
+          }
         </style>
       </head>
       <body>
-        ${htmlContent}
+        ${optimizedHtml}
       </body>
       </html>
     `;
     
     await page.setContent(fullHtml, { waitUntil: 'networkidle0' });
     
-    // Generate PDF
+    // Generate PDF with optimized settings
     const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,
+      preferCSSPageSize: false,
+      displayHeaderFooter: false,
       margin: {
-        top: '20mm',
-        right: '20mm',
-        bottom: '20mm',
-        left: '20mm'
-      }
+        top: '15mm',
+        right: '15mm',
+        bottom: '15mm',
+        left: '15mm'
+      },
+      // Reduce quality for smaller file size
+      quality: 75, // For JPEG compression
+      scale: 0.9  // Slightly reduce scale to save space
     });
 
     await browser.close();

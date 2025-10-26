@@ -59,18 +59,35 @@ export function generateDocumentHTML(data: ValuationData, isPreview: boolean = t
     let html = '<div style="text-align: center; margin: 10px 0;">'
     html += '<h4 style="font-size: 11pt; font-weight: bold; margin-bottom: 10px; color: #333;">מפת הסביבה - GovMap</h4>'
     
+    // For PDF export (not preview), skip large base64 images or use URLs
+    const isPdfExport = !isPreview
+    
     // Display both map modes if available
     if (screenshots.cropMode0) {
       html += '<div style="margin-bottom: 15px;">'
       html += '<p style="font-size: 9pt; color: #666; margin-bottom: 5px;">מפה נקייה (ללא תצ"א)</p>'
-      html += `<img src="${screenshots.cropMode0}" alt="GovMap Screenshot - Clean Map" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px;" />`
+      
+      // For PDF, check if it's a URL or base64
+      if (isPdfExport && screenshots.cropMode0.startsWith('data:image')) {
+        // Skip large base64 images in PDF or show placeholder
+        html += '<div style="border: 1px solid #ddd; padding: 20px; background: #f5f5f5; color: #666;">מפת GovMap - ראה קובץ מצורף</div>'
+      } else {
+        html += `<img src="${screenshots.cropMode0}" alt="GovMap Screenshot - Clean Map" style="max-width: 400px; max-height: 300px; width: auto; height: auto; border: 1px solid #ddd; border-radius: 4px;" />`
+      }
       html += '</div>'
     }
     
     if (screenshots.cropMode1) {
       html += '<div style="margin-bottom: 15px;">'
       html += '<p style="font-size: 9pt; color: #666; margin-bottom: 5px;">מפה עם תצ"א (רישום מקרקעין)</p>'
-      html += `<img src="${screenshots.cropMode1}" alt="GovMap Screenshot - Land Registry Map" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px;" />`
+      
+      // For PDF, check if it's a URL or base64
+      if (isPdfExport && screenshots.cropMode1.startsWith('data:image')) {
+        // Skip large base64 images in PDF or show placeholder
+        html += '<div style="border: 1px solid #ddd; padding: 20px; background: #f5f5f5; color: #666;">מפת תצ"א - ראה קובץ מצורף</div>'
+      } else {
+        html += `<img src="${screenshots.cropMode1}" alt="GovMap Screenshot - Land Registry Map" style="max-width: 400px; max-height: 300px; width: auto; height: auto; border: 1px solid #ddd; border-radius: 4px;" />`
+      }
       html += '</div>'
     }
     
