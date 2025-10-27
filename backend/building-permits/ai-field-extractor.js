@@ -3,8 +3,8 @@
  * Uses Claude Opus to extract Hebrew building permit fields with high accuracy
  */
 
-import Anthropic from '@anthropic-ai/sdk';
-import dotenv from 'dotenv';
+const Anthropic = require('@anthropic-ai/sdk');
+const dotenv = require('dotenv');
 
 dotenv.config();
 
@@ -379,6 +379,6 @@ Return JSON format:
   }
 }
 
-export {
+module.exports = {
   BuildingPermitAIExtractor
 };

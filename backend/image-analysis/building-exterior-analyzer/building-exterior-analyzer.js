@@ -1,6 +1,6 @@
-import Anthropic from '@anthropic-ai/sdk';
-import fs from 'fs';
-import path from 'path';
+const Anthropic = require('@anthropic-ai/sdk');
+const fs = require('fs');
+const path = require('path');
 
 class BuildingExteriorAnalyzer {
     constructor(apiKey = process.env.ANTHROPIC_API_KEY) {
@@ -405,12 +405,9 @@ async function example() {
     await analyzer.saveResults(result, './output/building-exterior-analysis.json');
 }
 
-export default BuildingExteriorAnalyzer;
+module.exports = BuildingExteriorAnalyzer;
 
 // Run example if called directly
-import { fileURLToPath } from 'url';
-const __filename = fileURLToPath(import.meta.url);
-
-if (process.argv[1] === __filename) {
+if (require.main === module) {
     example().catch(console.error);
 }

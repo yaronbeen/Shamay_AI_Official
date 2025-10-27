@@ -3,9 +3,9 @@
  * Uses Claude Opus to extract Hebrew shared building order fields with high accuracy
  */
 
-import Anthropic from '@anthropic-ai/sdk';
-import dotenv from 'dotenv';
-import fs from 'fs';
+const Anthropic = require('@anthropic-ai/sdk');
+const dotenv = require('dotenv');
+const fs = require('fs');
 
 dotenv.config();
 
@@ -591,6 +591,6 @@ Return JSON format:
   }
 }
 
-export {
+module.exports = {
   SharedBuildingAIExtractor
 };
