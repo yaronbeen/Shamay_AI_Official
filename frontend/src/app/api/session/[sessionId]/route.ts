@@ -2,9 +2,16 @@
  * Session API Adapter - Backward Compatibility Layer
  * Maps old /api/session/:id calls to new valuation API
  * This allows gradual migration of frontend code
+ * 
+ * Enhanced with caching to reduce database load:
+ * - In-memory cache with 30-second TTL
+ * - ETag support for client-side caching
+ * - Automatic cache invalidation on updates
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { getSessionCache } from '@/lib/session-cache'
+
 const { ShumaDB } = require('@/lib/shumadb.js')
 
 function getAuthUser(request: NextRequest) {
@@ -18,18 +25,56 @@ function getAuthUser(request: NextRequest) {
 
 /**
  * GET /api/session/:sessionId
- * Returns session data in old format
+ * Returns session data in old format with caching support
  */
 export async function GET(request: NextRequest, { params }: { params: { sessionId: string } }) {
   try {
     const user = getAuthUser(request)
     const { sessionId } = params
-
-    // Load shuma data for this session
+    const cache = getSessionCache()
+    
+    // Check if client has cached version (via If-None-Match header)
+    const clientETag = request.headers.get('if-none-match')
+    
+    // Try to get from cache first
+    const cached = cache.get(sessionId)
+    if (cached) {
+      // If client has same version, return 304 Not Modified
+      if (clientETag && clientETag === cached.etag) {
+        console.log(`✅ Cache hit (304): Session ${sessionId}`)
+        return new NextResponse(null, {
+          status: 304,
+          headers: {
+            'ETag': cached.etag,
+            'Cache-Control': 'private, max-age=30, must-revalidate',
+          }
+        })
+      }
+      
+      // Return cached data with ETag
+      console.log(`✅ Cache hit: Session ${sessionId}`)
+      return NextResponse.json(
+        {
+          sessionId,
+          data: cached.data,
+          status: 'active',
+        },
+        {
+          headers: {
+            'ETag': cached.etag,
+            'Cache-Control': 'private, max-age=30, must-revalidate',
+            'X-Cache': 'HIT',
+          }
+        }
+      )
+    }
+    
+    // Cache miss - load from database
+    console.log(`⚠️ Cache miss: Session ${sessionId} - Loading from DB`)
     const result = await ShumaDB.loadShumaForWizard(sessionId)
 
     if (result.error) {
-      // Session doesn't exist yet - return empty session
+      // Session doesn't exist yet - return empty session (don't cache)
       return NextResponse.json({
         sessionId,
         data: {},
@@ -37,12 +82,24 @@ export async function GET(request: NextRequest, { params }: { params: { sessionI
       })
     }
 
-    // Return session data
-    return NextResponse.json({
-      sessionId,
-      data: result.valuationData,
-      status: 'active',
-    })
+    // Store in cache and get ETag
+    const etag = cache.set(sessionId, result.valuationData)
+    
+    // Return session data with caching headers
+    return NextResponse.json(
+      {
+        sessionId,
+        data: result.valuationData,
+        status: 'active',
+      },
+      {
+        headers: {
+          'ETag': etag,
+          'Cache-Control': 'private, max-age=30, must-revalidate',
+          'X-Cache': 'MISS',
+        }
+      }
+    )
   } catch (error: any) {
     console.error('Session GET error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
@@ -59,6 +116,7 @@ export async function PUT(request: NextRequest, { params }: { params: { sessionI
     const { sessionId } = params
     const body = await request.json()
     const { data } = body
+    const cache = getSessionCache()
 
     // Handle case where data is undefined or not properly structured
     if (!data) {
@@ -81,6 +139,10 @@ export async function PUT(request: NextRequest, { params }: { params: { sessionI
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: 500 })
     }
+    
+    // Invalidate cache for this session after successful update
+    cache.invalidate(sessionId)
+    console.log(`🗑️ Cache invalidated for session ${sessionId} after update`)
 
     return NextResponse.json({
       success: true,

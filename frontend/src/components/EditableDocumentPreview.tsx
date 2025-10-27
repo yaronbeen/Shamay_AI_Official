@@ -16,6 +16,8 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
   const [editorMode, setEditorMode] = useState<'html' | 'wysiwyg'>('wysiwyg')
   const previewRef = useRef<HTMLDivElement>(null)
   const [isUpdatingFromState, setIsUpdatingFromState] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null)
 
   // Handle field changes
   const handleContentChange = useCallback((field: string, value: any) => {
@@ -36,40 +38,49 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
     }
   }, [data])
 
-  // Fetch fresh data from session store to get latest gisScreenshots
-  useEffect(() => {
-    const fetchFreshData = async () => {
-      try {
-        // Extract sessionId from the data
-        const sessionId = (data as any).sessionId
-        if (!sessionId) return
+  // Manual refresh function to get latest gisScreenshots
+  const handleManualRefresh = useCallback(async () => {
+    try {
+      // Extract sessionId from the data
+      const sessionId = (data as any).sessionId
+      if (!sessionId) return
 
-        // Fetch fresh data from session store
-        const response = await fetch(`/api/session/${sessionId}`)
-        if (response.ok) {
-          const freshSession = await response.json()
-          const freshData = freshSession?.data || {}
-          
-          // Only regenerate HTML if gisScreenshots is different
-          if (freshData.gisScreenshots && !(data as any).gisScreenshots) {
-            const html = generateDocumentHTML(freshData, true)
-            setHtmlContent(html)
-            setFreeTextContent(html)
-          }
+      setIsRefreshing(true)
+      
+      // Fetch fresh data from session store
+      const response = await fetch(`/api/session/${sessionId}`)
+      if (response.ok) {
+        const freshSession = await response.json()
+        const freshData = freshSession?.data || {}
+        
+        // Only regenerate HTML if gisScreenshots is different
+        if (freshData.gisScreenshots && 
+            JSON.stringify(freshData.gisScreenshots) !== JSON.stringify((data as any).gisScreenshots)) {
+          const html = generateDocumentHTML(freshData, true)
+          setHtmlContent(html)
+          setFreeTextContent(html)
+          onDataChange({ gisScreenshots: freshData.gisScreenshots })
         }
-      } catch (error) {
-        // Silently handle errors
+        
+        setLastRefreshTime(new Date())
       }
+    } catch (error) {
+      console.error('Error refreshing data:', error)
+    } finally {
+      setIsRefreshing(false)
     }
+  }, [(data as any).sessionId, (data as any).gisScreenshots, onDataChange])
 
-    // Fetch fresh data every 2 seconds to catch updates
-    const interval = setInterval(fetchFreshData, 2000)
+  // Initial load only - no polling
+  useEffect(() => {
+    const sessionId = (data as any).sessionId
+    if (!sessionId) return
     
-    // Also fetch immediately
-    fetchFreshData()
-    
-    return () => clearInterval(interval)
-  }, [(data as any).sessionId, (data as any).gisScreenshots])
+    // Only fetch once on initial mount if we don't have gisScreenshots yet
+    if (!(data as any).gisScreenshots) {
+      handleManualRefresh()
+    }
+  }, [(data as any).sessionId]) // Only depend on sessionId for initial load
 
   // Update content without cursor jumping (Stack Overflow solution)
   useEffect(() => {
@@ -394,8 +405,37 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
           {!isEditMode && (
             <p className="text-xs text-gray-500 mt-1">לחץ על "עריכת מסמך" כדי לשנות את התוכן</p>
           )}
+          {lastRefreshTime && (
+            <p className="text-xs text-green-600 mt-1">
+              עודכן לאחרונה: {lastRefreshTime.toLocaleTimeString('he-IL')}
+            </p>
+          )}
         </div>
         <div className="flex items-center space-x-2 space-x-reverse">
+          {/* Manual Refresh Button */}
+          {(data as any).sessionId && (
+            <button
+              onClick={handleManualRefresh}
+              disabled={isRefreshing}
+              className={`px-3 py-2 text-sm rounded-lg font-medium transition-all duration-200 ${
+                isRefreshing 
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                  : 'bg-green-500 text-white hover:bg-green-600 shadow-md'
+              }`}
+              title="רענן נתונים מהשרת"
+            >
+              {isRefreshing ? (
+                <>
+                  <span className="inline-block animate-spin mr-1">⟳</span>
+                  מרענן...
+                </>
+              ) : (
+                <>🔄 רענן נתונים</>
+              )}
+            </button>
+          )}
+          
+          {/* Edit Toggle Button */}
           <button
             onClick={() => {
               if (isEditMode) {
