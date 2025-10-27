@@ -69,14 +69,14 @@ router.post('/land-registry', async (req, res) => {
     // Extract the raw extracted data for better field mapping
     const rawData = result.extractionResults?.rawExtractedData || {};
     
-    // Format response
+    // Format response - ONLY return data actually extracted from documents
     const responseData = {
       success: true,
-      gush: rawData.gush || 'לא נמצא',
-      registration_office: rawData.registration_office || 'לא נמצא',
-      chelka: rawData.chelka || 'לא נמצא',
-      ownership_type: rawData.ownership_type || 'לא נמצא',
-      attachments: rawData.attachments_description || rawData.attachments_area || 'לא נמצא',
+      gush: rawData.gush || null,
+      registration_office: rawData.registration_office || null,
+      chelka: rawData.chelka || null,
+      ownership_type: rawData.ownership_type || null,
+      attachments: rawData.attachments_description || rawData.attachments_area || null,
       confidence: result.extractionResults?.overallConfidence || 0.0,
       extracted_at: new Date().toISOString(),
       rawData: rawData // Include full raw data for debugging
@@ -106,12 +106,7 @@ router.post('/land-registry', async (req, res) => {
     
     res.status(500).json({
       success: false,
-      error: error.message || 'AI extraction failed',
-      gush: 'לא נמצא',
-      registration_office: 'לא נמצא',
-      chelka: 'לא נמצא',
-      ownership_type: 'לא נמצא',
-      attachments: 'לא נמצא'
+      error: error.message || 'AI extraction failed'
     });
   }
 });
@@ -170,15 +165,15 @@ router.post('/building-permit', async (req, res) => {
     
     console.log(`✅ AI extraction completed`);
     
-    // Format response
+    // Format response - ONLY return data actually extracted from documents
     const responseData = {
       success: true,
-      building_year: result.permit_date?.value ? new Date(result.permit_date.value).getFullYear().toString() : new Date().getFullYear().toString(),
-      permitted_description: result.permitted_description?.value || 'לא נמצא',
-      permitted_use: result.permitted_use?.value || 'מגורים',
-      built_area: result.built_area?.value || '0',
-      building_description: result.permitted_description?.value || 'לא נמצא',
-      confidence: result.overallConfidence || 0.90,
+      building_year: result.permit_date?.value || null,
+      permitted_description: result.permitted_description?.value || null,
+      permitted_use: result.permitted_use?.value || null,
+      built_area: result.built_area?.value || null,
+      building_description: result.permitted_description?.value || null,
+      confidence: result.overallConfidence || 0.0,
       extracted_at: new Date().toISOString(),
       rawData: result // Include full raw data for debugging
     };
@@ -261,16 +256,16 @@ router.post('/shared-building', async (req, res) => {
     
     console.log(`✅ AI extraction completed`);
     
-    // Format response
+    // Format response - ONLY return data actually extracted from documents
     const responseData = {
       success: true,
-      order_issue_date: result.order_issue_date?.value || new Date().toISOString().split('T')[0],
-      building_description: result.building_description?.value || 'לא נמצא',
-      building_floors: result.building_floors?.value || '0',
-      building_sub_plots_count: result.building_sub_plots_count?.value || '0',
-      building_address: result.building_address?.value || 'לא נמצא',
-      total_sub_plots: result.total_sub_plots?.value || '0',
-      confidence: result.overallConfidence || 0.90,
+      order_issue_date: result.order_issue_date?.value || null,
+      building_description: result.building_description?.value || null,
+      building_floors: result.building_floors?.value || null,
+      building_sub_plots_count: result.building_sub_plots_count?.value || null,
+      building_address: result.building_address?.value || null,
+      total_sub_plots: result.total_sub_plots?.value || null,
+      confidence: result.overallConfidence || 0.0,
       extracted_at: new Date().toISOString(),
       rawData: result // Include full raw data for debugging
     };

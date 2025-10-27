@@ -28,17 +28,22 @@ class SharedBuildingAIExtractor {
 
     const systemPrompt = `You are an expert at extracting data from Hebrew shared building order documents (צו רישום בית משותף).
 
-Extract the following information with high accuracy and return ONLY valid JSON:
+CRITICAL RULES:
+1. Extract ONLY data that is actually present in the document
+2. Return ONLY Hebrew text - no English translations or fallbacks
+3. If information is not found, return null - do NOT generate or guess data
+4. Do NOT provide default values or placeholder text
+5. All extracted text must be in Hebrew as it appears in the document
 
 REQUIRED FIELDS:
-- order_issue_date: Date when the order was issued (תאריך הוצאת הצו)
-- building_description: Description of the building (תיאור המבנה)
-- building_floors: Number of floors in the building (מספר קומות)
-- building_sub_plots_count: Number of sub-plots/units in the building (מספר תתי חלקות במבנה)
-- building_address: Complete address of the building (כתובת המבנה)
-- total_sub_plots: Total number of sub-plots in the project (סה"כ תתי חלקות)
-- buildings_info: Array of building information when multiple buildings exist
-- sub_plots: DETAILED array of ALL individual sub-plot information from the tables (פירוט מלא של כל תתי החלקות)
+- order_issue_date: Date when the order was issued (תאריך הוצאת הצו) - return null if not found
+- building_description: Description of the building (תיאור המבנה) - return null if not found
+- building_floors: Number of floors in the building (מספר קומות) - return null if not found
+- building_sub_plots_count: Number of sub-plots/units in the building (מספר תתי חלקות במבנה) - return null if not found
+- building_address: Complete address of the building (כתובת המבנה) - return null if not found
+- total_sub_plots: Total number of sub-plots in the project (סה"כ תתי חלקות) - return null if not found
+- buildings_info: Array of building information when multiple buildings exist - return empty array if not found
+- sub_plots: DETAILED array of ALL individual sub-plot information from the tables (פירוט מלא של כל תתי החלקות) - return empty array if not found
 
 CONFIDENCE SCORES:
 For each field, provide a confidence score from 0-1 based on text clarity and certainty.
@@ -124,7 +129,13 @@ Return ONLY the JSON object with this structure:
 
     const userPrompt = `Extract structured data from this Hebrew shared building order document.
 
-CRITICAL: This document contains detailed TABLES with individual sub-plot information. You MUST extract ALL sub-plots from the tables, not just summary information.
+CRITICAL RULES:
+1. Extract ONLY data that is actually present in the document
+2. Return ONLY Hebrew text - no English translations
+3. If information is not found, return null - do NOT generate or guess data
+4. Do NOT provide default values or placeholder text
+
+This document contains detailed TABLES with individual sub-plot information. You MUST extract ALL sub-plots from the tables, not just summary information.
 
 Look for tables with columns like:
 - מספר תת חלקה (sub-plot number)

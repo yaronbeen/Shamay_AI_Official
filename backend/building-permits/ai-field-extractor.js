@@ -28,20 +28,25 @@ class BuildingPermitAIExtractor {
 
     const systemPrompt = `You are an expert at extracting data from Hebrew building permit documents (היתר בנייה מילולי).
 
-Extract the following information with high accuracy and return ONLY valid JSON:
+CRITICAL RULES:
+1. Extract ONLY data that is actually present in the document
+2. Return ONLY Hebrew text - no English translations or fallbacks
+3. If information is not found, return null - do NOT generate or guess data
+4. Do NOT provide default values or placeholder text
+5. All extracted text must be in Hebrew as it appears in the document
 
 REQUIRED FIELDS:
-- permit_number: Building permit number (מספר היתר בנייה)
-- permit_date: Date of the building permit (תאריך היתר בנייה)
-- permitted_description: What is permitted/allowed (מותר - תיאור מה מותר לבנות). Look for the detailed "מותר:" section that contains specific building specifications with exact measurements. CRITICAL: Copy the text EXACTLY as it appears in the document. Do not paraphrase, summarize, or rearrange. Copy word-for-word, maintaining the original punctuation, line breaks, and text structure. The text should start with "מותר:" and include the exact Hebrew text as written in the document.
-- permit_issue_date: Date when permit was issued (תאריך הפקת היתר)
-- local_committee_name: Name of local planning committee (שם הוועדה המקומית)
+- permit_number: Building permit number (מספר היתר בנייה) - return null if not found
+- permit_date: Date of the building permit (תאריך היתר בנייה) - return null if not found
+- permitted_description: What is permitted/allowed (מותר - תיאור מה מותר לבנות). Look for the detailed "מותר:" section that contains specific building specifications with exact measurements. CRITICAL: Copy the text EXACTLY as it appears in the document. Do not paraphrase, summarize, or rearrange. Copy word-for-word, maintaining the original punctuation, line breaks, and text structure. The text should start with "מותר:" and include the exact Hebrew text as written in the document. - return null if not found
+- permit_issue_date: Date when permit was issued (תאריך הפקת היתר) - return null if not found
+- local_committee_name: Name of local planning committee (שם הוועדה המקומית) - return null if not found
 
 ADDITIONAL FIELDS (if found):
-- property_address: Address of the property (כתובת הנכס)
-- gush: Block number (גוש)
-- chelka: Plot number (חלקה) 
-- sub_chelka: Sub-plot number (תת חלקה)
+- property_address: Address of the property (כתובת הנכס) - return null if not found
+- gush: Block number (גוש) - return null if not found
+- chelka: Plot number (חלקה) - return null if not found
+- sub_chelka: Sub-plot number (תת חלקה) - return null if not found
 
 CONFIDENCE SCORES:
 For each field, provide a confidence score from 0-1 based on text clarity and certainty.
@@ -123,7 +128,7 @@ Return ONLY the JSON object with this structure:
             },
             {
               type: "text",
-              text: "Extract structured data from this Hebrew building permit document (היתר בנייה מילולי). Focus on finding the Hebrew text and extracting the required fields."
+              text: "Extract structured data from this Hebrew building permit document (היתר בנייה מילולי).\n\nCRITICAL RULES:\n1. Extract ONLY data that is actually present in the document\n2. Return ONLY Hebrew text - no English translations\n3. If information is not found, return null - do NOT generate or guess data\n4. Do NOT provide default values or placeholder text\n\nFocus on finding the Hebrew text and extracting the required fields."
             }
           ]
         }
@@ -134,6 +139,12 @@ Return ONLY the JSON object with this structure:
         {
           role: "user",
           content: `Extract structured data from this Hebrew building permit document:
+
+CRITICAL RULES:
+1. Extract ONLY data that is actually present in the document
+2. Return ONLY Hebrew text - no English translations
+3. If information is not found, return null - do NOT generate or guess data
+4. Do NOT provide default values or placeholder text
 
 ${input}`
         }
