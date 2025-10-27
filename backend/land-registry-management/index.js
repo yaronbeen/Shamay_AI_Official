@@ -5,11 +5,10 @@
  * for Hebrew land registry documents (נסח טאבו) using AI and custom parsers.
  */
 
-import { LandRegistryAIExtractor } from './ai-field-extractor.js';
-import { LandRegistryComprehensiveAIExtractor } from './comprehensive-ai-extractor.js';
-import { LandRegistryDatabaseClient } from './database-client.js';
-import path from 'path';
-import fs from 'fs';
+const { LandRegistryComprehensiveAIExtractor } = require('./comprehensive-ai-extractor.js');
+const { LandRegistryDatabaseClient } = require('./database-client.js');
+const path = require('path');
+const fs = require('fs');
 
 /**
  * Process a complete land registry document: PDF -> Field Extraction -> Database
@@ -159,7 +158,7 @@ async function searchLandRegistryByLocation(gush, chelka = null) {
   }
 }
 
-export {
+module.exports = {
   processLandRegistryDocument,
   createLandRegistryRecord,
   getLandRegistryRecord,

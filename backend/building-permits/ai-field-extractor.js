@@ -73,7 +73,8 @@ CRITICAL EXTRACTION RULES:
 REQUIRED FIELDS:
 - permit_number: Building permit number (מספר היתר בנייה)
 - permit_date: Date from "מועד קביעת ההיתר" ONLY (bottom of document)
-- permitted_description: EXACT Hebrew text of what is permitted (מותר)
+- permitted_description: EXACT Hebrew text of what is permitted (מותר) - from dedicated "מותר:" sections ONLY
+- building_description: Complete description of the building/construction from any part of document (תיאור הבניין/עבודות)
 - permit_issue_date: Date when permit was issued (תאריך הפקת היתר)
 - local_committee_name: Committee name from permit stamp area ONLY
 
@@ -82,6 +83,10 @@ ADDITIONAL FIELDS (if found):
 - gush: Block number (גוש)
 - chelka: Plot number (חלקה)
 - sub_chelka: Sub-plot number (תת חלקה)
+
+IMPORTANT DISTINCTION:
+- permitted_description: STRICT - only from "מותר:" sections
+- building_description: FLEXIBLE - can come from any section describing the construction work, including detailed descriptions of floors, areas, units, etc.
 
 CONFIDENCE SCORES:
 For each field, provide a confidence score from 0-1 based on text clarity and certainty.
@@ -120,7 +125,8 @@ Return ONLY the JSON object with this structure:
 {
   "permit_number": "string or null",
   "permit_date": "YYYY-MM-DD or original format", 
-  "permitted_description": "text description or null",
+  "permitted_description": "text description or null (strict - only from מותר: sections)",
+  "building_description": "complete building description or null (flexible - from any part)",
   "permit_issue_date": "YYYY-MM-DD or original format",
   "local_committee_name": "committee name or null",
   "property_address": "address or null",
@@ -131,6 +137,7 @@ Return ONLY the JSON object with this structure:
     "permit_number": 0.0-1.0,
     "permit_date": 0.0-1.0,
     "permitted_description": 0.0-1.0,
+    "building_description": 0.0-1.0,
     "permit_issue_date": 0.0-1.0,
     "local_committee_name": 0.0-1.0,
     "overall": 0.0-1.0
@@ -139,6 +146,7 @@ Return ONLY the JSON object with this structure:
     "permit_number": "context explanation",
     "permit_date": "context explanation",
     "permitted_description": "context explanation",
+    "building_description": "context explanation",
     "permit_issue_date": "context explanation",
     "local_committee_name": "context explanation"
   }
@@ -247,6 +255,13 @@ ${input}`
           value: extractedData.permitted_description || null,
           confidence: (extractedData.confidence_scores?.permitted_description || 0) * 100,
           context: extractedData.extraction_contexts?.permitted_description || '',
+          pattern: 'ai_extraction'
+        },
+        
+        building_description: {
+          value: extractedData.building_description || null,
+          confidence: (extractedData.confidence_scores?.building_description || 0) * 100,
+          context: extractedData.extraction_contexts?.building_description || '',
           pattern: 'ai_extraction'
         },
         

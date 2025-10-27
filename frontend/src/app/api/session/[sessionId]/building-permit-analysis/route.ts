@@ -83,9 +83,23 @@ export async function POST(
       }, { status: 500 })
     }
     
+    // Map backend response to UI-expected format (camelCase → snake_case)
+    const mappedData = {
+      permit_number: result.permitNumber,
+      permit_date: result.permitDate,
+      permit_issue_date: result.permitIssueDate,
+      permitted_usage: result.permittedUsage || result.buildingDescription, // Fallback to buildingDescription
+      building_description: result.buildingDescription,
+      local_committee_name: result.localCommitteeName,
+      property_address: result.propertyAddress,
+      gush: result.gush,
+      chelka: result.chelka,
+      sub_chelka: result.subChelka,
+      confidence: result.confidence
+    }
+    
     // Save the extracted data to database
     console.log('💾 Saving building permit extraction to database...')
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3002'
     const saveResponse = await fetch(`${backendUrl}/api/sessions`, {
       method: 'POST',
       headers: {
@@ -94,7 +108,7 @@ export async function POST(
       body: JSON.stringify({
         action: 'save_permit_extraction',
         sessionId: params.sessionId,
-        extractedData: result.extractedData || result
+        extractedData: mappedData
       })
     })
     
@@ -113,7 +127,7 @@ export async function POST(
     
     return NextResponse.json({
       success: true,
-      extractedData: result.extractedData || result,
+      extractedData: mappedData,
       saveResult
     })
     

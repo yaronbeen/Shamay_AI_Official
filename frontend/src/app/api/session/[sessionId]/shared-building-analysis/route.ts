@@ -85,7 +85,6 @@ export async function POST(
     
     // Save the extracted data to database
     console.log('💾 Saving shared building extraction to database...')
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3002'
     const saveResponse = await fetch(`${backendUrl}/api/sessions`, {
       method: 'POST',
       headers: {

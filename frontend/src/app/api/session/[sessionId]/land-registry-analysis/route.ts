@@ -80,9 +80,50 @@ export async function POST(
       }, { status: 500 })
     }
     
+    // Map backend response to UI-expected format (camelCase → snake_case)
+    const mappedData = {
+      gush: extractedData.gush,
+      chelka: extractedData.chelka,
+      sub_chelka: extractedData.subChelka,
+      registration_office: extractedData.registrationOffice,
+      ownership_type: extractedData.ownershipType,
+      document_type: extractedData.documentType,
+      registered_area: extractedData.registeredArea,
+      apartment_registered_area: extractedData.apartmentArea,
+      balcony_area: extractedData.balconyArea,
+      buildings_count: extractedData.buildingsCount,
+      address_from_tabu: extractedData.addressFromTabu,
+      unit_description: extractedData.unitDescription,
+      floor: extractedData.floor,
+      building_number: extractedData.buildingNumber,
+      attachments: extractedData.attachments,
+      attachments_description: extractedData.attachmentsDescription,
+      attachments_area: extractedData.attachmentsArea,
+      additional_areas: extractedData.additionalAreas,
+      owners: extractedData.owners,
+      owners_count: extractedData.ownersCount,
+      shared_property: extractedData.sharedProperty,
+      rights: extractedData.rights,
+      plot_notes: extractedData.plotNotes,
+      notes_action_type: extractedData.notesActionType,
+      notes_beneficiary: extractedData.notesBeneficiary,
+      easements_essence: extractedData.easementsEssence,
+      easements_description: extractedData.easementsDescription,
+      mortgages: extractedData.mortgages,
+      mortgage_essence: extractedData.mortgageEssence,
+      mortgage_rank: extractedData.mortgageRank,
+      mortgage_lenders: extractedData.mortgageLenders,
+      mortgage_borrowers: extractedData.mortgageBorrowers,
+      mortgage_amount: extractedData.mortgageAmount,
+      mortgage_property_share: extractedData.mortgagePropertyShare,
+      confidence: extractedData.confidence,
+      sub_plots_count: extractedData.subPlotsCount,
+      issue_date: extractedData.issueDate,
+      tabu_extract_date: extractedData.tabuExtractDate
+    }
+    
     // Save the extracted data to database
     console.log('💾 Saving land registry extraction to database...')
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
     const saveResponse = await fetch(`${backendUrl}/api/sessions`, {
       method: 'POST',
       headers: {
@@ -91,7 +132,7 @@ export async function POST(
       body: JSON.stringify({
         action: 'save_land_registry_extraction',
         sessionId: params.sessionId,
-        extractedData: extractedData.extractedData || extractedData
+        extractedData: mappedData
       })
     })
     
@@ -110,7 +151,7 @@ export async function POST(
     
     return NextResponse.json({
       success: true,
-      extractedData: extractedData.extractedData || extractedData,
+      extractedData: mappedData,
       saveResult
     })
     

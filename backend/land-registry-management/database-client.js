@@ -1,11 +1,9 @@
-import pg from 'pg';
-import dotenv from 'dotenv';
+const { Client } = require('pg');
+const dotenv = require('dotenv');
 
 dotenv.config();
 
-const { Client } = pg;
-
-export class LandRegistryDatabaseClient {
+class LandRegistryDatabaseClient {
   constructor() {
     this.client = new Client({
       host: process.env.DB_HOST || 'localhost',
@@ -258,3 +256,7 @@ export class LandRegistryDatabaseClient {
     }
   }
 }
+
+module.exports = {
+  LandRegistryDatabaseClient
+};

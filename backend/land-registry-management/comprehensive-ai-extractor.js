@@ -4,8 +4,8 @@
  * Extracts ALL owners, mortgages, notes, and easements - not just the first ones
  */
 
-import Anthropic from '@anthropic-ai/sdk';
-import dotenv from 'dotenv';
+const Anthropic = require('@anthropic-ai/sdk');
+const dotenv = require('dotenv');
 
 dotenv.config();
 
@@ -139,8 +139,8 @@ Return ONLY JSON:
         }
       ];
     } else if (options.isPdf && typeof input === 'string') {
-      const fs = await import('fs');
-      const pdfBuffer = fs.default.readFileSync(input);
+      const fs = require('fs');
+      const pdfBuffer = fs.readFileSync(input);
       const base64Pdf = pdfBuffer.toString('base64');
 
       messages = [
@@ -398,8 +398,8 @@ Return ONLY the JSON object with this structure:
         }
       ];
     } else if (options.isPdf && typeof input === 'string') {
-      const fs = await import('fs');
-      const pdfBuffer = fs.default.readFileSync(input);
+      const fs = require('fs');
+      const pdfBuffer = fs.readFileSync(input);
       const base64Pdf = pdfBuffer.toString('base64');
 
       messages = [
@@ -502,6 +502,6 @@ Return ONLY the JSON object with this structure:
   }
 }
 
-export {
+module.exports = {
   LandRegistryComprehensiveAIExtractor
 };
