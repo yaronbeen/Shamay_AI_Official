@@ -376,15 +376,22 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
       
       if (response.ok) {
         const result = await response.json()
-        return {
-          registrationOffice: result.registration_office || 'לא נמצא',
-          gush: result.gush || 'לא נמצא',
-          parcel: result.chelka || 'לא נמצא',
-          ownershipType: result.ownership_type || 'לא נמצא',
-          attachments: result.attachments || 'לא נמצא',
-          balconyArea: result.balcony_area || result.balcony_sqm || 0,
-          buildingNumber: result.building_number || result.house_number || '',
-          registeredArea: result.registered_area || result.apartment_registered_area || 0
+        console.log('🏛️ Land registry API response:', result)
+        
+        if (result.success && result.extractedData) {
+          // Return structured data for Step 3
+          return {
+            land_registry: result.extractedData,
+            // Also include flat fields for backward compatibility
+            registrationOffice: result.extractedData.registration_office || 'לא נמצא',
+            gush: result.extractedData.gush || 'לא נמצא',
+            parcel: result.extractedData.chelka || 'לא נמצא',
+            ownershipType: result.extractedData.ownership_type || 'לא נמצא',
+            attachments: result.extractedData.attachments || 'לא נמצא',
+            balconyArea: result.extractedData.balcony_area || 0,
+            buildingNumber: result.extractedData.building_number || '',
+            registeredArea: result.extractedData.registered_area || result.extractedData.apartment_registered_area || 0
+          }
         }
       }
     } catch (error) {
@@ -392,6 +399,7 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
     }
     
     return {
+      land_registry: null,
       registrationOffice: 'לא נמצא',
       gush: 'לא נמצא',
       parcel: 'לא נמצא',
@@ -412,17 +420,24 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
       
       if (response.ok) {
         const result = await response.json()
-        return {
-          buildingYear: result.building_year || 'לא נמצא',
-          buildingRights: result.permitted_description || 'לא נמצא',
-          permittedUse: result.permitted_use || 'לא נמצא',
-          builtArea: result.built_area || 'לא נמצא',
-          buildingDescription: result.building_description || 'לא נמצא',
-          buildingPermitNumber: result.permit_number || result.building_permit_number || 'לא נמצא',
-          buildingPermitDate: result.permit_date || result.building_permit_date || 'לא נמצא',
-          buildingFloors: result.building_floors || result.floors || 'לא נמצא',
-          buildingUnits: result.building_units || result.units || 'לא נמצא',
-          buildingDetails: result.building_details || result.additional_details || ''
+        console.log('🏗️ Building permit API response:', result)
+        
+        if (result.success && result.extractedData) {
+          // Return structured data for Step 3
+          return {
+            building_permit: result.extractedData,
+            // Also include flat fields for backward compatibility
+            buildingYear: result.extractedData.building_year || 'לא נמצא',
+            buildingRights: result.extractedData.permitted_usage || result.extractedData.permitted_description || result.extractedData.building_description || 'לא נמצא',
+            permittedUse: result.extractedData.permitted_usage || 'לא נמצא',
+            builtArea: result.extractedData.built_area || 'לא נמצא',
+            buildingDescription: result.extractedData.building_description || 'לא נמצא',
+            buildingPermitNumber: result.extractedData.permit_number || 'לא נמצא',
+            buildingPermitDate: result.extractedData.permit_date || 'לא נמצא',
+            buildingFloors: result.extractedData.building_floors || 'לא נמצא',
+            buildingUnits: result.extractedData.building_units || 'לא נמצא',
+            buildingDetails: result.extractedData.building_details || ''
+          }
         }
       }
     } catch (error) {
@@ -430,6 +445,7 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
     }
     
     return {
+      building_permit: null,
       buildingYear: 'לא נמצא',
       buildingRights: 'לא נמצא',
       permittedUse: 'לא נמצא',
@@ -452,9 +468,16 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
       
       if (response.ok) {
         const result = await response.json()
-        return {
-          sharedAreas: result.common_areas || 'לא נמצא',
-          buildingDescription: result.building_description || 'לא נמצא'
+        console.log('🏢 Shared building API response:', result)
+        
+        if (result.success && result.extractedData) {
+          // Return structured data for Step 3
+          return {
+            shared_building: result.extractedData,
+            // Also include flat fields for backward compatibility
+            sharedAreas: result.extractedData.common_areas || 'לא נמצא',
+            buildingDescription: result.extractedData.building_description || 'לא נמצא'
+          }
         }
       }
     } catch (error) {
@@ -462,6 +485,7 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
     }
     
     return {
+      shared_building: null,
       sharedAreas: 'לא נמצא',
       buildingDescription: 'לא נמצא'
     }
@@ -491,7 +515,19 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
         if (interiorData.success) {
           // Handle both nested and flat extractedData structure
           const extracted = interiorData.extractedData || interiorData
-          result.propertyLayoutDescription = extracted.property_layout_description || 'לא נמצא'
+          
+          // Store structured data for Step 3
+          result.interior_analysis = {
+            description: extracted.description,
+            property_layout_description: extracted.property_layout_description,
+            room_analysis: extracted.room_analysis || [],
+            condition_assessment: extracted.condition_assessment,
+            interior_features: extracted.interior_features,
+            finish_level: extracted.finish_level
+          }
+          
+          // Also include flat fields for backward compatibility
+          result.propertyLayoutDescription = extracted.description || extracted.property_layout_description || 'לא נמצא'
           result.roomAnalysis = extracted.room_analysis || []
           result.conditionAssessment = extracted.condition_assessment || 'לא נמצא'
           result.interiorFeatures = extracted.interior_features || 'לא נמצא'

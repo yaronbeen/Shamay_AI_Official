@@ -536,6 +536,32 @@ class ShumaDBEnhanced {
   }
 
   /**
+   * Parse floor value to integer, handling ranges like "8-9" by taking the first number
+   */
+  static _parseFloorsToInteger(floorsValue) {
+    if (!floorsValue) return null;
+
+    // Handle string values like "8-9" by extracting the first number
+    if (typeof floorsValue === 'string') {
+      // Extract first number from range like "8-9" -> 8
+      const match = floorsValue.match(/^(\d+)/);
+      if (match) {
+        return parseInt(match[1], 10);
+      }
+      // Try to parse the entire string as a number
+      const parsed = parseInt(floorsValue, 10);
+      return isNaN(parsed) ? null : parsed;
+    }
+
+    // If it's already a number, return it
+    if (typeof floorsValue === 'number') {
+      return floorsValue;
+    }
+
+    return null;
+  }
+
+  /**
    * Save Garmushka measurements to garmushka table + shuma
    */
   static async _saveGarmushkaData(client, shumaId, sessionId, garmushkaData) {
@@ -1025,7 +1051,7 @@ class ShumaDBEnhanced {
         sessionId,
         sharedBuildingData.buildingDescription || sharedBuildingData.building_description,
         this._validateConfidence(sharedBuildingData.buildingDescriptionConfidence || sharedBuildingData.confidence, 0.95),
-        sharedBuildingData.buildingFloors || sharedBuildingData.building_floors,
+        this._parseFloorsToInteger(sharedBuildingData.buildingFloors || sharedBuildingData.building_floors),
         this._validateConfidence(sharedBuildingData.buildingFloorsConfidence || sharedBuildingData.confidence, 0.95),
         sharedBuildingData.buildingSubPlotsCount || sharedBuildingData.building_sub_plots_count || sharedBuildingData.total_sub_plots,
         this._validateConfidence(sharedBuildingData.buildingSubPlotsCountConfidence || sharedBuildingData.confidence, 0.95),
