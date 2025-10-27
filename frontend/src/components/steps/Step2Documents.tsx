@@ -388,7 +388,7 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
             gush: data.gush || 'לא נמצא',
             parcel: data.chelka || 'לא נמצא',
             ownershipType: data.ownership_type || 'לא נמצא',
-            attachments: data.attachments_description || (Array.isArray(data.attachments) ? JSON.stringify(data.attachments) : data.attachments) || 'לא נמצא',
+            attachments: data.attachments_description || (Array.isArray(data.attachments) ? data.attachments.map((a: any) => a.description || a.type).join(', ') : data.attachments) || 'לא נמצא',
             balconyArea: data.balcony_area || 0,
             buildingNumber: data.building_number || '',
             registeredArea: data.registered_area || data.apartment_registered_area || 0,
