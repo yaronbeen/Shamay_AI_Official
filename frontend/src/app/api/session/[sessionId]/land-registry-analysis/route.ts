@@ -71,7 +71,48 @@ export async function POST(
     const extractedData = await aiResponse.json()
     console.log('✅ AI extraction completed:', extractedData)
     
-    return NextResponse.json(extractedData)
+    // Check if AI extraction was successful
+    if (!extractedData.success) {
+      console.error('❌ AI extraction failed:', extractedData.error)
+      return NextResponse.json({
+        success: false,
+        error: extractedData.error || 'AI extraction failed'
+      }, { status: 500 })
+    }
+    
+    // Save the extracted data to database
+    console.log('💾 Saving land registry extraction to database...')
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
+    const saveResponse = await fetch(`${backendUrl}/api/sessions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'save_land_registry_extraction',
+        sessionId: params.sessionId,
+        extractedData: extractedData.extractedData || extractedData
+      })
+    })
+    
+    if (!saveResponse.ok) {
+      const saveError = await saveResponse.json().catch(() => ({ error: 'Unknown save error' }))
+      console.error('❌ Failed to save land registry extraction:', saveError)
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to save extracted data to database',
+        details: saveError.error || 'Database save failed'
+      }, { status: 500 })
+    }
+    
+    const saveResult = await saveResponse.json()
+    console.log('✅ Land registry extraction saved successfully:', saveResult)
+    
+    return NextResponse.json({
+      success: true,
+      extractedData: extractedData.extractedData || extractedData,
+      saveResult
+    })
     
   } catch (error) {
     console.error('❌ Frontend API error:', error)

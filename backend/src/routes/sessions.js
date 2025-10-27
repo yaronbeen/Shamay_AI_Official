@@ -71,7 +71,7 @@ router.post('/', async (req, res) => {
       case 'save_permit_extraction': {
         // Save building permit extraction
         const { sessionId: permitSessionId, extractedData } = req.body;
-        const permitResult = await ShumaDB.savePermitExtraction(permitSessionId, extractedData);
+        const permitResult = await ShumaDB.savePermitExtraction(permitSessionId, extractedData, null);
 
         if (permitResult.error) {
           return res.status(500).json({ error: permitResult.error });
@@ -83,7 +83,7 @@ router.post('/', async (req, res) => {
       case 'save_land_registry_extraction': {
         // Save land registry extraction
         const { sessionId: lrSessionId, extractedData: lrData } = req.body;
-        const lrResult = await ShumaDB.saveLandRegistryExtraction(lrSessionId, lrData);
+        const lrResult = await ShumaDB.saveLandRegistryExtraction(lrSessionId, lrData, null);
 
         if (lrResult.error) {
           return res.status(500).json({ error: lrResult.error });
@@ -95,7 +95,7 @@ router.post('/', async (req, res) => {
       case 'save_shared_building_extraction': {
         // Save shared building order extraction
         const { sessionId: sbSessionId, extractedData: sbData } = req.body;
-        const sbResult = await ShumaDB.saveSharedBuildingExtraction(sbSessionId, sbData);
+        const sbResult = await ShumaDB.saveSharedBuildingExtraction(sbSessionId, sbData, null);
 
         if (sbResult.error) {
           return res.status(500).json({ error: sbResult.error });

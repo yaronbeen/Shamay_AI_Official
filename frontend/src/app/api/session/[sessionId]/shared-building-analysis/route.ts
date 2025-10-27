@@ -74,7 +74,48 @@ export async function POST(
     const result = await aiResponse.json()
     console.log('✅ Received AI extraction result:', result)
     
-    return NextResponse.json(result)
+    // Check if AI extraction was successful
+    if (!result.success) {
+      console.error('❌ AI extraction failed:', result.error)
+      return NextResponse.json({
+        success: false,
+        error: result.error || 'AI extraction failed'
+      }, { status: 500 })
+    }
+    
+    // Save the extracted data to database
+    console.log('💾 Saving shared building extraction to database...')
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3002'
+    const saveResponse = await fetch(`${backendUrl}/api/sessions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'save_shared_building_extraction',
+        sessionId: params.sessionId,
+        extractedData: result.extractedData || result
+      })
+    })
+    
+    if (!saveResponse.ok) {
+      const saveError = await saveResponse.json().catch(() => ({ error: 'Unknown save error' }))
+      console.error('❌ Failed to save shared building extraction:', saveError)
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to save extracted data to database',
+        details: saveError.error || 'Database save failed'
+      }, { status: 500 })
+    }
+    
+    const saveResult = await saveResponse.json()
+    console.log('✅ Shared building extraction saved successfully:', saveResult)
+    
+    return NextResponse.json({
+      success: true,
+      extractedData: result.extractedData || result,
+      saveResult
+    })
     
   } catch (error) {
     console.error('❌ Frontend API error:', error)
