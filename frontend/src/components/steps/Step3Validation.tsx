@@ -954,7 +954,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
                   <p><strong>סוג בעלות:</strong> {extractedData.land_registry.ownership_type}</p>
                 )}
                 {extractedData.attachments && (
-                  <p><strong>נספחים:</strong> {extractedData.attachments}</p>
+                  <p><strong>נספחים:</strong> {typeof extractedData.attachments === 'string' ? extractedData.attachments : Array.isArray(extractedData.attachments) ? extractedData.attachments.map((a: any) => a.description || a.type).join(', ') : 'לא נמצא'}</p>
                 )}
                 {extractedData.builtArea && (
                   <p><strong>שטח רשום:</strong> {extractedData.builtArea} מ"ר</p>
@@ -1102,11 +1102,11 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
                 <div className="relative">
                   <input
                     type="text"
-                    value={editingField === 'attachments' ? tempValue : (extractedData.attachments || '')}
+                    value={editingField === 'attachments' ? tempValue : (typeof extractedData.attachments === 'string' ? extractedData.attachments : Array.isArray(extractedData.attachments) ? extractedData.attachments.map((a: any) => a.description || a.type).join(', ') : '')}
                     onChange={(e) => setTempValue(e.target.value)}
                     onFocus={() => {
                       setEditingField('attachments')
-                      setTempValue(extractedData.attachments || '')
+                      setTempValue(typeof extractedData.attachments === 'string' ? extractedData.attachments : Array.isArray(extractedData.attachments) ? extractedData.attachments.map((a: any) => a.description || a.type).join(', ') : '')
                     }}
                     onBlur={async () => {
                       if (editingField === 'attachments') {
@@ -1488,9 +1488,9 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
                   </div>
                 ) : (
                   <>
-                    <span className="flex-1 text-right">{extractedData.attachments || 'לא נמצא'}</span>
+                    <span className="flex-1 text-right">{typeof extractedData.attachments === 'string' ? extractedData.attachments : Array.isArray(extractedData.attachments) ? (extractedData.attachments as any[]).map((a: any) => a.description || a.type).join(', ') : 'לא נמצא'}</span>
                     <button
-                      onClick={() => handleFieldEdit('attachments', extractedData.attachments || '')}
+                      onClick={() => handleFieldEdit('attachments', typeof extractedData.attachments === 'string' ? extractedData.attachments : Array.isArray(extractedData.attachments) ? (extractedData.attachments as any[]).map((a: any) => a.description || a.type).join(', ') : '')}
                       className="p-1 text-blue-600 hover:bg-blue-100 rounded"
                     >
                       <Edit3 className="w-4 h-4" />
