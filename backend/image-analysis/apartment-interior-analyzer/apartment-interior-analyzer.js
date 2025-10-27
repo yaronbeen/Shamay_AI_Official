@@ -26,6 +26,16 @@ class ApartmentInteriorAnalyzer {
                 const [header, data] = imagePathOrBase64.split(',');
                 base64Image = data;
                 mimeType = header.match(/data:([^;]+)/)[1];
+            } else if (imagePathOrBase64.startsWith('http://') || imagePathOrBase64.startsWith('https://')) {
+                // Handle HTTP/HTTPS URLs
+                const fetch = require('node-fetch');
+                const response = await fetch(imagePathOrBase64);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch image from URL: ${response.statusText}`);
+                }
+                const buffer = await response.buffer();
+                base64Image = buffer.toString('base64');
+                mimeType = response.headers.get('content-type') || 'image/jpeg';
             } else if (imagePathOrBase64.startsWith('/9j/') || imagePathOrBase64.match(/^[A-Za-z0-9+/]+=*$/)) {
                 // Handle raw base64 data
                 base64Image = imagePathOrBase64;

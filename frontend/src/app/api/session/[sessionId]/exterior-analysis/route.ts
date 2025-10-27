@@ -23,7 +23,9 @@ export async function POST(
     const exteriorUploads = uploads.filter((upload: any) => 
       upload.type === 'exterior' || 
       upload.type === 'exterior_image' ||
-      (upload.type === 'image' && upload.name?.toLowerCase().includes('exterior'))
+      upload.type === 'building_image' || // Handle building_image as exterior
+      upload.type === 'building' ||
+      (upload.type === 'image' && (upload.name?.toLowerCase().includes('exterior') || upload.name?.toLowerCase().includes('building')))
     )
     
     if (exteriorUploads.length === 0) {

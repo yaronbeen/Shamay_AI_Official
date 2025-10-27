@@ -1009,31 +1009,29 @@ class ShumaDBEnhanced {
       const shumaId = shumaResult.rows[0].id
       
       // Insert into shared_building_order
+      // Production schema has shuma_id and session_id, not filename
       const result = await client.query(`
         INSERT INTO shared_building_order (
-          filename,
-          order_issue_date, order_issue_date_confidence,
-          building_description, building_description_confidence, building_description_context,
-          building_floors, building_floors_confidence, building_floors_context,
-          building_sub_plots_count, building_sub_plots_count_confidence, building_sub_plots_count_context,
-          building_address, building_address_confidence, building_address_context,
-          total_sub_plots, total_sub_plots_confidence, total_sub_plots_context,
-          sub_plots,
-          buildings_info,
-          overall_confidence
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+          shuma_id, session_id,
+          building_description, building_description_confidence,
+          number_of_floors, number_of_floors_confidence,
+          number_of_units, number_of_units_confidence,
+          common_areas, common_areas_confidence,
+          raw_extraction
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING id
       `, [
-        documentFilename,
-        formatDateForDB(sharedBuildingData.orderIssueDate), this._validateConfidence(sharedBuildingData.orderIssueDateConfidence, 0.95),
-        sharedBuildingData.buildingDescription, this._validateConfidence(sharedBuildingData.buildingDescriptionConfidence, 0.95), sharedBuildingData.buildingDescriptionContext || '',
-        sharedBuildingData.buildingFloors, this._validateConfidence(sharedBuildingData.buildingFloorsConfidence, 0.95), sharedBuildingData.buildingFloorsContext || '',
-        sharedBuildingData.buildingSubPlotsCount, this._validateConfidence(sharedBuildingData.buildingSubPlotsCountConfidence, 0.95), sharedBuildingData.buildingSubPlotsCountContext || '',
-        sharedBuildingData.buildingAddress, this._validateConfidence(sharedBuildingData.buildingAddressConfidence, 0.95), sharedBuildingData.buildingAddressContext || '',
-        sharedBuildingData.totalSubPlots, this._validateConfidence(sharedBuildingData.totalSubPlotsConfidence, 0.95), sharedBuildingData.totalSubPlotsContext || '',
-        JSON.stringify(sharedBuildingData.subPlots || []),
-        JSON.stringify(sharedBuildingData.buildingsInfo || []),
-        this._validateConfidence(sharedBuildingData.overallConfidence, 0.90)
+        shumaId,
+        sessionId,
+        sharedBuildingData.buildingDescription || sharedBuildingData.building_description,
+        this._validateConfidence(sharedBuildingData.buildingDescriptionConfidence || sharedBuildingData.confidence, 0.95),
+        sharedBuildingData.buildingFloors || sharedBuildingData.building_floors,
+        this._validateConfidence(sharedBuildingData.buildingFloorsConfidence || sharedBuildingData.confidence, 0.95),
+        sharedBuildingData.buildingSubPlotsCount || sharedBuildingData.building_sub_plots_count || sharedBuildingData.total_sub_plots,
+        this._validateConfidence(sharedBuildingData.buildingSubPlotsCountConfidence || sharedBuildingData.confidence, 0.95),
+        sharedBuildingData.buildingAddress || sharedBuildingData.building_address || null,
+        this._validateConfidence(sharedBuildingData.confidence, 0.95),
+        JSON.stringify(sharedBuildingData) // Store all raw data
       ])
       
       const sharedBuildingId = result.rows[0].id
