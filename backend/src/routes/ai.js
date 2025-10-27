@@ -500,12 +500,30 @@ router.post('/exterior-analysis', async (req, res) => {
           structuredData: result.structuredData
         });
         
-        // Use first image's structured data for overall analysis
-        if (result.structuredData && !overallAnalysis.building_type) {
-          overallAnalysis.building_condition = result.structuredData.condition || 'לא ידוע';
-          overallAnalysis.building_features = result.structuredData.features?.join(', ') || 'לא זוהו';
-          overallAnalysis.building_type = result.structuredData.building_type || 'לא מזוהה';
-          overallAnalysis.overall_assessment = result.structuredData.overall_assessment || result.analysis;
+        // Use first image's data for overall analysis
+        if (result.success && !overallAnalysis.building_type) {
+          // The full analysis is always in result.analysis (Hebrew text)
+          overallAnalysis.overall_assessment = result.analysis;
+          
+          // Extract structured data if available (camelCase from analyzer)
+          if (result.structuredData) {
+            const cond = result.structuredData.condition;
+            overallAnalysis.building_condition = cond === 'excellent' ? 'מצוין' : 
+                                                 cond === 'good' ? 'טוב' : 
+                                                 cond === 'fair' ? 'בינוני' : 
+                                                 cond === 'poor' ? 'דורש שיפוץ' : 'לא ידוע';
+            
+            overallAnalysis.building_features = result.structuredData.features && result.structuredData.features.length > 0 
+              ? result.structuredData.features.join(', ') 
+              : 'לא זוהו';
+            
+            const type = result.structuredData.buildingType;
+            overallAnalysis.building_type = type === 'apartment_building' ? 'בניין מגורים' : 
+                                            type === 'villa' ? 'וילה' : 
+                                            type === 'commercial' ? 'מסחרי' : 
+                                            type === 'mixed_use' ? 'מעורב' : 
+                                            type === 'townhouse' ? 'בית עירוני' : 'לא מזוהה';
+          }
         }
       }
     }

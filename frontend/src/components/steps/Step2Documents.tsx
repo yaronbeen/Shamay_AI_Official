@@ -379,18 +379,21 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
         console.log('🏛️ Land registry API response:', result)
         
         if (result.success && result.extractedData) {
-          // Return structured data for Step 3
+          const data = result.extractedData
+          // Return ALL fields from API - both structured and flat
           return {
-            land_registry: result.extractedData,
-            // Also include flat fields for backward compatibility
-            registrationOffice: result.extractedData.registration_office || 'לא נמצא',
-            gush: result.extractedData.gush || 'לא נמצא',
-            parcel: result.extractedData.chelka || 'לא נמצא',
-            ownershipType: result.extractedData.ownership_type || 'לא נמצא',
-            attachments: result.extractedData.attachments || 'לא נמצא',
-            balconyArea: result.extractedData.balcony_area || 0,
-            buildingNumber: result.extractedData.building_number || '',
-            registeredArea: result.extractedData.registered_area || result.extractedData.apartment_registered_area || 0
+            land_registry: data,
+            // Flat fields for UI compatibility
+            registrationOffice: data.registration_office || 'לא נמצא',
+            gush: data.gush || 'לא נמצא',
+            parcel: data.chelka || 'לא נמצא',
+            ownershipType: data.ownership_type || 'לא נמצא',
+            attachments: data.attachments_description || (Array.isArray(data.attachments) ? JSON.stringify(data.attachments) : data.attachments) || 'לא נמצא',
+            balconyArea: data.balcony_area || 0,
+            buildingNumber: data.building_number || '',
+            registeredArea: data.registered_area || data.apartment_registered_area || 0,
+            builtArea: data.registered_area || data.apartment_registered_area || 'לא נמצא',
+            finishLevel: 'לא נמצא' // Not in tabu
           }
         }
       }
@@ -407,7 +410,9 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
       attachments: 'לא נמצא',
       balconyArea: 0,
       buildingNumber: '',
-      registeredArea: 0
+      registeredArea: 0,
+      builtArea: 'לא נמצא',
+      finishLevel: 'לא נמצא'
     }
   }
 
@@ -423,20 +428,22 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
         console.log('🏗️ Building permit API response:', result)
         
         if (result.success && result.extractedData) {
-          // Return structured data for Step 3
+          const data = result.extractedData
+          // Return ALL fields from API - both structured and flat
           return {
-            building_permit: result.extractedData,
-            // Also include flat fields for backward compatibility
-            buildingYear: result.extractedData.building_year || 'לא נמצא',
-            buildingRights: result.extractedData.permitted_usage || result.extractedData.permitted_description || result.extractedData.building_description || 'לא נמצא',
-            permittedUse: result.extractedData.permitted_usage || 'לא נמצא',
-            builtArea: result.extractedData.built_area || 'לא נמצא',
-            buildingDescription: result.extractedData.building_description || 'לא נמצא',
-            buildingPermitNumber: result.extractedData.permit_number || 'לא נמצא',
-            buildingPermitDate: result.extractedData.permit_date || 'לא נמצא',
-            buildingFloors: result.extractedData.building_floors || 'לא נמצא',
-            buildingUnits: result.extractedData.building_units || 'לא נמצא',
-            buildingDetails: result.extractedData.building_details || ''
+            building_permit: data,
+            // Flat fields for UI compatibility
+            buildingYear: data.building_year || 'לא נמצא',
+            buildingRights: data.permitted_usage || data.permitted_description || data.building_description || 'לא נמצא',
+            permittedUse: data.permitted_usage || data.permitted_description || 'לא נמצא',
+            builtArea: data.built_area || 'לא נמצא',
+            buildingDescription: data.building_description || 'לא נמצא',
+            buildingPermitNumber: data.permit_number || 'לא נמצא',
+            buildingPermitDate: data.permit_date || 'לא נמצא',
+            buildingFloors: data.building_floors || 'לא נמצא',
+            buildingUnits: data.building_units || 'לא נמצא',
+            buildingDetails: data.building_details || '',
+            buildingType: 'לא מזוהה' // Not in permit
           }
         }
       }
@@ -455,7 +462,8 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
       buildingPermitDate: 'לא נמצא',
       buildingFloors: 'לא נמצא',
       buildingUnits: 'לא נמצא',
-      buildingDetails: ''
+      buildingDetails: '',
+      buildingType: 'לא מזוהה'
     }
   }
 
@@ -471,12 +479,15 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
         console.log('🏢 Shared building API response:', result)
         
         if (result.success && result.extractedData) {
-          // Return structured data for Step 3
+          const data = result.extractedData
+          // Return ALL fields from API - both structured and flat
           return {
-            shared_building: result.extractedData,
-            // Also include flat fields for backward compatibility
-            sharedAreas: result.extractedData.common_areas || 'לא נמצא',
-            buildingDescription: result.extractedData.building_description || 'לא נמצא'
+            shared_building: data,
+            // Flat fields for UI compatibility
+            sharedAreas: data.common_areas || 'לא נמצא',
+            buildingDescription: data.building_description || 'לא נמצא',
+            buildingFloors: data.building_floors || 'לא נמצא',
+            buildingUnits: data.building_sub_plots_count || data.total_sub_plots || 'לא נמצא'
           }
         }
       }
@@ -487,7 +498,9 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
     return {
       shared_building: null,
       sharedAreas: 'לא נמצא',
-      buildingDescription: 'לא נמצא'
+      buildingDescription: 'לא נמצא',
+      buildingFloors: 'לא נמצא',
+      buildingUnits: 'לא נמצא'
     }
   }
 
