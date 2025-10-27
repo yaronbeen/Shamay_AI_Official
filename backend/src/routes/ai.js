@@ -166,19 +166,19 @@ router.post('/building-permit', async (req, res) => {
     
     // Process with AI
     console.log(`🤖 Starting AI extraction...`);
-    const result = await extractor.extractAllFields(tempFilePath, { isPdf: true });
+    const result = await extractor.extractAllFields(fileBuffer, { useVision: true });
     
     console.log(`✅ AI extraction completed`);
     
     // Format response
     const responseData = {
       success: true,
-      building_year: result.permit_date ? new Date(result.permit_date).getFullYear().toString() : new Date().getFullYear().toString(),
-      permitted_description: result.permitted_description || 'לא נמצא',
-      permitted_use: result.permitted_use || 'מגורים',
-      built_area: result.built_area || '0',
-      building_description: result.permitted_description || 'לא נמצא',
-      confidence: result.confidence_scores?.overall || 0.90,
+      building_year: result.permit_date?.value ? new Date(result.permit_date.value).getFullYear().toString() : new Date().getFullYear().toString(),
+      permitted_description: result.permitted_description?.value || 'לא נמצא',
+      permitted_use: result.permitted_use?.value || 'מגורים',
+      built_area: result.built_area?.value || '0',
+      building_description: result.permitted_description?.value || 'לא נמצא',
+      confidence: result.overallConfidence || 0.90,
       extracted_at: new Date().toISOString(),
       rawData: result // Include full raw data for debugging
     };
@@ -257,20 +257,20 @@ router.post('/shared-building', async (req, res) => {
     
     // Process with AI
     console.log(`🤖 Starting AI extraction...`);
-    const result = await extractor.extractAllFields(tempFilePath, { isPdf: true });
+    const result = await extractor.extractAllFields(fileBuffer, { useVision: true });
     
     console.log(`✅ AI extraction completed`);
     
     // Format response
     const responseData = {
       success: true,
-      order_issue_date: result.order_issue_date || new Date().toISOString().split('T')[0],
-      building_description: result.building_description || 'לא נמצא',
-      building_floors: result.building_floors || '0',
-      building_sub_plots_count: result.building_sub_plots_count || '0',
-      building_address: result.building_address || 'לא נמצא',
-      total_sub_plots: result.total_sub_plots || '0',
-      confidence: result.confidence_scores?.overall || 0.90,
+      order_issue_date: result.order_issue_date?.value || new Date().toISOString().split('T')[0],
+      building_description: result.building_description?.value || 'לא נמצא',
+      building_floors: result.building_floors?.value || '0',
+      building_sub_plots_count: result.building_sub_plots_count?.value || '0',
+      building_address: result.building_address?.value || 'לא נמצא',
+      total_sub_plots: result.total_sub_plots?.value || '0',
+      confidence: result.overallConfidence || 0.90,
       extracted_at: new Date().toISOString(),
       rawData: result // Include full raw data for debugging
     };

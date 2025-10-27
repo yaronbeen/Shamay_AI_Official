@@ -31,7 +31,7 @@ export async function setupDatabase() {
         price DECIMAL(15,2),
         price_per_sqm DECIMAL(10,2),
         sale_date DATE,
-        building_year INTEGER,
+        building_year VARCHAR(100),
         parking BOOLEAN DEFAULT FALSE,
         elevator BOOLEAN DEFAULT FALSE,
         balcony DECIMAL(5,2) DEFAULT 0,
