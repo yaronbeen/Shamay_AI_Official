@@ -6,6 +6,7 @@
  */
 
 import { LandRegistryAIExtractor } from './ai-field-extractor.js';
+import { LandRegistryComprehensiveAIExtractor } from './comprehensive-ai-extractor.js';
 import { LandRegistryDatabaseClient } from './database-client.js';
 import path from 'path';
 import fs from 'fs';
@@ -26,10 +27,11 @@ async function processLandRegistryDocument(pdfPath, options = {}) {
     let extractionResults;
     
     if (options.useAI !== false) {
-      const aiExtractor = new LandRegistryAIExtractor(options.anthropicApiKey);
-      // Direct PDF processing with Anthropic
-      console.log('📄 Processing PDF directly with Anthropic...');
-      extractionResults = await aiExtractor.extractAllFields(pdfPath, { isPdf: true });
+      // Use comprehensive extractor for better results
+      const aiExtractor = new LandRegistryComprehensiveAIExtractor(options.anthropicApiKey);
+      // Direct PDF processing with comprehensive multi-stage extraction
+      console.log('📄 Processing PDF with comprehensive multi-stage extraction...');
+      extractionResults = await aiExtractor.extractAllFieldsComprehensive(pdfPath, { isPdf: true });
     } else {
       // For regex-based extraction, we'd need to extract text first
       // This would require pdf-parse or similar library

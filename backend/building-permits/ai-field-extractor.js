@@ -14,7 +14,7 @@ class BuildingPermitAIExtractor {
       apiKey: apiKey || process.env.ANTHROPIC_API_KEY
     });
     
-    this.model = 'claude-3-5-sonnet-20241022'; // User-specified model
+    this.model = 'claude-3-5-sonnet-20241022'; // Updated model
   }
 
   /**
@@ -28,55 +28,93 @@ class BuildingPermitAIExtractor {
 
     const systemPrompt = `You are an expert at extracting data from Hebrew building permit documents (היתר בנייה מילולי).
 
-CRITICAL RULES:
-1. Extract ONLY data that is actually present in the document
-2. Return ONLY Hebrew text - no English translations or fallbacks
-3. If information is not found, return null - do NOT generate or guess data
-4. Do NOT provide default values or placeholder text
-5. All extracted text must be in Hebrew as it appears in the document
+Extract the following information with high accuracy and return ONLY valid JSON:
+
+CRITICAL EXTRACTION RULES:
+
+1. PERMIT DATE (permit_date) - VERY IMPORTANT:
+   - ALWAYS look for "מועד קביעת ההיתר" at the BOTTOM of the document
+   - IGNORE any other dates in the document (headers, middle sections, application dates)
+   - This is the FINAL determination date, usually with an official stamp
+   - Look for exact phrases: "מועד קביעת ההיתר", "מועד קביעה", "נקבע ביום", "תאריך נתינת היתר"
+   - Must be in the signature/stamp area at the bottom of the last page
+   - If "מועד קביעת ההיתר" is not found, return null rather than guessing
+
+2. LOCAL COMMITTEE NAME (local_committee_name) - CRITICAL RULES:
+   - ABSOLUTE REQUIREMENT: MUST include specific city name
+   - Generic "הועדה המקומית לתכנון ובנייה" WITHOUT city name = INVALID = return null
+   - If you CANNOT find the city name with 100% certainty, return null with confidence 0
+   - REQUIRED format: "הועדה המקומית לתכנון ובנייה [EXACT_CITY_NAME]"
+   - Search locations in this order:
+     1. Official stamp/seal area at bottom (primary location)
+     2. Signature area and around stamps
+     3. Document letterhead at top
+     4. Any municipal logos or emblems
+     5. Address fields or contact information
+     6. Throughout the document text
+   - Look for city names like: אשקלון, נתניה, גבעתיים, תל אביב, ירושלים, חיפה, באר שבע
+   - VALIDATION: If committee name does not contain a specific city, return null instead
+   - Better to return null than generic name without city
+
+3. PERMITTED DESCRIPTION (permitted_description) - ABSOLUTE STRICTNESS REQUIRED:
+   - Extract ONLY if you find EXPLICIT section starting with: "מותר:", "רשאי:", "מאושר:", "מורשה:"
+   - CRITICAL: Do NOT extract from:
+     * תנאים מיוחדים (special conditions)
+     * כתובות או גוש/חלקה (addresses or plot numbers)
+     * תכנית מתאר (master plan references)
+     * כללי instructions or conditions
+     * תיאור הנכס (property descriptions)
+   - ONLY extract text that explicitly says what construction is PERMITTED
+   - If section does NOT start with "מותר:" or "רשאי:", return null with confidence 0
+   - Better to return null than extract wrong content
+   - DO NOT make up, summarize, or invent any content
+   - If unsure or cannot find clear "מותר:" section, return null
 
 REQUIRED FIELDS:
-- permit_number: Building permit number (מספר היתר בנייה) - return null if not found
-- permit_date: Date of the building permit (תאריך היתר בנייה) - return null if not found
-- permitted_description: What is permitted/allowed (מותר - תיאור מה מותר לבנות). Look for the detailed "מותר:" section that contains specific building specifications with exact measurements. CRITICAL: Copy the text EXACTLY as it appears in the document. Do not paraphrase, summarize, or rearrange. Copy word-for-word, maintaining the original punctuation, line breaks, and text structure. The text should start with "מותר:" and include the exact Hebrew text as written in the document. - return null if not found
-- permit_issue_date: Date when permit was issued (תאריך הפקת היתר) - return null if not found
-- local_committee_name: Name of local planning committee (שם הוועדה המקומית) - return null if not found
+- permit_number: Building permit number (מספר היתר בנייה)
+- permit_date: Date from "מועד קביעת ההיתר" ONLY (bottom of document)
+- permitted_description: EXACT Hebrew text of what is permitted (מותר)
+- permit_issue_date: Date when permit was issued (תאריך הפקת היתר)
+- local_committee_name: Committee name from permit stamp area ONLY
 
 ADDITIONAL FIELDS (if found):
-- property_address: Address of the property (כתובת הנכס) - return null if not found
-- gush: Block number (גוש) - return null if not found
-- chelka: Plot number (חלקה) - return null if not found
-- sub_chelka: Sub-plot number (תת חלקה) - return null if not found
+- property_address: Address of the property (כתובת הנכס)
+- gush: Block number (גוש)
+- chelka: Plot number (חלקה)
+- sub_chelka: Sub-plot number (תת חלקה)
 
 CONFIDENCE SCORES:
 For each field, provide a confidence score from 0-1 based on text clarity and certainty.
 Also provide context explaining where/how the information was found.
 
-Hebrew terms to look for:
+Hebrew search terms:
 - היתר בנייה, רישיון בנייה
 - מספר היתר, מס' היתר
-- תאריך, מיום
-- ועדה מקומית, ועדה מקומית לתכנון ובנייה
-- מותר, רשאי (especially sections starting with "מותר:")
-- תאריך הפקה, תאריך הוצאה
+- מועד קביעת ההיתר, מועד קביעה, נקבע ביום, תאריך נתינת היתר
+- ועדה מקומית + [עיר], הועדה המקומית לתכנון ובנייה + [מיקום]
+- מותר, רשאי, מאושר, מורשה, תיאור מה מותר לבנות
+- עיר, עירייה, רשות מקומית, מועצה מקומית
+- אשקלון, נתניה, גבעתיים, תל אביב, ירושלים, חיפה, באר שבע
 - גוש, חלקה, תת חלקה
 - כתובת, רחוב
-- בית מגורים משותף, בניין, קומות, יחידות דיור
-- שטחי עזר, מגורים, מרפסות, הול כניסה
-- הקמת בית מגורים משותף, בניין מס', ק.ק.ק, ח.טכני
-- שטחי עזר (ח. אשפה גז מחסנים), מעליות וצנרת, ממיידים
-- מגורים בשטח, מרפסות פתוחות, הול כניסה וח.מדרגות
 
-IMPORTANT: Do NOT extract from "תנאים מיוחדים להיתר", "תיאור מה מותר", or general company information sections. Look for the detailed "מותר:" section that contains specific building specifications with exact measurements. 
+CRITICAL EXTRACTION LOCATION GUIDANCE:
+- permit_date: ONLY from BOTTOM of LAST PAGE near official stamps - look for "מועד קביעת ההיתר"
+- local_committee_name: Search ENTIRE document for city name - check stamps, letterheads, addresses, text
+- permitted_description: ONLY from dedicated "מותר:" sections - not addresses or general descriptions
+- permit_number: Usually at top or in document header
+- permit_issue_date: Date of document creation/issuance (different from determination date)
 
-CRITICAL: Copy the text EXACTLY as it appears in the document. The text should look like this format:
-"מותר: הקמת בית מגורים משותף( בניין מס' 11) בן 7 ק. ק.ק. +ח.טכני על הגג סה"כ 26 יח"ד המכיל :
-שטחי עזר (ח. אשפה גז מחסנים, 183.46 מ"ר; מעליות וצנרת 12.79 מ"ר; ממ"דים 312.0 מ"ר;
-מגורים בשטח 2735.33 מ"ר; מרפסות פתוחות 486.02 מ"ר; הול כניסה וח.מדרגות 596.67 מ"ר;
-ח. מכונות על הגג בשטח 18.44 מ"ר בריכת מים; ק.ע. מפולשת 30.27 מ"ר;
-אנטנה מערכת סולרית גדרות ופתוח ;הכל בהתאם לתכנית."
+VALIDATION RULES:
+- If permit_date does not come from "מועד קביעת ההיתר" area, return null
+- Committee name: MUST include specific city name - search entire document if needed
+- If description is not from a "מותר:" section, return null
 
-Do not rearrange, summarize, or paraphrase. Copy word-for-word.
+SEARCH STRATEGY FOR COMMITTEE:
+- If initial search finds generic name, expand search to entire document
+- Look for any city name mentioned anywhere in the document
+- Common city patterns: [עיר] + municipality, addresses with city names
+- Stamp areas may have abbreviated city names or municipal symbols
 
 Return ONLY the JSON object with this structure:
 {
@@ -128,7 +166,7 @@ Return ONLY the JSON object with this structure:
             },
             {
               type: "text",
-              text: "Extract structured data from this Hebrew building permit document (היתר בנייה מילולי).\n\nCRITICAL RULES:\n1. Extract ONLY data that is actually present in the document\n2. Return ONLY Hebrew text - no English translations\n3. If information is not found, return null - do NOT generate or guess data\n4. Do NOT provide default values or placeholder text\n\nFocus on finding the Hebrew text and extracting the required fields."
+              text: "Extract structured data from this Hebrew building permit document (היתר בנייה מילולי).\n\nCRITICAL EXTRACTION RULES:\n1. PERMIT DATE: Look ONLY at BOTTOM of document for 'מועד קביעת ההיתר' - ignore other dates\n2. COMMITTEE NAME: MUST include specific city name - search entire document if needed\n3. PERMITTED DESCRIPTION: ONLY from sections starting with 'מותר:' - not addresses or conditions\n4. If any field cannot be found with 100% certainty, return null\n5. Return ONLY Hebrew text - no English translations\n6. Do NOT generate or guess any data\n\nFocus on finding the Hebrew text and extracting the required fields with strict validation."
             }
           ]
         }
@@ -140,11 +178,13 @@ Return ONLY the JSON object with this structure:
           role: "user",
           content: `Extract structured data from this Hebrew building permit document:
 
-CRITICAL RULES:
-1. Extract ONLY data that is actually present in the document
-2. Return ONLY Hebrew text - no English translations
-3. If information is not found, return null - do NOT generate or guess data
-4. Do NOT provide default values or placeholder text
+CRITICAL EXTRACTION RULES:
+1. PERMIT DATE: Look ONLY at BOTTOM of document for 'מועד קביעת ההיתר' - ignore other dates
+2. COMMITTEE NAME: MUST include specific city name - search entire document if needed
+3. PERMITTED DESCRIPTION: ONLY from sections starting with 'מותר:' - not addresses or conditions
+4. If any field cannot be found with 100% certainty, return null
+5. Return ONLY Hebrew text - no English translations
+6. Do NOT generate or guess any data
 
 ${input}`
         }

@@ -227,8 +227,8 @@ router.post('/shared-building', async (req, res) => {
     console.log(`🔍 Backend AI: Processing shared building order for session: ${sessionId}`);
     console.log(`📥 Downloading from: ${fileUrl}`);
     
-    // Dynamically import the ESM module
-    const { SharedBuildingAIExtractor } = await import('../../shared-building-order/ai-field-extractor.js');
+    // Dynamically import the Hebrew ESM module for better extraction
+    const { SharedBuildingAIExtractor } = await import('../../shared-building-order/ai-field-extractor-hebrew.js');
     const extractor = new SharedBuildingAIExtractor(process.env.ANTHROPIC_API_KEY);
     
     // Download the file from the URL
@@ -317,7 +317,7 @@ router.post('/interior-analysis', async (req, res) => {
     console.log(`🏠 Backend AI: Processing ${images.length} interior images for session: ${sessionId}`);
     
     // Dynamically import the ESM module
-    const { ApartmentInteriorAnalyzer } = await import('../../image-analysis/apartment-interior-analyzer/apartment-interior-analyzer.js');
+    const ApartmentInteriorAnalyzer = (await import('../../image-analysis/apartment-interior-analyzer/apartment-interior-analyzer.js')).default;
     const analyzer = new ApartmentInteriorAnalyzer(process.env.ANTHROPIC_API_KEY);
     
     const analyzedImages = [];
@@ -397,7 +397,7 @@ router.post('/exterior-analysis', async (req, res) => {
     console.log(`🏢 Backend AI: Processing ${images.length} exterior images for session: ${sessionId}`);
     
     // Dynamically import the ESM module
-    const { BuildingExteriorAnalyzer } = await import('../../image-analysis/building-exterior-analyzer/building-exterior-analyzer.js');
+    const BuildingExteriorAnalyzer = (await import('../../image-analysis/building-exterior-analyzer/building-exterior-analyzer.js')).default;
     const analyzer = new BuildingExteriorAnalyzer(process.env.ANTHROPIC_API_KEY);
     
     const analyzedImages = [];
