@@ -9,7 +9,7 @@ import { Step2Documents } from './steps/Step2Documents'
 import { Step3Validation } from './steps/Step3Validation'
 import { Step4AIAnalysis } from './steps/Step4AIAnalysis'
 import { Step5Export } from './steps/Step5Export'
-import { DocumentContent } from './DocumentContent'
+import { Step3PDFViewer } from './Step3PDFViewer'
 
 export interface ValuationData {
   // Basic Property Information
@@ -199,6 +199,7 @@ export function ValuationWizard() {
   const [currentStep, setCurrentStep] = useState(1)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [sessionLoading, setSessionLoading] = useState(true)
+  const [showPDFViewer, setShowPDFViewer] = useState(false)
   const [data, setData] = useState<ValuationData>({
     street: '',
     buildingNumber: '',
@@ -381,7 +382,7 @@ export function ValuationWizard() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">יוצר מושב חדש...</p>
+          <p className="text-gray-600">מייצר שומה חדשה..</p>
         </div>
       </div>
     )

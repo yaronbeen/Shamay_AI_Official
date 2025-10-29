@@ -36,35 +36,35 @@ const DOCUMENT_TYPES = {
     label: 'היתר בניה',
     description: 'היתר בניה ותשריט',
     icon: FileText,
-    color: 'green',
+    color: 'blue',
     required: false
   },
   condo: {
     label: 'צו בית משותף',
     description: 'צו בית משותף',
     icon: FileText,
-    color: 'purple',
+    color: 'blue',
     required: false
   },
   planning: {
     label: 'מידע תכנוני',
     description: 'מידע תכנוני נוסף',
     icon: FileText,
-    color: 'orange',
+    color: 'blue',
     required: false
   },
   building_image: {
     label: 'תמונת חזית הבניין',
     description: 'תמונת החזית/שער הכניסה (תוצג בראש הדוח)',
     icon: Image,
-    color: 'indigo',
+    color: 'blue',
     required: false
   },
   interior_image: {
     label: 'תמונות פנים הדירה',
     description: 'תמונות פנים הדירה (עד 3 תמונות)',
     icon: Image,
-    color: 'pink',
+    color: 'blue',
     required: false
   }
 }
@@ -747,64 +747,103 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
     if (!hasSelected && imageData.length > 0) {
       imageData[0].isSelected = true
       
-      // Update uploads state to mark first image as selected
+      // Update uploads state to mark first BUILDING image as selected (not interior)
       setUploads(prev => prev.map(u => 
-        (u.type === 'building_image' || u.type === 'interior_image') && u.status === 'completed' && u.id === imageUploads[0].id
+        u.type === 'building_image' && u.status === 'completed' && u.id === imageUploads[0].id
           ? { ...u, isSelected: true }
           : { ...u, isSelected: false }
       ))
     }
     
-    const selectedImage = imageData.find(img => img.isSelected)
+    // Find selected image - prioritize building_image type only
+    const selectedImage = imageData.find(img => img.isSelected && img.type === 'building_image') 
+                       || imageData.find(img => img.type === 'building_image')
     
     console.log('Updating image data:', { imageData, selectedImage, selectedImagePreview: selectedImage?.preview })
     
       updateData({
       propertyImages: imageData,
-      selectedImagePreview: selectedImage?.preview || imageData[0]?.preview
+      selectedImagePreview: selectedImage?.preview || null
     })
   }
 
   const handleRemoveUpload = async (uploadId: string) => {
     const upload = uploads.find(u => u.id === uploadId)
     
-    // Delete from session if it has a session ID
-    if (sessionId && upload) {
+    if (!upload) return
+    
+    console.log(`🗑️ Removing upload ${uploadId} (${upload.type})`)
+    
+    // Update local state first
+    setUploads(prev => {
+      const remaining = prev.filter(u => u.id !== uploadId)
+      
+      // Handle image types
+      if (upload.type === 'building_image' || upload.type === 'interior_image') {
+        const remainingImages = remaining.filter(u => (u.type === 'building_image' || u.type === 'interior_image') && u.status === 'completed')
+        
+        // Handle interior images - remove from interiorImages array
+        if (upload.type === 'interior_image') {
+          const remainingInteriorImages = remaining
+            .filter(u => u.type === 'interior_image' && u.status === 'completed')
+            .map(u => u.preview)
+            .filter(Boolean)
+          
+          console.log('🖼️ Updating interior images:', {
+            removed: upload.preview,
+            remaining: remainingInteriorImages.length
+          })
+          
+          updateData({ 
+            interiorImages: remainingInteriorImages,
+            propertyImages: remainingImages.map(u => ({
+              name: u.file.name,
+              preview: u.preview,
+              isSelected: u.isSelected || false
+            }))
+          })
+        } else if (upload.type === 'building_image') {
+          // Handle building images - update selectedImagePreview
+          const buildingImages = remainingImages.filter(u => u.type === 'building_image')
+          const selectedBuildingImage = buildingImages.find(u => u.isSelected) || buildingImages[0]
+          
+          console.log('🏢 Updating building images:', {
+            removed: upload.preview,
+            remaining: buildingImages.length,
+            newSelected: selectedBuildingImage?.preview
+          })
+          
+          updateData({ 
+            propertyImages: remainingImages.map(u => ({
+              name: u.file.name,
+              preview: u.preview,
+              isSelected: u.isSelected || false
+            })),
+            selectedImagePreview: selectedBuildingImage?.preview || null
+          })
+        }
+      }
+      
+      return remaining
+    })
+    
+    // Delete from blob storage if it has a URL
+    if (upload.url) {
       try {
-        console.log(`🗑️ Deleting upload ${uploadId} from session ${sessionId}`)
-        const response = await fetch(`/api/session/${sessionId}/upload/${uploadId}`, {
+        console.log(`🗑️ Deleting file from blob storage: ${upload.url}`)
+        const response = await fetch(upload.url, {
           method: 'DELETE'
         })
         
         if (response.ok) {
-          console.log(`✅ Upload ${uploadId} deleted from session`)
+          console.log(`✅ File deleted from blob storage`)
         } else {
-          console.error(`❌ Failed to delete upload ${uploadId} from session`)
+          console.warn(`⚠️ Could not delete file from blob storage (status: ${response.status})`)
         }
       } catch (error) {
-        console.error(`❌ Error deleting upload ${uploadId} from session:`, error)
+        console.error(`❌ Error deleting file from blob storage:`, error)
       }
     }
-    
-    // Update local state
-    setUploads(prev => {
-      const remaining = prev.filter(u => u.id !== uploadId)
-      
-      if (upload?.type === 'building_image' || upload?.type === 'interior_image') {
-        const remainingImages = remaining.filter(u => (u.type === 'building_image' || u.type === 'interior_image') && u.status === 'completed')
-        const selectedImage = remainingImages.find(u => u.isSelected)
-        
-        updateData({ 
-          propertyImages: remainingImages.map(u => ({
-            name: u.file.name,
-            preview: u.preview,
-            isSelected: u.isSelected || false
-          })),
-          selectedImagePreview: selectedImage?.preview || remainingImages[0]?.preview
-        })
-      }
-      return remaining
-    })
   }
 
   const handleSelectImage = (uploadId: string) => {
@@ -814,11 +853,12 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
         isSelected: upload.id === uploadId && (upload.type === 'building_image' || upload.type === 'interior_image')
       }))
       
-      // Update data immediately
+      // Update data immediately - but only use building_image for document preview
       const imageUploads = updated.filter(u => (u.type === 'building_image' || u.type === 'interior_image') && u.status === 'completed')
-      const selectedImage = imageUploads.find(u => u.isSelected)
+      const buildingImages = updated.filter(u => u.type === 'building_image' && u.status === 'completed')
+      const selectedBuildingImage = buildingImages.find(u => u.isSelected) || buildingImages[0]
       
-      console.log('Selecting image:', { uploadId, selectedImage, preview: selectedImage?.preview })
+      console.log('Selecting image:', { uploadId, selectedBuildingImage, preview: selectedBuildingImage?.preview })
       
       updateData({ 
         propertyImages: imageUploads.map(u => ({
@@ -826,7 +866,7 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
           preview: u.preview,
           isSelected: u.isSelected || false
         })),
-        selectedImagePreview: selectedImage?.preview
+        selectedImagePreview: selectedBuildingImage?.preview || null
       })
       
       return updated
@@ -1281,14 +1321,6 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
         </div>
       )}
 
-      {/* Debug Info */}
-      <div className="mt-8 p-4 bg-gray-100 rounded-lg">
-        <h4 className="font-semibold mb-2">Debug Info:</h4>
-        <p>Selected Image Preview: {data.selectedImagePreview ? 'Present' : 'Missing'}</p>
-        <p>Property Images: {data.propertyImages?.length || 0}</p>
-        <p>Uploads: {uploads.filter(u => u.type === 'building_image' || u.type === 'interior_image').length}</p>
-        <p>Current Data: {JSON.stringify({ selectedImagePreview: data.selectedImagePreview, propertyImages: data.propertyImages }, null, 2)}</p>
-      </div>
 
       {/* Validation Summary */}
       <div className="mt-8">

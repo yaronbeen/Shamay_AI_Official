@@ -273,14 +273,14 @@ export default function WizardPage() {
         }
         
         // For objects/arrays, compare JSON strings (simple but effective)
-        const oldJSON = JSON.stringify(oldValue)
-        const newJSON = JSON.stringify(newValue)
+        const oldJSON = JSON.stringify(oldValue) || ''
+        const newJSON = JSON.stringify(newValue) || ''
         if (oldJSON !== newJSON) {
           changedFields.push(key)
           console.log(`🔍 Change detected in ${key}:`, {
-            oldLength: oldJSON.length,
-            newLength: newJSON.length,
-            sample: newJSON.substring(0, 100)
+            oldLength: oldJSON?.length || 0,
+            newLength: newJSON?.length || 0,
+            sample: newJSON ? newJSON.substring(0, 100) : ''
           })
           return true
         }
@@ -504,7 +504,7 @@ export default function WizardPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">יוצר מושב חדש...</p>
+          <p className="text-gray-600">מייצר שומה חדשה..</p>
         </div>
       </div>
     )
@@ -552,13 +552,6 @@ export default function WizardPage() {
         </div>
       </nav>
 
-      {/* Debug info */}
-      {sessionId && (
-        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 mb-4">
-          <p className="text-sm">✅ Session ID: {sessionId}</p>
-          <p className="text-xs">Session is active and ready for uploads</p>
-        </div>
-      )}
       
       <div className="w-full px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">

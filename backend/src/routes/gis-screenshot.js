@@ -18,6 +18,17 @@ router.post('/', async (req, res) => {
 
   console.log(`📸 GIS Screenshot request - cropMode: ${cropMode}, URL: ${govmapUrl}`);
 
+  // Remove 'in' parameter from URL to hide sidebar
+  let cleanedUrl = govmapUrl;
+  try {
+    const urlObj = new URL(govmapUrl);
+    urlObj.searchParams.delete('in'); // Remove info panel parameter
+    cleanedUrl = urlObj.toString();
+    console.log(`🧹 Cleaned URL (removed 'in' param): ${cleanedUrl}`);
+  } catch (e) {
+    console.warn('⚠️ Could not parse URL, using original');
+  }
+
   let browser;
   try {
     const isVercel = !!process.env.VERCEL || !!process.env.VERCEL_ENV;
@@ -92,6 +103,94 @@ router.post('/', async (req, res) => {
     // Wait for map to load
     console.log(`⏳ Waiting for map to load...`);
     await new Promise(resolve => setTimeout(resolve, 3000));
+
+    // Debug: Check what's on the page before hiding anything
+    console.log(`🔍 Debugging page content...`);
+    const pageInfo = await page.evaluate(() => {
+      const mapElements = document.querySelectorAll('*');
+      const mapClasses = Array.from(mapElements).map(el => el.className).filter(c => c);
+      const mapIds = Array.from(mapElements).map(el => el.id).filter(id => id);
+      
+      return {
+        totalElements: mapElements.length,
+        mapClasses: mapClasses.slice(0, 20), // First 20 classes
+        mapIds: mapIds.slice(0, 20), // First 20 IDs
+        url: window.location.href,
+        title: document.title
+      };
+    });
+    console.log('📊 Page info:', pageInfo);
+
+    // Hide sidebar panels using GovMap's actual HTML structure
+    console.log(`🎨 Hiding GovMap sidebar panels...`);
+    const debugInfo = await page.evaluate(() => {
+      let hiddenCount = 0;
+      
+      // Method 1: Hide elements with data-scnshotdisplay="hide" attribute (GovMap's own hiding attribute)
+      const dataHideElements = document.querySelectorAll('[data-scnshotdisplay="hide"]');
+      dataHideElements.forEach(element => {
+        element.style.display = 'none';
+        element.style.visibility = 'hidden';
+        hiddenCount++;
+      });
+      
+      // Method 2: Hide panels container
+      const panelsContainers = document.querySelectorAll('[class*="_panelsContainer"]');
+      panelsContainers.forEach(element => {
+        element.style.display = 'none';
+        element.style.visibility = 'hidden';
+        hiddenCount++;
+      });
+      
+      // Method 3: Hide side panels (elements with _isSidePanel class)
+      const sidePanels = document.querySelectorAll('[class*="_isSidePanel"]');
+      sidePanels.forEach(element => {
+        element.style.display = 'none';
+        element.style.visibility = 'hidden';
+        hiddenCount++;
+      });
+      
+      // Method 4: Hide panel IDs (e.g., panel-EntitiesDetails)
+      const panelIds = document.querySelectorAll('[id^="panel-"]');
+      panelIds.forEach(element => {
+        element.style.display = 'none';
+        element.style.visibility = 'hidden';
+        hiddenCount++;
+      });
+      
+      // Method 5: Hide search results containers
+      const searchResultsContainers = document.querySelectorAll('[class*="_searchResultsContainer"]');
+      searchResultsContainers.forEach(element => {
+        element.style.display = 'none';
+        element.style.visibility = 'hidden';
+        hiddenCount++;
+      });
+      
+      // Method 6: Hide entities details containers
+      const entitiesDetailsContainers = document.querySelectorAll('#entities-details-container, [id*="entitiesDetails"], [class*="_entitiesDetailsContainer"]');
+      entitiesDetailsContainers.forEach(element => {
+        element.style.display = 'none';
+        element.style.visibility = 'hidden';
+        hiddenCount++;
+      });
+      
+      console.log(`✅ Hidden ${hiddenCount} GovMap sidebar/panel elements`);
+      
+      // Return debug info
+      return {
+        dataHideCount: dataHideElements.length,
+        panelsContainerCount: panelsContainers.length,
+        sidePanelCount: sidePanels.length,
+        panelIdCount: panelIds.length,
+        searchResultsCount: searchResultsContainers.length,
+        entitiesDetailsCount: entitiesDetailsContainers.length,
+        totalHidden: hiddenCount
+      };
+    });
+    console.log('🔍 Hiding debug info:', debugInfo);
+
+    // Wait a bit more for the UI changes to take effect
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Take screenshot
     console.log(`📸 Capturing screenshot...`);

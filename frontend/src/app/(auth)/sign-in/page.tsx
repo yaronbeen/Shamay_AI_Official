@@ -107,11 +107,6 @@ export default function SignInPage() {
                   {isLoading ? 'מתחבר...' : 'התחבר'}
                 </Button>
                 
-                {/* Development Admin Access */}
-                <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <p className="text-xs text-yellow-800 mb-2">🔧 גישה למפתחים:</p>
-                  <p className="text-xs text-yellow-700">admin@shamay.ai / admin123</p>
-                </div>
               </form>
             </TabsContent>
             

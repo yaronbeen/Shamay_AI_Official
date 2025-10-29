@@ -238,7 +238,7 @@ class ShumaDBEnhanced {
         ) RETURNING id
       `, [
         sessionId, organizationId, userId,
-        valuationData.street || '', valuationData.buildingNumber || '', valuationData.city || '',
+        valuationData.street || '', valuationData.buildingNumber || '', String(valuationData.city || ''),
         valuationData.neighborhood || '', valuationData.fullAddress || '', valuationData.rooms || '0.0',
         valuationData.floor || '0', valuationData.airDirections || '', valuationData.area || 0,
         valuationData.propertyEssence || '', valuationData.clientName || '', formatDateForDB(valuationData.visitDate),

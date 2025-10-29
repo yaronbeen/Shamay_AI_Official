@@ -24,6 +24,10 @@ const nextConfig = {
         source: '/api/garmushka/:path*',
         destination: `${backendUrl}/api/garmushka/:path*`,
       },
+      {
+        source: '/api/address-to-govmap',
+        destination: `${backendUrl}/api/address-to-govmap`,
+      },
     ];
   },
   // Keep existing configuration

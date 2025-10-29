@@ -4,6 +4,8 @@ import { CheckCircle, XCircle, AlertTriangle, FileText, Building, Users, MapPin,
 import { ValuationData } from '../ValuationWizard'
 import { useState, useEffect } from 'react'
 import { DataSource } from '../ui/DataSource'
+import { ProvenanceViewer } from '../ProvenanceViewer'
+import { Step3PDFViewer } from '../Step3PDFViewer'
 
 interface Step3ValidationProps {
   data: ValuationData
@@ -117,6 +119,8 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [allFiles, setAllFiles] = useState<Array<{type: string, name: string, preview?: string, url?: string, file?: File}>>([])
   const [filesLoading, setFilesLoading] = useState(true)
+  const [showProvenanceViewer, setShowProvenanceViewer] = useState(false)
+  const [showPDFViewer, setShowPDFViewer] = useState(false)
   
   // AI Extraction History
   const [aiExtractions, setAIExtractions] = useState<any[]>([])
@@ -792,8 +796,8 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
         </div>
 
       {/* Document Viewer and Data Validation */}
-      <div className="grid grid-cols-2 lg:grid-cols-1 gap-6 mb-6">
-        {/* Left Panel - Document Viewer */}
+      <div className="grid grid-cols-1 gap-6 mb-6">
+        {/* Left Panel - PDF Viewer */}
         <div className="bg-white rounded-lg border border-gray-200 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-2 text-right">צפייה במסמכים</h3>
           
@@ -939,299 +943,15 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
             </div>
           )}
 
-          {/* Extracted Data Summary */}
-          {/* {Object.keys(extractedData).length > 0 && (
-            <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <h4 className="font-semibold text-yellow-900 mb-3">סיכום נתונים שחולצו</h4>
-              <div className="space-y-2 text-sm">
-                {extractedData.land_registry?.registration_office && (
-                  <p><strong>משרד רישום מקרקעין:</strong> {extractedData.land_registry.registration_office}</p>
-                )}
-                {extractedData.land_registry?.gush && (
-                  <p><strong>גוש:</strong> {extractedData.land_registry.gush} | <strong>חלקה:</strong> {extractedData.land_registry.chelka}</p>
-                )}
-                {extractedData.land_registry?.ownership_type && (
-                  <p><strong>סוג בעלות:</strong> {extractedData.land_registry.ownership_type}</p>
-                )}
-                {extractedData.attachments && (
-                  <p><strong>נספחים:</strong> {typeof extractedData.attachments === 'string' ? extractedData.attachments : Array.isArray(extractedData.attachments) ? extractedData.attachments.map((a: any) => a.description || a.type).join(', ') : 'לא נמצא'}</p>
-                )}
-                {extractedData.builtArea && (
-                  <p><strong>שטח רשום:</strong> {extractedData.builtArea} מ"ר</p>
-                )}
-              </div>
-            </div> */}
         </div>
         </div>
-
-        {/* Right Panel - Data Validation Form */}
-        {/* <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">אימות נתונים</h3>
-          <p className="text-gray-600 text-sm mb-6 text-right">
-            סקור ואמת את הנתונים שחולצו. בצע תיקונים נחוצים.
-          </p>
-
-          Legal Status Section
-      <div className="mb-6">
-            <h4 className="text-md font-semibold text-gray-900 mb-4 text-right">מצב משפטי</h4>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                  משרד רישום מקרקעין
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={editingField === 'registrationOffice' ? tempValue : (extractedData.land_registry?.registration_office || '')}
-                    onChange={(e) => setTempValue(e.target.value)}
-                    onFocus={() => {
-                      setEditingField('registrationOffice')
-                      setTempValue(extractedData.land_registry?.registration_office || '')
-                    }}
-                    onBlur={async () => {
-                      if (editingField === 'registrationOffice') {
-                        await updateExtractedData('registrationOffice', tempValue)
-                        setEditingField(null)
-                      }
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-right"
-                    placeholder="הזן משרד רישום מקרקעין"
-                  />
-                  <DataSource 
-                    source="tabu" 
-                    details="נשלף מתוך תעודת בעלות (עמוד 1)"
-                    className="absolute left-2 top-2"
-                  />
-                </div>
-      </div>
-
-              <div className="grid grid-cols-2 gap-4">
-          <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                    מספר גוש
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={editingField === 'gush' ? tempValue : (extractedData.land_registry?.gush?.toString() || '')}
-                      onChange={(e) => setTempValue(e.target.value)}
-                      onFocus={() => {
-                        setEditingField('gush')
-                        setTempValue(extractedData.land_registry?.gush?.toString() || '')
-                      }}
-                      onBlur={async () => {
-                        if (editingField === 'gush') {
-                          await updateExtractedData('gush', tempValue)
-                          setEditingField(null)
-                        }
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-right"
-                      placeholder="הזן מספר גוש"
-                    />
-                    <DataSource 
-                      source="tabu" 
-                      details="נשלף מתוך תעודת בעלות (עמוד 1)"
-                      className="absolute left-2 top-2"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                    מספר חלקה
-                  </label>
-                  <div className="relative">
-                  <input
-                    type="text"
-                      value={editingField === 'parcel' ? tempValue : (extractedData.land_registry?.chelka?.toString() || '')}
-                      onChange={(e) => setTempValue(e.target.value)}
-                      onFocus={() => {
-                        setEditingField('parcel')
-                        setTempValue(extractedData.land_registry?.chelka?.toString() || '')
-                      }}
-                      onBlur={async () => {
-                        if (editingField === 'parcel') {
-                          await updateExtractedData('parcel', tempValue)
-                          setEditingField(null)
-                        }
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-right"
-                      placeholder="הזן מספר חלקה"
-                    />
-                    <DataSource 
-                      source="tabu" 
-                      details="נשלף מתוך תעודת בעלות (עמוד 1)"
-                      className="absolute left-2 top-2"
-                    />
-                  </div>
-                </div>
-                </div>
-                
-                <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                  סוג בעלות
-                </label>
-                <div className="relative">
-                  <select
-                    value={editingField === 'ownershipType' ? tempValue : (extractedData.ownershipType || '')}
-                    onChange={async (e) => {
-                      setTempValue(e.target.value)
-                      await updateExtractedData('ownershipType', e.target.value)
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-right"
-                  >
-                    <option value="">בחר סוג בעלות</option>
-                    <option value="בעלות פרטית">בעלות פרטית</option>
-                    <option value="בעלות משותפת">בעלות משותפת</option>
-                    <option value="חכירה">חכירה</option>
-                    <option value="שכירות">שכירות</option>
-                  </select>
-                  <DataSource 
-                    source="tabu" 
-                    details="נשלף מתוך תעודת בעלות (עמוד 2)"
-                    className="absolute left-2 top-2"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                  נספחים
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={editingField === 'attachments' ? tempValue : (typeof extractedData.attachments === 'string' ? extractedData.attachments : Array.isArray(extractedData.attachments) ? extractedData.attachments.map((a: any) => a.description || a.type).join(', ') : '')}
-                    onChange={(e) => setTempValue(e.target.value)}
-                    onFocus={() => {
-                      setEditingField('attachments')
-                      setTempValue(typeof extractedData.attachments === 'string' ? extractedData.attachments : Array.isArray(extractedData.attachments) ? extractedData.attachments.map((a: any) => a.description || a.type).join(', ') : '')
-                    }}
-                    onBlur={async () => {
-                      if (editingField === 'attachments') {
-                        await updateExtractedData('attachments', tempValue)
-                        setEditingField(null)
-                      }
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-right"
-                    placeholder="הזן נספחים"
-                  />
-                  <DataSource 
-                    source="tabu" 
-                    details="נשלף מתוך תעודת בעלות (עמוד 3)"
-                    className="absolute left-2 top-2"
-                  />
-                </div>
-              </div>
-                </div>
-                
-                
-          {/* Building Details Section */}
-          {/* <div className="mb-6">
-            <h4 className="text-md font-semibold text-gray-900 mb-4 text-right">פרטי בנייה</h4>
-            
-            <div className="space-y-4">
-                <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                  שטחים משותפים
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={editingField === 'sharedAreas' ? tempValue : (extractedData.sharedAreas || '')}
-                    onChange={(e) => setTempValue(e.target.value)}
-                    onFocus={() => {
-                      setEditingField('sharedAreas')
-                      setTempValue(extractedData.sharedAreas || '')
-                    }}
-                    onBlur={async () => {
-                      if (editingField === 'sharedAreas') {
-                        await updateExtractedData('sharedAreas', tempValue)
-                        setEditingField(null)
-                      }
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-right"
-                    placeholder="הזן שטחים משותפים"
-                  />
-                  <DataSource 
-                    source="condo" 
-                    details="נשלף מתוך צו בית משותף (סעיף 2)"
-                    className="absolute left-2 top-2"
-                  />
-                </div>
-              </div>
-
-                <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                  זכויות בנייה
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={editingField === 'buildingRights' ? tempValue : (extractedData.buildingRights || '')}
-                    onChange={(e) => setTempValue(e.target.value)}
-                    onFocus={() => {
-                      setEditingField('buildingRights')
-                      setTempValue(extractedData.buildingRights || '')
-                    }}
-                    onBlur={async () => {
-                      if (editingField === 'buildingRights') {
-                        await updateExtractedData('buildingRights', tempValue)
-                        setEditingField(null)
-                      }
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-right"
-                    placeholder="הזן זכויות בנייה"
-                  />
-                  <DataSource 
-                    source="permit" 
-                    details="נשלף מתוך מידע תכנוני (סעיף 1)"
-                    className="absolute left-2 top-2"
-                  />
-                </div>
-                </div>
-                
-                <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                  שימוש מותר
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={editingField === 'permittedUse' ? tempValue : (extractedData.permittedUse || '')}
-                    onChange={(e) => setTempValue(e.target.value)}
-                    onFocus={() => {
-                      setEditingField('permittedUse')
-                      setTempValue(extractedData.permittedUse || '')
-                    }}
-                    onBlur={async () => {
-                      if (editingField === 'permittedUse') {
-                        await updateExtractedData('permittedUse', tempValue)
-                        setEditingField(null)
-                      }
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-right"
-                    placeholder="הזן שימוש מותר"
-                  />
-                  <DataSource 
-                    source="permit" 
-                    details="נשלף מתוך מידע תכנוני (סעיף 1)"
-                    className="absolute left-2 top-2"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-                </div>
-              </div>
 
       {/* Extraction Results Summary - Only show if data has been processed */}
       {hasExtractedData && (
         <div className="bg-blue-50 rounded-lg border border-blue-200 p-6 mb-6">
           <h3 className="text-lg font-semibold text-blue-900 mb-4 text-right">סיכום חילוץ נתונים</h3>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             <div className="bg-white rounded-lg p-4 border border-blue-200">
               <div className="flex items-center gap-2 mb-2">
                 <FileText className="w-5 h-5 text-blue-600" />
@@ -1289,7 +1009,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
         <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">מצב משפטי</h3>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4">
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
@@ -1552,7 +1272,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
         <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">פרטי הבניין</h3>
         
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
           <div className="space-y-4">
                 <div>
               <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
@@ -1775,7 +1495,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
         <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">מאפייני הנכס</h3>
         
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
           <div className="space-y-4">
                 <div>
               <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
@@ -2021,7 +1741,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
       <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
       <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">ניתוח חוץ הנכס</h3>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4">
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
@@ -2215,7 +1935,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
       <div className="bg-white rounded-lg border border-gray-200 p-6">
       <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">מכירות דומות</h3>
       
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
             מחיר ממוצע למ"ר

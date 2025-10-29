@@ -2,22 +2,46 @@ import { ValuationData } from '../components/ValuationWizard'
 
 export function generateDocumentHTML(data: ValuationData, isPreview: boolean = true): string {
 
+  // Format date as DD.MM.YYYY
   const formatDate = (dateString: string) => {
-    if (!dateString) return new Date().toLocaleDateString('he-IL')
-    return new Date(dateString).toLocaleDateString('he-IL')
+    if (!dateString) {
+      const today = new Date();
+      const day = today.getDate().toString().padStart(2, '0');
+      const month = (today.getMonth() + 1).toString().padStart(2, '0');
+      const year = today.getFullYear();
+      return `${day}.${month}.${year}`;
+    }
+    try {
+      const date = new Date(dateString);
+      const day = date.getDate().toString().padStart(2, '0');
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const year = date.getFullYear();
+      return `${day}.${month}.${year}`;
+    } catch {
+      return dateString;
+    }
   }
 
+  // Format Hebrew date with full month name
   const formatHebrewDate = (dateString: string) => {
-    if (!dateString) return new Date().toLocaleDateString('he-IL', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    })
-    return new Date(dateString).toLocaleDateString('he-IL', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    })
+    const hebrewMonths = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+    
+    if (!dateString) {
+      const today = new Date();
+      const day = today.getDate();
+      const month = hebrewMonths[today.getMonth()];
+      const year = today.getFullYear();
+      return `${day} ב${month} ${year}`;
+    }
+    try {
+      const date = new Date(dateString);
+      const day = date.getDate();
+      const month = hebrewMonths[date.getMonth()];
+      const year = date.getFullYear();
+      return `${day} ב${month} ${year}`;
+    } catch {
+      return dateString;
+    }
   }
 
   const getFullAddress = () => {
@@ -210,6 +234,9 @@ export function generateDocumentHTML(data: ValuationData, isPreview: boolean = t
           <div style="margin-bottom: 10px;">
             <strong>לכבוד מזמין השומה:</strong> <span data-field="clientName" data-editable="true">${getClientName()}</span>
           </div>
+          ${data.valuationType ? `<div style="margin-bottom: 10px;">
+            <strong>סוג השומה:</strong> ${data.valuationType}
+          </div>` : ''}
           <div style="margin-bottom: 10px;">
             <strong>מועד הביקור בנכס:</strong> ${formatDate(data.visitDate || new Date().toISOString())}
           </div>
@@ -257,6 +284,9 @@ export function generateDocumentHTML(data: ValuationData, isPreview: boolean = t
           <div style="margin-bottom: 10px;">
             <strong>לכבוד מזמין השומה:</strong> <span data-field="clientName" data-editable="true">${getClientName()}</span>
           </div>
+          ${data.valuationType ? `<div style="margin-bottom: 10px;">
+            <strong>סוג השומה:</strong> ${data.valuationType}
+          </div>` : ''}
           <div style="margin-bottom: 10px;">
             <strong>מועד הביקור בנכס:</strong> ${formatDate(data.visitDate || new Date().toISOString())}
           </div>

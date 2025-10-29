@@ -2,14 +2,28 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Hebrew RTL Support */
+/* Hebrew RTL Support - GLOBAL */
 html {
-  direction: rtl;
+  direction: rtl !important;
   font-family: 'Calibri', 'Arial', 'David', sans-serif;
 }
 
 body {
   @apply bg-gray-50 text-gray-900;
+  direction: rtl !important;
+}
+
+/* Force RTL on all major containers */
+#__next,
+main,
+div[dir],
+.container {
+  direction: rtl;
+}
+
+/* Ensure all text aligns right by default */
+* {
+  text-align: inherit;
 }
 
 /* Custom Hebrew fonts */
