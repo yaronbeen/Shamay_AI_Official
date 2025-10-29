@@ -141,7 +141,7 @@ class LandRegistryDatabaseClient {
         extractionData.confidence_scores?.mortgages || 0, // 49
         extractionData.confidence_scores?.overall || 0, // 50
         extractionData.extraction_method || 'anthropic_ai', // 51
-        extractionData.model_used || 'claude-3-5-sonnet-20241022', // 52
+        extractionData.model_used || 'claude-3-5-sonnet-20240620', // 52
         extractionData.text_length || 0, // 53
         // Add raw_text and raw_response if they fit within reasonable limits
         (extractionData.raw_text || '').length > 50000 ? 

@@ -123,16 +123,16 @@ function wgs84ToITM(lat: number, lon: number) {
   return { easting, northing }
 }
 
-function buildGovMapUrl(easting: number, northing: number, options: { address?: string, showTazea?: boolean } = {}) {
+function buildGovMapUrl(easting: number, northing: number, options: { address?: string, showTazea?: boolean, showInfo?: boolean } = {}) {
   const GOVMAP_BASE_URL = 'https://www.govmap.gov.il/'
   // Offset to center the view properly (marker will be at easting, northing)
-  // Center should be slightly offset so marker balloon doesn't cover important info
+  // Set to 0 to center directly on the building
   const GOVMAP_CENTER_OFFSET = {
-    easting: -53,    // Center 53m west of marker
-    northing: +122   // Center 122m north of marker
+    easting: 0,    // No offset - center directly on building
+    northing: 0    // No offset - center directly on building
   }
 
-  const { address, showTazea = true } = options
+  const { address, showTazea = true, showInfo = false } = options
 
   const eastingRounded = easting.toFixed(2)
   const northingRounded = northing.toFixed(2)
@@ -142,7 +142,7 @@ function buildGovMapUrl(easting: number, northing: number, options: { address?: 
 
   const params = new URLSearchParams()
   params.append('c', `${centerEasting},${centerNorthing}`)
-  params.append('z', '13')
+  params.append('z', '13') // Increased zoom level for better address visibility
   
   const layers = showTazea ? '21,15' : '15'
   params.append('lay', layers)
@@ -151,15 +151,20 @@ function buildGovMapUrl(easting: number, northing: number, options: { address?: 
     params.append('q', address.trim())
   }
 
+  // Building selection layers (bs parameter should only contain layer numbers)
   const bsLayers = showTazea ? '15,21' : '15'
-  params.append('bs', `${bsLayers}|${eastingRounded},${northingRounded}`)
+  params.append('bs', bsLayers)
 
   if (showTazea) {
     params.append('b', '1')
   }
   params.append('bb', '1')
   params.append('zb', '1')
-  params.append('in', '1')
+  
+  // Only add info panel if explicitly requested
+  if (showInfo) {
+    params.append('in', '1')
+  }
 
   const urlString = params.toString().replace(/%2C/g, ',')
   return `${GOVMAP_BASE_URL}?${urlString}`
@@ -186,8 +191,8 @@ async function addressToGovMap(address: string) {
     console.log(`[2/3] ✓ ITM coordinates: ${easting.toFixed(2)}, ${northing.toFixed(2)}`)
 
     console.log(`[3/3] Generating GovMap URLs`)
-    const govmapUrlWithoutTazea = buildGovMapUrl(easting, northing, { address, showTazea: false })
-    const govmapUrlWithTazea = buildGovMapUrl(easting, northing, { address, showTazea: true })
+    const govmapUrlWithoutTazea = buildGovMapUrl(easting, northing, { address, showTazea: false, showInfo: false })
+    const govmapUrlWithTazea = buildGovMapUrl(easting, northing, { address, showTazea: true, showInfo: false })
 
     console.log(`[3/3] ✓ GovMap URLs generated:`)
     console.log(`  - Without Tazea: ${govmapUrlWithoutTazea}`)

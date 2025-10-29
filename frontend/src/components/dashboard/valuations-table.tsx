@@ -120,7 +120,13 @@ export function ValuationsTable() {
                 </TableCell>
                 <TableCell>{getStatusBadge(valuation.status)}</TableCell>
                 <TableCell>
-                  {new Date(valuation.updatedAt).toLocaleDateString('he-IL')}
+                  {(() => {
+                    const date = new Date(valuation.updatedAt);
+                    const day = date.getDate().toString().padStart(2, '0');
+                    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                    const year = date.getFullYear();
+                    return `${day}.${month}.${year}`;
+                  })()}
                 </TableCell>
                 <TableCell>
                   <div className="flex gap-2">

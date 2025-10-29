@@ -29,21 +29,31 @@ router.post('/land-registry', async (req, res) => {
     
     // Handle both file paths and URLs
     let fileBuffer;
+    let actualPath = fileUrl;
+    
+    // LOCAL DEV: Convert API paths to local file paths
+    if (fileUrl.startsWith('/api/files/')) {
+      const pathParts = fileUrl.split('/api/files/')[1];
+      // Files are stored in frontend/uploads, not backend/uploads
+      actualPath = path.join(__dirname, '../../../frontend/uploads', pathParts);
+      console.log(`📁 LOCAL DEV: Converted API path to local: ${actualPath}`);
+    }
+    
     if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
-      // It's a URL - download it
+      // VERCEL/PRODUCTION: It's a URL - download it
       const response = await fetch(fileUrl);
       if (!response.ok) {
         throw new Error(`Failed to download file: ${response.status} ${response.statusText}`);
       }
       fileBuffer = Buffer.from(await response.arrayBuffer());
-      console.log(`✅ Downloaded file: ${fileBuffer.length} bytes`);
+      console.log(`✅ VERCEL: Downloaded file from URL: ${fileBuffer.length} bytes`);
     } else {
-      // It's a file path - read it directly
-      if (!fs.existsSync(fileUrl)) {
-        throw new Error(`File not found: ${fileUrl}`);
+      // LOCAL DEV: It's a file path - read it directly
+      if (!fs.existsSync(actualPath)) {
+        throw new Error(`File not found: ${actualPath}`);
       }
-      fileBuffer = fs.readFileSync(fileUrl);
-      console.log(`✅ Read file: ${fileBuffer.length} bytes`);
+      fileBuffer = fs.readFileSync(actualPath);
+      console.log(`✅ LOCAL DEV: Read local file: ${fileBuffer.length} bytes`);
     }
     
     // Save to temporary location
@@ -188,21 +198,31 @@ router.post('/building-permit', async (req, res) => {
     
     // Handle both file paths and URLs
     let fileBuffer;
+    let actualPath = fileUrl;
+    
+    // LOCAL DEV: Convert API paths to local file paths
+    if (fileUrl.startsWith('/api/files/')) {
+      const pathParts = fileUrl.split('/api/files/')[1];
+      // Files are stored in frontend/uploads, not backend/uploads
+      actualPath = path.join(__dirname, '../../../frontend/uploads', pathParts);
+      console.log(`📁 LOCAL DEV: Converted API path to local: ${actualPath}`);
+    }
+    
     if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
-      // It's a URL - download it
+      // VERCEL/PRODUCTION: It's a URL - download it
       const response = await fetch(fileUrl);
       if (!response.ok) {
         throw new Error(`Failed to download file: ${response.status} ${response.statusText}`);
       }
       fileBuffer = Buffer.from(await response.arrayBuffer());
-      console.log(`✅ Downloaded file: ${fileBuffer.length} bytes`);
+      console.log(`✅ VERCEL: Downloaded file from URL: ${fileBuffer.length} bytes`);
     } else {
-      // It's a file path - read it directly
-      if (!fs.existsSync(fileUrl)) {
-        throw new Error(`File not found: ${fileUrl}`);
+      // LOCAL DEV: It's a file path - read it directly
+      if (!fs.existsSync(actualPath)) {
+        throw new Error(`File not found: ${actualPath}`);
       }
-      fileBuffer = fs.readFileSync(fileUrl);
-      console.log(`✅ Read file: ${fileBuffer.length} bytes`);
+      fileBuffer = fs.readFileSync(actualPath);
+      console.log(`✅ LOCAL DEV: Read local file: ${fileBuffer.length} bytes`);
     }
     
     // Save to temporary location
@@ -301,21 +321,31 @@ router.post('/shared-building', async (req, res) => {
     
     // Handle both file paths and URLs
     let fileBuffer;
+    let actualPath = fileUrl;
+    
+    // LOCAL DEV: Convert API paths to local file paths
+    if (fileUrl.startsWith('/api/files/')) {
+      const pathParts = fileUrl.split('/api/files/')[1];
+      // Files are stored in frontend/uploads, not backend/uploads
+      actualPath = path.join(__dirname, '../../../frontend/uploads', pathParts);
+      console.log(`📁 LOCAL DEV: Converted API path to local: ${actualPath}`);
+    }
+    
     if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
-      // It's a URL - download it
+      // VERCEL/PRODUCTION: It's a URL - download it
       const response = await fetch(fileUrl);
       if (!response.ok) {
         throw new Error(`Failed to download file: ${response.status} ${response.statusText}`);
       }
       fileBuffer = Buffer.from(await response.arrayBuffer());
-      console.log(`✅ Downloaded file: ${fileBuffer.length} bytes`);
+      console.log(`✅ VERCEL: Downloaded file from URL: ${fileBuffer.length} bytes`);
     } else {
-      // It's a file path - read it directly
-      if (!fs.existsSync(fileUrl)) {
-        throw new Error(`File not found: ${fileUrl}`);
+      // LOCAL DEV: It's a file path - read it directly
+      if (!fs.existsSync(actualPath)) {
+        throw new Error(`File not found: ${actualPath}`);
       }
-      fileBuffer = fs.readFileSync(fileUrl);
-      console.log(`✅ Read file: ${fileBuffer.length} bytes`);
+      fileBuffer = fs.readFileSync(actualPath);
+      console.log(`✅ LOCAL DEV: Read local file: ${fileBuffer.length} bytes`);
     }
     
     // Save to temporary location
@@ -409,8 +439,17 @@ router.post('/interior-analysis', async (req, res) => {
     for (const image of images) {
       console.log(`🖼️ Analyzing image: ${image.name || 'unnamed'}`);
       
-      // Analyze the image (supports base64 data)
-      const result = await analyzer.analyzeApartmentInterior(image.data || image.url);
+      // Convert API URL to file system path if needed
+      let imagePath = image.data || image.url;
+      if (imagePath && imagePath.startsWith('/api/files/')) {
+        // Convert /api/files/sessionId/filename to uploads/sessionId/filename
+        const pathParts = imagePath.split('/api/files/')[1];
+        imagePath = path.join(__dirname, '../../uploads', pathParts);
+        console.log(`📁 Converted URL to path: ${imagePath}`);
+      }
+      
+      // Analyze the image (supports base64 data or file path)
+      const result = await analyzer.analyzeApartmentInterior(imagePath);
       
       if (result.success) {
         analyzedImages.push({
@@ -490,8 +529,17 @@ router.post('/exterior-analysis', async (req, res) => {
     for (const image of images) {
       console.log(`🖼️ Analyzing image: ${image.name || 'unnamed'}`);
       
-      // Analyze the image (supports base64 data)
-      const result = await analyzer.analyzeBuildingExterior(image.data || image.url);
+      // Convert API URL to file system path if needed
+      let imagePath = image.data || image.url;
+      if (imagePath && imagePath.startsWith('/api/files/')) {
+        // Convert /api/files/sessionId/filename to uploads/sessionId/filename
+        const pathParts = imagePath.split('/api/files/')[1];
+        imagePath = path.join(__dirname, '../../uploads', pathParts);
+        console.log(`📁 Converted URL to path: ${imagePath}`);
+      }
+      
+      // Analyze the image (supports base64 data or file path)
+      const result = await analyzer.analyzeBuildingExterior(imagePath);
       
       if (result.success) {
         analyzedImages.push({

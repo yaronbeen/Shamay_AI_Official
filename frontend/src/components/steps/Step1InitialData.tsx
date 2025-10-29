@@ -9,10 +9,25 @@ interface Step1InitialDataProps {
 }
 
 export function Step1InitialData({ data, updateData, onValidationChange }: Step1InitialDataProps) {
+  // Helper to convert DD.MM.YYYY to YYYY-MM-DD for date input
+  const formatDateForInput = (dateStr: string) => {
+    if (!dateStr) return new Date().toISOString().split('T')[0]
+    // If already in YYYY-MM-DD format, return as is
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr
+    // If in DD.MM.YYYY format, convert to YYYY-MM-DD
+    const match = dateStr.match(/^(\d{2})\.(\d{2})\.(\d{4})$/)
+    if (match) {
+      const [, day, month, year] = match
+      return `${year}-${month}-${day}`
+    }
+    // Fallback to current date
+    return new Date().toISOString().split('T')[0]
+  }
+
   const [formData, setFormData] = useState({
     // סוג שומה ומועד כתיבתה
     valuationType: data.valuationType || '',
-    valuationDate: data.valuationDate || new Date().toISOString().split('T')[0],
+    valuationDate: formatDateForInput(data.valuationDate),
     
     // זהות מזמין השומה והקשר שלו לנכס
     clientName: data.clientName || '',
@@ -28,9 +43,9 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
     city: data.city || '',
     
     // תיאור הנכס והסביבה (basic info only - detailed analysis will be done by AI in Step 3)
-    rooms: data.rooms || 0,
-    floor: data.floor || 0,
-    area: data.area || 0,
+    rooms: (data.rooms !== null && data.rooms !== undefined && data.rooms !== 0 && data.rooms !== '') ? data.rooms : '',
+    floor: (data.floor !== null && data.floor !== undefined && data.floor !== 0 && data.floor !== '') ? data.floor : '',
+    area: (data.area !== null && data.area !== undefined && data.area !== 0 && data.area !== '') ? data.area : '',
     
     // פרטי שמאי
     shamayName: data.shamayName || '',
@@ -61,14 +76,14 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
     setFormData({
       // סוג שומה ומועד כתיבתה
       valuationType: data.valuationType || '',
-      valuationDate: data.valuationDate || new Date().toISOString().split('T')[0],
+      valuationDate: formatDateForInput(data.valuationDate),
       
       // זהות מזמין השומה והקשר שלו לנכס
       clientName: data.clientName || '',
       clientRelation: data.clientRelation || '',
       
       // המועד הקובע לשומה
-      valuationEffectiveDate: data.valuationEffectiveDate || new Date().toISOString().split('T')[0],
+      valuationEffectiveDate: formatDateForInput(data.valuationEffectiveDate),
       
       // זיהוי הנכס
       street: data.street || '',
@@ -77,9 +92,9 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
       city: data.city || '',
       
       // תיאור הנכס והסביבה (basic info only - detailed analysis will be done by AI in Step 3)
-      rooms: data.rooms || 0,
-      floor: data.floor || 0,
-      area: data.area || 0,
+      rooms: (data.rooms !== null && data.rooms !== undefined && data.rooms !== 0 && data.rooms !== '') ? data.rooms : '',
+      floor: (data.floor !== null && data.floor !== undefined && data.floor !== 0 && data.floor !== '') ? data.floor : '',
+      area: (data.area !== null && data.area !== undefined && data.area !== 0 && data.area !== '') ? data.area : '',
       
       // פרטי שמאי
       shamayName: data.shamayName || '',
@@ -213,11 +228,11 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 dir="rtl"
               >
                 <option value="">בחר סוג שומה</option>
-                <option value="market">שווי שוק</option>
-                <option value="investment">שווי השקעה</option>
-                <option value="insurance">שווי ביטוח</option>
-                <option value="tax">שווי מס</option>
-                <option value="expropriation">שווי הפקעה</option>
+                <option value="שווי שוק">שווי שוק</option>
+                <option value="שווי השקעה">שווי השקעה</option>
+                <option value="שווי ביטוח">שווי ביטוח</option>
+                <option value="שווי מס">שווי מס"</option>
+                <option value="שווי הפקעה">שווי הפקעה</option>
               </select>
             </div>
 
@@ -386,10 +401,13 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 type="number"
                 name="rooms"
                 autoComplete="off"
-                min="1"
+                min="0"
                 max="99"
-                value={formData.rooms}
-                onChange={(e) => updateField('rooms', parseInt(e.target.value) || 0)}
+                value={formData.rooms === '' || formData.rooms === 0 ? '' : formData.rooms}
+                onChange={(e) => {
+                  const val = e.target.value === '' ? '' : parseInt(e.target.value)
+                  updateField('rooms', val)
+                }}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="הזן מספר חדרים"
               />
@@ -403,10 +421,13 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 type="number"
                 name="floor"
                 autoComplete="off"
-                min="1"
+                min="0"
                 max="99"
-                value={formData.floor}
-                onChange={(e) => updateField('floor', parseInt(e.target.value) || 0)}
+                value={formData.floor === '' || formData.floor === 0 ? '' : formData.floor}
+                onChange={(e) => {
+                  const val = e.target.value === '' ? '' : parseInt(e.target.value)
+                  updateField('floor', val)
+                }}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="הזן מספר קומה"
               />
@@ -420,10 +441,13 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 type="number"
                 name="area"
                 autoComplete="off"
-                min="1"
+                min="0"
                 step="0.1"
-                value={formData.area}
-                onChange={(e) => updateField('area', parseFloat(e.target.value) || 0)}
+                value={formData.area === '' || formData.area === 0 ? '' : formData.area}
+                onChange={(e) => {
+                  const val = e.target.value === '' ? '' : parseFloat(e.target.value)
+                  updateField('area', val)
+                }}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="הזן שטח"
               />

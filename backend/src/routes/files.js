@@ -4,7 +4,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
-const ShumaDB = require('../models/ShumaDB');
+const { ShumaDB } = require('../models/ShumaDB');
 const logger = require('../config/logger');
 
 // Configure multer for file uploads

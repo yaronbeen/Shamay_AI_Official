@@ -7,162 +7,139 @@ export async function POST(
   { params }: { params: { sessionId: string } }
 ) {
   try {
-    const { sessionId } = params
-    console.log(`📸 GIS Screenshot API called for session: ${sessionId}`)
+    const contentType = request.headers.get('content-type')
     
-    // Load session from database
-    const loadResult = await ShumaDB.loadShumaForWizard(sessionId)
-    
-    if (!loadResult.success || !loadResult.valuationData) {
-      console.error(`❌ Session not found: ${sessionId}`)
-      return NextResponse.json({ error: 'Session not found' }, { status: 404 })
-    }
-    
-    const sessionData = loadResult.valuationData
+    // Handle JSON request (for server screenshot)
+    if (contentType?.includes('application/json')) {
+      const body = await request.json()
+      const { cropMode, govmapUrl, coordinates, annotations } = body
 
-    // Check if this is a file upload (FormData) or JSON request
-    const contentType = request.headers.get('content-type') || ''
-    
-    let cropMode, govmapUrl, annotations, coordinates, file
-    
-    if (contentType.includes('multipart/form-data')) {
-      // Handle file upload (cropped image)
-      const formData = await request.formData()
-      file = formData.get('file') as File
-      cropMode = formData.get('cropMode') as string
-      annotations = formData.get('annotations') as string
-      
-      console.log(`📸 Received file upload - cropMode: ${cropMode}, file size: ${file?.size}`)
-      
-      if (!cropMode || !file) {
-        console.error(`❌ Missing data - cropMode: ${cropMode}, file: ${file ? 'present' : 'missing'}`)
-        return NextResponse.json({ error: 'Missing cropMode or file data' }, { status: 400 })
+      if (!govmapUrl) {
+        return NextResponse.json({ error: 'GovMap URL is required' }, { status: 400 })
       }
-    } else {
-      // Handle JSON request (server-side screenshot)
-      const jsonData = await request.json()
-      cropMode = jsonData.cropMode
-      govmapUrl = jsonData.govmapUrl
-      annotations = jsonData.annotations
-      coordinates = jsonData.coordinates
-      
-      console.log(`📸 Received JSON - cropMode: ${cropMode}, govmapUrl: ${govmapUrl}`)
-      
-      if (!cropMode || !govmapUrl) {
-        console.error(`❌ Missing data - cropMode: ${cropMode}, govmapUrl: ${govmapUrl ? 'present' : 'missing'}`)
-        return NextResponse.json({ error: 'Missing cropMode or govmapUrl data' }, { status: 400 })
-      }
-    }
 
-    // Create uploads directory for this session (only in local dev)
-    let filePath: string
-    let fileUrl: string
-    
-    // Generate filename with timestamp
-    const timestamp = Date.now()
-    const filename = `govmap_crop_${cropMode}_${timestamp}.png`
-    
-    if (file) {
-      // Handle file upload (cropped image)
-      console.log(`📸 Uploading file to storage: ${filename}`)
-      
-      const arrayBuffer = await file.arrayBuffer()
-      const buffer = Buffer.from(arrayBuffer)
-      
-      // Upload to storage (Blob in production, local in dev)
-      const uploadResult = await FileStorageService.uploadFile(
-        buffer,
-        sessionId,
-        filename,
-        'image/png'
-      )
-      
-      filePath = uploadResult.path
-      fileUrl = uploadResult.url
-      
-      console.log(`✅ File uploaded successfully:`, uploadResult)
-      
-      return NextResponse.json({
-        success: true,
-        filePath: filePath,
-        fileUrl: fileUrl,
-        message: 'Cropped image saved successfully'
-      })
-    } else {
-      // Server-side screenshot - delegate to Express backend
-      console.log(`📸 Requesting screenshot from backend...`)
-      
+      // Call backend service to capture screenshot
       try {
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
-        
-        // Call backend screenshot API
-        const response = await fetch(`${backendUrl}/api/gis-screenshot`, {
+        const screenshotResponse = await fetch(`${backendUrl}/api/gis-screenshot`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
             govmapUrl,
-            cropMode
+            cropMode,
+            viewport: { width: 1200, height: 800 }
           })
         })
-        
-        const result = await response.json()
-        
-        if (!response.ok || !result.success) {
-          console.error('❌ Backend screenshot failed:', result)
-          
-          return NextResponse.json({
-            success: false,
-            error: result.error || 'Screenshot failed',
-            message: result.message || 'צילום אוטומטי נכשל. נא להשתמש בהעלאה ידנית של צילום מסך.',
-            hint: result.hint || 'השתמש בכפתורים הכחולים להעלאת צילום מסך'
-          }, { status: response.status })
+
+        if (!screenshotResponse.ok) {
+          // Check for 501 (serverless limitation)
+          if (screenshotResponse.status === 501) {
+            return NextResponse.json({
+              success: false,
+              error: 'Server screenshot not available',
+              message: 'צילום שרת אינו זמין בסביבת ענן. השתמש בהעלאת צילום מסך ידנית.'
+            }, { status: 501 })
+          }
+          throw new Error(`Backend screenshot failed: ${screenshotResponse.statusText}`)
         }
+
+        const screenshotData = await screenshotResponse.json()
         
-        // Convert base64 screenshot to buffer
-        const screenshotBuffer = Buffer.from(result.screenshot, 'base64')
-        
-        console.log(`✅ Screenshot received from backend - ${screenshotBuffer.length} bytes`)
-        
-        // Upload to storage
-        console.log(`☁️ Uploading to storage...`)
-        const uploadResult = await FileStorageService.uploadFile(
-          screenshotBuffer,
-          sessionId,
-          filename,
-          'image/png'
-        )
-        
-        filePath = uploadResult.path
-        fileUrl = uploadResult.url
-        
-        console.log(`✅ Screenshot uploaded successfully:`, uploadResult)
-        
+        // Return the screenshot as base64 for immediate display
+        // The actual saving to DB will happen after annotation
         return NextResponse.json({
           success: true,
-          screenshotUrl: fileUrl,
-          cropMode,
-          filePath
+          screenshot: screenshotData.screenshot, // Return base64 data URL
+          message: 'Server screenshot captured successfully'
         })
-        
-      } catch (backendError) {
-        console.error('❌ Error calling backend screenshot:', backendError)
-        
+
+      } catch (error) {
+        console.error('Server screenshot error:', error)
         return NextResponse.json({
           success: false,
-          error: 'Failed to capture screenshot',
-          message: 'צילום אוטומטי נכשל. נא להשתמש בהעלאה ידנית של צילום מסך.',
-          hint: 'השתמש בכפתורים הכחולים להעלאת צילום מסך',
-          details: backendError instanceof Error ? backendError.message : 'Unknown error'
+          error: 'Server screenshot failed',
+          details: error instanceof Error ? error.message : 'Unknown error'
         }, { status: 500 })
       }
     }
 
+    // Handle FormData request (for file upload)
+    const formData = await request.formData()
+    const file = formData.get('file') as File
+    const cropMode = formData.get('cropMode') as string
+    const annotationsJson = formData.get('annotations') as string
+    const address = formData.get('address') as string
+    const coordinatesJson = formData.get('coordinates') as string
+
+    if (!file) {
+      return NextResponse.json({ error: 'No file provided' }, { status: 400 })
+    }
+
+    // Convert file to base64
+    const arrayBuffer = await file.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
+    const base64 = buffer.toString('base64')
+    const base64DataUrl = `data:image/png;base64,${base64}`
+
+    // Parse annotations and coordinates
+    const annotations = annotationsJson ? JSON.parse(annotationsJson) : []
+    const coordinates = coordinatesJson ? JSON.parse(coordinatesJson) : null
+
+    // Load session data
+    const loadResult = await ShumaDB.loadShumaForWizard(params.sessionId)
+    if (!loadResult.success) {
+      return NextResponse.json({ error: 'Session not found' }, { status: 404 })
+    }
+
+    const sessionData = loadResult.valuationData || {}
+    const existingScreenshots = (sessionData as any).gisScreenshots || {}
+
+    // Update screenshots
+    const updatedScreenshots = {
+      ...existingScreenshots,
+      [`cropMode${cropMode}`]: base64DataUrl
+    }
+
+    // Save to session
+    await ShumaDB.saveShumaFromSession(
+      params.sessionId,
+      'default-org',
+      'system',
+      {
+        ...sessionData,
+        gisScreenshots: updatedScreenshots,
+        gisScreenshotMetadata: {
+          ...((sessionData as any).gisScreenshotMetadata || {}),
+          [`cropMode${cropMode}`]: {
+            address,
+            coordinates,
+            annotations,
+            capturedAt: new Date().toISOString(),
+            fileName: file.name
+          }
+        }
+      } as any
+    )
+
+    // Here you could also save the file to storage (S3, local storage, etc.)
+    // For now, we're saving only base64 in the database
+
+    return NextResponse.json({
+      success: true,
+      message: 'Screenshot saved successfully',
+      screenshot: {
+        cropMode,
+        base64: base64DataUrl.substring(0, 100) + '...', // Preview only
+        address,
+        coordinates
+      }
+    })
+
   } catch (error) {
-    console.error('❌ Error saving GIS screenshot:', error)
-    return NextResponse.json({ 
-      error: 'Failed to save screenshot', 
+    console.error('❌ Error saving screenshot:', error)
+    return NextResponse.json({
+      success: false,
+      error: 'Failed to save screenshot',
       details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 })
   }

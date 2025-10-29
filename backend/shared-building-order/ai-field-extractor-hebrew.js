@@ -15,7 +15,7 @@ class SharedBuildingAIExtractor {
       apiKey: apiKey || process.env.ANTHROPIC_API_KEY
     });
     
-    this.model = 'claude-3-5-sonnet-20241022'; // Updated model
+    this.model = 'claude-3-5-sonnet-20240620'; // Updated model
   }
 
   /**

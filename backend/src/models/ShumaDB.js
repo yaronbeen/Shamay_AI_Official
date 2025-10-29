@@ -1532,4 +1532,3 @@ class ShumaDBEnhanced {
 }
 
 module.exports = { db, ShumaDB: ShumaDBEnhanced, formatDateForDB }
-

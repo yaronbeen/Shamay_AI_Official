@@ -376,7 +376,12 @@ export default function AddressMapsViewer() {
   }
 
   const searchAddress = async () => {
+    console.log('🚀 searchAddress function called')
+    console.log('🚀 streetInput:', streetInput)
+    console.log('🚀 cityInput:', cityInput)
+    
     if (!streetInput.trim() || !cityInput.trim()) {
+      console.log('❌ Validation failed: missing street or city')
       showMessage('נא להזין רחוב ועיר לפחות', 'error')
       return
     }
@@ -384,16 +389,48 @@ export default function AddressMapsViewer() {
     const address = `${streetInput} ${numberInput} ${cityInput}`.trim()
     const displayAddress = `${streetInput} ${numberInput}, ${cityInput}`
 
+    console.log('✅ Validation passed, address:', address)
     showMessage('מחפש כתובת...', 'info')
 
     try {
-      const response = await fetch('/api/address-to-govmap', {
+      console.log('🔵 Calling /api/address-to-govmap with address:', address)
+      
+      // Add timestamp to avoid caching
+      const url = `/api/address-to-govmap?t=${Date.now()}`
+      
+      const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address, options: { zoom: 13, showTazea: true } })
+        headers: { 
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache'
+        },
+        cache: 'no-store',
+        body: JSON.stringify({ address, options: { zoom: 16, showTazea: true, showInfo: false } })
       })
 
-      const result = await response.json()
+      console.log('📡 Response received:', {
+        status: response.status,
+        statusText: response.statusText,
+        url: response.url,
+        contentType: response.headers.get('content-type'),
+        ok: response.ok
+      })
+
+      // Get response as text first to check if it's JSON
+      const responseText = await response.text()
+      console.log('📄 Response text (first 500 chars):', responseText.substring(0, 500))
+
+      // Check if it's JSON
+      let result
+      try {
+        result = JSON.parse(responseText)
+      } catch (parseError) {
+        console.error('❌ Failed to parse response as JSON:', parseError)
+        console.error('❌ Full response text:', responseText)
+        console.error('❌ Check Network tab for more details')
+        showMessage(`שגיאה: השרת החזיר HTML במקום JSON. סטטוס: ${response.status}. בדוק את הקונסול לפרטים נוספים.`, 'error')
+        return
+      }
 
       if (!result.success) {
         showMessage(result.error || 'כתובת לא נמצאה', 'error')
