@@ -803,7 +803,16 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
           
           {/* Document Tabs */}
           <div className="flex space-x-reverse space-x-1 mb-4">
-            {allFiles.map((file, index) => (
+            {((allFiles || []).filter((f) => {
+              const name = (f.name || '').toLowerCase()
+              const url = (f.url || '').toLowerCase()
+              const source = (f.source || '').toLowerCase()
+              const type = (f.type || f.file?.type || '').toLowerCase()
+              const isPdf = type === 'application/pdf' || name.endsWith('.pdf') || url.endsWith('.pdf')
+              const isGarmushka = source.includes('garmushka') || name.includes('garmushka') || url.includes('garmushka') || type.includes('garmushka') 
+              const isFromUploads = url.includes('/frontend/uploads/') || url.includes('/uploads/') || url.includes('/api/files/') || source.includes('step2') || source.includes('documents') || source.includes('upload')
+              return isPdf && isFromUploads && !isGarmushka
+            })).map((file, index) => (
               <button
                 key={index}
                 onClick={() => setCurrentFileIndex(index)}
@@ -825,10 +834,30 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
                 <Loader2 className="w-8 h-8 mx-auto mb-4 animate-spin text-blue-600" />
                 <p className="text-gray-600">טוען מסמכים...</p>
               </div>
-            ) : allFiles.length > 0 ? (
+            ) : ((allFiles || []).filter((f) => {
+              const name = (f.name || '').toLowerCase()
+              const url = (f.url || '').toLowerCase()
+              const source = (f.source || '').toLowerCase()
+              const type = (f.type || f.file?.type || '').toLowerCase()
+              const isPdf = type === 'application/pdf' || name.endsWith('.pdf') || url.endsWith('.pdf')
+              const isGarmushka = source.includes('garmushka') || name.includes('garmushka') || url.includes('garmushka')
+              const isFromUploads = url.includes('/frontend/uploads/') || url.includes('/uploads/') || url.includes('/api/files/') || source.includes('step2') || source.includes('documents') || source.includes('upload')
+              return isPdf && isFromUploads && !isGarmushka
+            })).length > 0 ? (
               <div className="text-center w-full h-full flex items-center justify-center">
                 {(() => {
-                  const currentFile = allFiles[currentFileIndex]
+                  const files = (allFiles || []).filter((f) => {
+                    const name = (f.name || '').toLowerCase()
+                    const url = (f.url || '').toLowerCase()
+                    const source = (f.source || '').toLowerCase()
+                    const type = (f.type || f.file?.type || '').toLowerCase()
+                    const isPdf = type === 'application/pdf' || name.endsWith('.pdf') || url.endsWith('.pdf')
+                    const isGarmushka = source.includes('garmushka') || name.includes('garmushka') || url.includes('garmushka')
+                    const isFromUploads = url.includes('/frontend/uploads/') || url.includes('/uploads/') || url.includes('/api/files/') || source.includes('step2') || source.includes('documents') || source.includes('upload')
+                    return isPdf && isFromUploads && !isGarmushka
+                  })
+                  const safeIndex = Math.min(currentFileIndex, Math.max(files.length - 1, 0))
+                  const currentFile = files[safeIndex]
                   // Check file type from the file object or determine from URL/name
                   const fileType = currentFile?.file?.type || (currentFile?.name?.endsWith('.pdf') ? 'application/pdf' : 'application/pdf')
                   const isPDF = fileType === 'application/pdf'
@@ -839,7 +868,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
                     return (
                       <div className="relative w-full h-full">
                         <iframe
-                          key={`pdf-${currentFile.url}-${currentFileIndex}`}
+                          key={`pdf-${currentFile.url}-${safeIndex}`}
                           src={currentFile.url}
                           className="w-full h-full rounded border"
                           title={getFileTypeLabel(currentFile.type)}
@@ -912,36 +941,45 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
           </div>
 
           {/* File Navigation */}
-          {allFiles.length > 1 && (
-            <div className="flex justify-between items-center mt-4">
-              <button
-                onClick={() => setCurrentFileIndex(Math.max(0, currentFileIndex - 1))}
-                disabled={currentFileIndex === 0}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronRightCircleIcon className="w-4 h-4" />
-                <span>הקודם</span>
-              </button>
-              
-              <div className="text-center">
-                <div className="text-sm text-gray-600">
-                  {currentFileIndex + 1} מתוך {allFiles.length}
+          {(() => {
+            const filesCount = ((allFiles || []).filter((f) => {
+              const name = (f.name || '').toLowerCase()
+              const url = (f.url || '').toLowerCase()
+              const source = (f.source || '').toLowerCase()
+              const type = (f.type || f.file?.type || '').toLowerCase()
+              const isPdf = type === 'application/pdf' || name.endsWith('.pdf') || url.endsWith('.pdf')
+              const isGarmushka = source.includes('garmushka') || name.includes('garmushka') || url.includes('garmushka')
+              const isFromUploads = url.includes('/frontend/uploads/') || url.includes('/uploads/') || url.includes('/api/files/') || source.includes('step2') || source.includes('documents') || source.includes('upload')
+              return isPdf && isFromUploads && !isGarmushka
+            })).length
+            return filesCount > 1 && (
+              <div className="flex justify-between items-center mt-4">
+                <button
+                  onClick={() => setCurrentFileIndex(Math.max(0, currentFileIndex - 1))}
+                  disabled={currentFileIndex === 0}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRightCircleIcon className="w-4 h-4" />
+                  <span>הקודם</span>
+                </button>
+                
+                <div className="text-center">
+                  <div className="text-sm text-gray-600">
+                    {Math.min(currentFileIndex + 1, filesCount)} מתוך {filesCount}
+                  </div>
                 </div>
-                <div className="text-xs text-gray-500 mt-1">
-                  {currentFile?.name}
-                </div>
+                
+                <button
+                  onClick={() => setCurrentFileIndex(Math.min(filesCount - 1, currentFileIndex + 1))}
+                  disabled={currentFileIndex >= filesCount - 1}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <span>הבא</span>
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
               </div>
-              
-              <button
-                onClick={() => setCurrentFileIndex(Math.min(allFiles.length - 1, currentFileIndex + 1))}
-                disabled={currentFileIndex === allFiles.length - 1}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <span>הבא</span>
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-            </div>
-          )}
+            )
+          })()}
 
         </div>
         </div>

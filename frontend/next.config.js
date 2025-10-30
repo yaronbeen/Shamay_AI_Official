@@ -28,6 +28,10 @@ const nextConfig = {
         source: '/api/address-to-govmap',
         destination: `${backendUrl}/api/address-to-govmap`,
       },
+      {
+        source: '/api/comparable-data/:path*',
+        destination: `${backendUrl}/api/comparable-data/:path*`,
+      },
     ];
   },
   // Keep existing configuration

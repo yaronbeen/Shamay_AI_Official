@@ -53,23 +53,54 @@ async function importComparableDataCSV(csvFilePath, userId = 'system') {
 function parseCSVFile(filePath) {
   return new Promise((resolve, reject) => {
     const results = [];
+    let rowNumber = 0;
+    let headers = [];
     
-    fs.createReadStream(filePath)
-      .pipe(csv())
+    fs.createReadStream(filePath, { encoding: 'utf8' })
+      .pipe(csv({
+        skipEmptyLines: true,
+        trim: true
+      }))
+      .on('headers', (parsedHeaders) => {
+        headers = parsedHeaders;
+        console.log('📋 CSV Headers detected:', headers);
+      })
       .on('data', (row) => {
+        rowNumber++;
+        
+        // Debug: log first row to see data
+        if (rowNumber === 1) {
+          console.log('📋 First row raw:', row);
+        }
+        
         // Clean up any BOM or encoding issues
         const cleanRow = {};
         Object.keys(row).forEach(key => {
           const cleanKey = key.replace(/^\uFEFF/, '').trim();
-          cleanRow[cleanKey] = row[key] ? row[key].toString().trim() : null;
+          const value = row[key] ? row[key].toString().trim() : null;
+          cleanRow[cleanKey] = value;
         });
-        results.push(cleanRow);
+        
+        // Skip empty rows (all values are null or empty)
+        const hasData = Object.values(cleanRow).some(val => val && val.length > 0);
+        if (hasData) {
+          results.push(cleanRow);
+          if (rowNumber === 1) {
+            console.log('📋 First row cleaned:', cleanRow);
+          }
+        } else {
+          console.log(`⚠️ Skipping empty row ${rowNumber}`);
+        }
       })
       .on('end', () => {
-        console.log(`📊 Parsed ${results.length} rows from CSV`);
+        console.log(`📊 Parsed ${results.length} valid rows from CSV (skipped ${rowNumber - results.length} empty rows)`);
+        if (results.length > 0) {
+          console.log('📋 Final sample row keys:', Object.keys(results[0]));
+        }
         resolve(results);
       })
       .on('error', (error) => {
+        console.error('❌ CSV parsing error:', error);
         reject(error);
       });
   });
@@ -158,9 +189,10 @@ async function getComparableDataStats() {
 /**
  * Analyze comparable data for property valuation
  * @param {Object} propertyData - Property data to compare
+ * @param {string} sessionId - Optional session ID to save results
  * @returns {Promise<Object>} - Analysis results
  */
-async function analyzeComparableData(propertyData) {
+async function analyzeComparableData(propertyData, sessionId = null) {
   try {
     console.log('📈 Analyzing comparable data...');
     
@@ -187,44 +219,154 @@ async function analyzeComparableData(propertyData) {
       return {
         success: false,
         message: 'No comparable data found for analysis',
-        comparables: []
+        analysis: {
+          analysis_results: {
+            comparables: [],
+            market_trends: "לא נמצא",
+            adjustment_factor: 1,
+            avg_price_per_sqm: 0,
+            median_price_per_sqm: 0
+          }
+        },
+        extractedData: {
+          comparables: [],
+          market_trends: "לא נמצא",
+          adjustment_factor: 1,
+          avg_price_per_sqm: 0,
+          median_price_per_sqm: 0
+        }
       };
     }
     
     // Calculate statistics
-    const prices = similarProperties
-      .filter(p => p.declared_price && p.declared_price > 0)
-      .map(p => p.declared_price);
-      
-    const pricesPerSqm = similarProperties
-      .filter(p => p.verified_price_per_sqm && p.verified_price_per_sqm > 0)
-      .map(p => p.verified_price_per_sqm);
-    
-    const analysis = {
-      success: true,
-      totalComparables: similarProperties.length,
-      averagePrice: prices.length > 0 ? prices.reduce((a, b) => a + b) / prices.length : null,
-      medianPrice: prices.length > 0 ? calculateMedian(prices) : null,
-      averagePricePerSqm: pricesPerSqm.length > 0 ? pricesPerSqm.reduce((a, b) => a + b) / pricesPerSqm.length : null,
-      medianPricePerSqm: pricesPerSqm.length > 0 ? calculateMedian(pricesPerSqm) : null,
-      priceRange: {
-        min: Math.min(...prices),
-        max: Math.max(...prices)
-      },
-      comparables: similarProperties.slice(0, 10) // Top 10 most relevant
-    };
-    
-    // Estimate value if property area is provided
-    if (propertyData.area && analysis.averagePricePerSqm) {
-      analysis.estimatedValue = Math.round(analysis.averagePricePerSqm * propertyData.area);
-      analysis.estimatedRange = {
-        low: Math.round(analysis.estimatedValue * 0.9),
-        high: Math.round(analysis.estimatedValue * 1.1)
-      };
+    console.log(`📊 Found ${similarProperties.length} similar properties`);
+    if (similarProperties.length > 0) {
+      console.log('📊 Sample property:', similarProperties[0]);
     }
     
-    console.log(`✅ Analysis completed with ${analysis.totalComparables} comparables`);
-    return analysis;
+    const pricesPerSqm = similarProperties
+      .filter(p => p.verified_price_per_sqm && parseFloat(p.verified_price_per_sqm) > 0)
+      .map(p => parseFloat(p.verified_price_per_sqm));
+    
+    console.log(`📊 Extracted ${pricesPerSqm.length} price per sqm values:`, pricesPerSqm);
+    
+    // Format comparables to match expected structure
+    const comparables = similarProperties.map(p => {
+      // Parse floor_number - handle both string and numeric
+      let floor = 0;
+      if (p.floor_number) {
+        const floorStr = String(p.floor_number).trim();
+        const floorMatch = floorStr.match(/(\d+)/);
+        if (floorMatch) {
+          floor = parseInt(floorMatch[1]) || 0;
+        }
+      }
+      
+      return {
+        address: p.address || p.street_name || '',
+        size: Math.round(parseFloat(p.area || p.apartment_area_sqm || 0)),
+        floor: floor,
+        price: Math.round(parseFloat(p.price || p.declared_price || 0)),
+        rooms: parseFloat(p.rooms) || 0,
+        price_per_sqm: Math.round(parseFloat(p.verified_price_per_sqm || p.price_per_sqm_rounded || 0))
+      };
+    });
+    
+    // Calculate prices (total prices, not per sqm)
+    const prices = similarProperties
+      .filter(p => p.price && parseFloat(p.price) > 0)
+      .map(p => parseFloat(p.price));
+    
+    // Calculate average and median price per sqm
+    const avg_price_per_sqm = pricesPerSqm.length > 0 
+      ? pricesPerSqm.reduce((a, b) => a + b) / pricesPerSqm.length 
+      : 0;
+    const median_price_per_sqm = pricesPerSqm.length > 0 
+      ? calculateMedian(pricesPerSqm) 
+      : 0;
+    
+    // Calculate average and median total price
+    const avg_price = prices.length > 0 
+      ? prices.reduce((a, b) => a + b) / prices.length 
+      : 0;
+    const median_price = prices.length > 0 
+      ? calculateMedian(prices) 
+      : 0;
+    
+    // Calculate market trends based on price per sqm variance
+    let market_trends = "יציב";
+    if (pricesPerSqm.length > 2) {
+      const variance = pricesPerSqm.reduce((sum, price) => {
+        return sum + Math.pow(price - avg_price_per_sqm, 2);
+      }, 0) / pricesPerSqm.length;
+      const stdDev = Math.sqrt(variance);
+      const coefficientOfVariation = (stdDev / avg_price_per_sqm) * 100;
+      
+      if (coefficientOfVariation > 15) {
+        market_trends = "משתנה - פערים משמעותיים במחירים";
+      } else if (coefficientOfVariation > 8) {
+        market_trends = "תנודתי במידה בינונית";
+      } else {
+        market_trends = "יציב - מחירים עקביים";
+      }
+    }
+    
+    // Build analysis_results structure
+    const analysis_results = {
+      comparables: comparables,
+      market_trends: market_trends,
+      adjustment_factor: 1,
+      avg_price_per_sqm: Math.round(avg_price_per_sqm),
+      median_price_per_sqm: Math.round(median_price_per_sqm),
+      avg_price: Math.round(avg_price),
+      median_price: Math.round(median_price),
+      total_comparables: comparables.length,
+      price_range: prices.length > 0 ? {
+        min: Math.round(Math.min(...prices)),
+        max: Math.round(Math.max(...prices))
+      } : null
+    };
+    
+    // Build the full response structure
+    const response = {
+      success: true,
+      message: "Comparable sales data processed successfully",
+      analysis: {
+        analysis_results: analysis_results,
+        created_at: new Date().toISOString()
+      },
+      extractedData: {
+        avg_price_per_sqm: Math.round(avg_price_per_sqm),
+        median_price_per_sqm: Math.round(median_price_per_sqm),
+        avg_price: Math.round(avg_price),
+        median_price: Math.round(median_price),
+        adjustment_factor: 1,
+        comparables: comparables,
+        market_trends: market_trends,
+        total_comparables: comparables.length,
+        price_range: prices.length > 0 ? {
+          min: Math.round(Math.min(...prices)),
+          max: Math.round(Math.max(...prices))
+        } : null
+      }
+    };
+    
+    // Save to database if sessionId provided
+    if (sessionId) {
+      try {
+        const db = new ComparableDataDatabaseClient();
+        // Save the analysis_results structure
+        await db.saveAnalysisResults(sessionId, analysis_results);
+        await db.disconnect();
+        console.log(`✅ Analysis results saved to database for session ${sessionId}`);
+      } catch (saveError) {
+        console.warn('⚠️ Failed to save analysis to database:', saveError.message);
+        // Don't fail the whole operation if save fails
+      }
+    }
+    
+    console.log(`✅ Analysis completed with ${comparables.length} comparables`);
+    return response;
     
   } catch (error) {
     console.error('❌ Failed to analyze comparable data:', error.message);
