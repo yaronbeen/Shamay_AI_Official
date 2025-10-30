@@ -9,79 +9,6 @@
 
 const axios = require('axios');
 
-/**
- * Extract exact coordinates from GovMap by letting it geocode the address
- * This ensures we get the exact coordinates that GovMap uses
- * @param {string} address - Address to geocode
- * @returns {Promise<{easting: number, northing: number} | null>} - ITM coordinates from GovMap
- */
-async function getGovMapExactCoordinates(address) {
-    try {
-        console.log('🗺️ Getting exact coordinates from GovMap for:', address);
-        
-        // Check if Puppeteer is available
-        let puppeteer;
-        try {
-            puppeteer = require('puppeteer');
-        } catch (error) {
-            console.warn('⚠️ Puppeteer not available for GovMap coordinate extraction');
-            return null;
-        }
-
-        // Create GovMap URL with just address query
-        const searchAddress = encodeURIComponent(address.trim());
-        const initialUrl = `https://www.govmap.gov.il/?q=${searchAddress}&13`;
-        
-        console.log('🌐 Loading GovMap URL:', initialUrl);
-
-        const browser = await puppeteer.launch({
-            headless: true,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage'
-            ]
-        });
-
-        try {
-            const page = await browser.newPage();
-            
-            // Navigate to GovMap with address
-            await page.goto(initialUrl, {
-                waitUntil: 'networkidle0',
-                timeout: 15000
-            });
-
-            // Wait for map to load and GovMap to geocode (usually updates URL)
-            await page.waitForTimeout(3000);
-
-            // Get the final URL after GovMap has geocoded
-            const finalUrl = page.url();
-            console.log('📍 Final GovMap URL:', finalUrl);
-
-            // Extract coordinates from URL (format: c=180004.48,661997.14)
-            const coordMatch = finalUrl.match(/[?&]c=([\d.]+),([\d.]+)/);
-            
-            if (coordMatch) {
-                const easting = parseFloat(coordMatch[1]);
-                const northing = parseFloat(coordMatch[2]);
-                
-                console.log(`✅ Extracted GovMap coordinates: E=${easting}, N=${northing}`);
-                
-                return { easting, northing };
-            } else {
-                console.warn('⚠️ Could not extract coordinates from GovMap URL');
-                return null;
-            }
-        } finally {
-            await browser.close();
-        }
-    } catch (error) {
-        console.error('❌ Error extracting coordinates from GovMap:', error.message);
-        return null;
-    }
-}
-
 // Rate limiting
 let lastRequestTime = 0;
 const MIN_REQUEST_INTERVAL = 1000; // 1 second between requests
@@ -264,35 +191,6 @@ function convertWithValidation(lat, lon) {
  * @param {Object} options - Configuration options
  * @returns {Promise<Object>} - { lat, lon, displayName, confidence }
  */
-/**
- * Geocode address using GovMap's own geocoding service
- * This ensures coordinates match what GovMap expects
- */
-async function geocodeWithGovMap(address) {
-    try {
-        // GovMap uses their own geocoding API (undocumented)
-        // We'll use their search endpoint if available
-        // For now, fall back to Nominatim with Israel-specific search
-        
-        console.log('🔍 Attempting GovMap geocoding for:', address);
-        
-        // Try to extract building number and street from address
-        const addressParts = address.match(/^(.+?)\s+(\d+)[\s,]+(.+)$/);
-        if (addressParts) {
-            const [, street, number, city] = addressParts;
-            console.log(`📍 Parsed address: ${street} ${number}, ${city}`);
-        }
-        
-        // For now, use Nominatim but note the potential coordinate mismatch
-        console.log('⚠️ Using Nominatim - coordinates may differ from GovMap by ~100m');
-        
-        return await geocodeAddress(address);
-    } catch (error) {
-        console.error('❌ GovMap geocoding failed:', error);
-        return await geocodeAddress(address);
-    }
-}
-
 async function geocodeAddress(address, options = {}) {
     const {
         userAgent = 'Shamay-SaaS/1.0 (Real Estate Document Processing)',
@@ -392,18 +290,17 @@ function buildGovMapUrl(easting, northing, options = {}) {
     const GOVMAP_BASE_URL = 'https://www.govmap.gov.il/';
     
     // Map center offset from marker position
-    // Set to 0 to center directly on the building
     const GOVMAP_CENTER_OFFSET = {
-        easting: 0,    // No offset - center directly on building
-        northing: 0    // No offset - center directly on building
+        easting: -45,   // Move center 45m west of marker
+        northing: +180  // Move center 180m north of marker
     };
 
     const config = {
-        zoom: 13, // Increased zoom level for better address visibility
+        zoom: 13,
         showTazea: true,      // Show land registry overlay (affects lay and bs parameters)
         showBorder: true,     // bb=1
         showZoomBorder: true, // zb=1
-        showInfo: false,      // in=1 - Default to false to avoid sidebar
+        showInfo: true,       // in=1
         ...options
     };
 
@@ -413,16 +310,6 @@ function buildGovMapUrl(easting, northing, options = {}) {
     if (typeof easting !== 'number' || typeof northing !== 'number') {
         throw new Error('Invalid coordinates: easting and northing must be numbers');
     }
-
-    // Validate ITM coordinate ranges (approximate ranges for Israel)
-    // Easting: ~100000 to ~290000, Northing: ~500000 to ~800000
-    if (easting < 100000 || easting > 300000 || northing < 400000 || northing > 900000) {
-        console.warn(`⚠️ Suspicious ITM coordinates detected: E=${easting}, N=${northing}`);
-        console.warn(`⚠️ Expected ranges: E=100000-300000, N=400000-900000`);
-    }
-
-    // Log coordinates being used
-    console.log(`📍 Building GovMap URL with coordinates: E=${easting.toFixed(2)}, N=${northing.toFixed(2)}`);
 
     // Round coordinates to 2 decimal places (for marker position)
     const eastingRounded = easting.toFixed(2);
@@ -445,18 +332,14 @@ function buildGovMapUrl(easting, northing, options = {}) {
     const layers = showTazea ? '21,15' : '15';
     params.append('lay', layers);
 
-    // Address query (for display/search context)
-    // With the marker coordinates in 'bs', the 'q' parameter shouldn't cause redirect
+    // Address query (if provided)
     if (address && typeof address === 'string' && address.trim().length > 0) {
         params.append('q', address.trim());
     }
 
-    // Building selection layers (bs parameter) WITH marker coordinates
-    // Format: bs=LAYERS|EASTING,NORTHING
-    // This tells GovMap where to place the marker/select the building
+    // Marker position (bs uses reversed layer order: 15,21 instead of 21,15)
     const bsLayers = showTazea ? '15,21' : '15';
-    const bsValue = `${bsLayers}|${eastingRounded},${northingRounded}`;
-    params.append('bs', bsValue);
+    params.append('bs', `${bsLayers}|${eastingRounded},${northingRounded}`);
 
     // Additional toggles
     if (showTazea) {
@@ -472,11 +355,9 @@ function buildGovMapUrl(easting, northing, options = {}) {
         params.append('in', '1');
     }
 
-    // URLSearchParams encodes special chars, but GovMap expects them raw
-    // Decode: %2C → ,  and  %7C → |
-    const urlString = params.toString()
-        .replace(/%2C/g, ',')  // Commas must be unencoded
-        .replace(/%7C/g, '|'); // Pipes must be unencoded for bs parameter
+    // URLSearchParams encodes commas as %2C, but GovMap expects raw commas
+    // Only pipes (|) should be encoded as %7C
+    const urlString = params.toString().replace(/%2C/g, ',');
     return `${GOVMAP_BASE_URL}?${urlString}`;
 }
 
