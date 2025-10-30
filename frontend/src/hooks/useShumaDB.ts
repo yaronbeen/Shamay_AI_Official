@@ -84,16 +84,36 @@ export const useShumaDB = () => {
         }),
       })
 
-      const result = await response.json()
+      // Read response as text first (we can parse it as JSON later if needed)
+      const textResponse = await response.text()
+      let result: any
+
+      // Try to parse as JSON
+      const contentType = response.headers.get('content-type')
+      if (contentType && contentType.includes('application/json')) {
+        try {
+          result = JSON.parse(textResponse)
+        } catch (jsonError) {
+          // If JSON parsing fails
+          console.error('❌ Failed to parse JSON response:', textResponse.substring(0, 200))
+          throw new Error(`Server error: ${textResponse.substring(0, 100)}`)
+        }
+      } else {
+        // Non-JSON response (likely HTML error page)
+        console.error('❌ Non-JSON response received:', textResponse.substring(0, 200))
+        throw new Error(`Server returned non-JSON response: ${response.status} ${response.statusText}`)
+      }
 
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to save GIS data')
+        throw new Error(result?.error || `Failed to save GIS data: ${response.status} ${response.statusText}`)
       }
 
       return { success: true }
     } catch (err: any) {
-      setError(err.message)
-      return { success: false, error: err.message }
+      const errorMessage = err.message || 'Failed to save GIS data'
+      console.error('❌ [HOOK] Save GIS data error:', errorMessage)
+      setError(errorMessage)
+      return { success: false, error: errorMessage }
     } finally {
       setIsLoading(false)
     }

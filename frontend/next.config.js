@@ -36,6 +36,66 @@ const nextConfig = {
   
   // Webpack configuration
   webpack: (config, { isServer }) => {
+    if (!isServer) {
+      // Completely exclude pdfjs-dist from bundling (we load it from CDN)
+      const originalExternals = config.externals || []
+      const isArray = Array.isArray(originalExternals)
+      
+      // Add function to ignore pdfjs-dist completely
+      const ignorePdfJs = (context, callback) => {
+        const request = context.request
+        if (request && (
+          request === 'pdfjs-dist' ||
+          request.startsWith('pdfjs-dist/') ||
+          request.includes('pdfjs-dist') ||
+          request.includes('pdfjs-dist/build/pdf') ||
+          request.includes('pdfjs-dist/legacy/build/pdf')
+        )) {
+          // Return 'external' to tell webpack this is an external dependency
+          // We'll provide it via CDN script tag instead
+          return callback(null, 'external pdfjsLib')
+        }
+        callback()
+      }
+      
+      config.externals = isArray 
+        ? [...originalExternals, ignorePdfJs]
+        : [originalExternals, ignorePdfJs].filter(Boolean)
+      
+      // Prevent webpack from resolving pdfjs-dist at all
+      config.resolve.alias = config.resolve.alias || {}
+      config.resolve.alias['pdfjs-dist'] = false
+      config.resolve.alias['pdfjs-dist/build/pdf'] = false
+      config.resolve.alias['pdfjs-dist/legacy/build/pdf'] = false
+      config.resolve.alias['pdfjs-dist/build/pdf.mjs'] = false
+      
+      // Use NormalModuleReplacementPlugin to replace pdfjs-dist imports with empty module
+      const webpack = require('webpack')
+      config.plugins = config.plugins || []
+      config.plugins.push(
+        new webpack.NormalModuleReplacementPlugin(
+          /^pdfjs-dist$/,
+          require.resolve('./pdfjs-dist-stub.js')
+        ),
+        new webpack.NormalModuleReplacementPlugin(
+          /^pdfjs-dist\//,
+          (resource) => {
+            // Replace any pdfjs-dist subpath with empty module
+            resource.request = require.resolve('./pdfjs-dist-stub.js')
+          }
+        )
+      )
+      
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        canvas: false,
+        fs: false,
+        path: false,
+        stream: false,
+        crypto: false,
+      };
+    }
+
     // Exclude PDF.js worker from bundling (it's loaded separately)
     config.module.rules.push({
       test: /pdf\.worker\.(min\.)?mjs$/,
@@ -50,16 +110,6 @@ const nextConfig = {
       test: /\.node$/,
       use: 'node-loader',
     });
-
-    // Mark canvas as external for both client and server
-    config.externals = config.externals || {};
-    if (!isServer) {
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        canvas: false,
-        fs: false,
-      };
-    }
 
     return config;
   },

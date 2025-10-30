@@ -35,11 +35,11 @@
     "clsx": "^2.1.1",
     "dayjs": "^1.11.10",
     "html2canvas": "^1.4.1",
+    "konva": "^10.0.8",
     "lucide-react": "^0.294.0",
     "next": "14.0.4",
     "next-auth": "^4.24.11",
     "next-intl": "^4.3.12",
-    "pdfjs-dist": "^5.4.296",
     "pg": "^8.16.3",
     "postcss": "^8",
     "react": "^18",
@@ -47,21 +47,23 @@
     "react-easy-crop": "^5.5.3",
     "react-hook-form": "^7.48.2",
     "react-image-crop": "^11.0.10",
+    "react-konva": "^18.2.10",
     "react-pdf": "^10.2.0",
     "tailwind-merge": "^3.3.1",
     "tailwindcss": "^3.3.0",
     "typescript": "^5",
+    "use-image": "^1.1.4",
     "zod": "^3.22.4",
     "zustand": "^4.4.7"
   },
   "devDependencies": {
+    "@types/html2canvas": "^1.0.0",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "eslint": "^8",
     "eslint-config-next": "14.0.4",
     "prisma": "^6.17.1",
-    "tailwindcss-rtl": "^0.9.0",
-    "@types/html2canvas": "^1.0.0"
+    "tailwindcss-rtl": "^0.9.0"
   }
 }

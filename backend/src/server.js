@@ -76,6 +76,7 @@ app.use('/api/gis-screenshot', require('./routes/gis-screenshot'));
 app.use('/api/address-to-govmap', require('./routes/address-to-govmap'));
 app.use('/api/garmushka', require('./routes/garmushka'));
 app.use('/api/export', require('./routes/export'));
+app.use('/api/pdf-to-image', require('./routes/pdf-to-image'));
 
 // Static file serving for uploads
 app.use('/uploads', express.static('uploads'));

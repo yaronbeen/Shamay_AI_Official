@@ -48,13 +48,25 @@ router.post('/', async (req, res) => {
 
       case 'save_gis_data': {
         // Save GIS data
-        const gisResult = await ShumaDB.saveGISData(sessionId, gisData);
+        try {
+          const gisResult = await ShumaDB.saveGISData(sessionId, gisData);
 
-        if (gisResult.error) {
-          return res.status(500).json({ error: gisResult.error });
+          if (gisResult.error) {
+            logger.error('GIS data save error:', gisResult.error);
+            return res.status(500).json({ 
+              error: gisResult.error,
+              message: 'Failed to save GIS screenshots to database'
+            });
+          }
+
+          return res.json({ success: true });
+        } catch (error) {
+          logger.error('Unexpected error saving GIS data:', error);
+          return res.status(500).json({ 
+            error: error.message || 'Internal server error',
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+          });
         }
-
-        return res.json({ success: true });
       }
 
       case 'save_garmushka': {

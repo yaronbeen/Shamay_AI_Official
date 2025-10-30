@@ -260,6 +260,7 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
     <div className="space-y-6">
       {sessionId ? (
         <GarmushkaMeasurementViewer 
+          data={data}
           sessionId={sessionId}
           initialMeasurements={data.garmushkaMeasurements}
           onMeasurementComplete={(measurements) => {
