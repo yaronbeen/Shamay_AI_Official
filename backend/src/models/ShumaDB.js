@@ -563,6 +563,7 @@ class ShumaDBEnhanced {
 
   /**
    * Save Garmushka measurements to garmushka table + shuma
+   * Note: pngExport should be a file URL (not base64) after processing in saveGarmushkaData
    */
   static async _saveGarmushkaData(client, shumaId, sessionId, garmushkaData) {
     if (!garmushkaData.measurementTable || garmushkaData.measurementTable.length === 0) {
@@ -588,7 +589,7 @@ class ShumaDBEnhanced {
       garmushkaData.metersPerPixel || null,
       this._truncateString(garmushkaData.unitMode || 'metric', 20),
       garmushkaData.isCalibrated || false,
-      garmushkaData.pngExport || null, // TEXT field for base64
+      garmushkaData.pngExport || null, // TEXT field - now stores URL instead of base64
       shumaId,
       sessionId
     ])
@@ -610,6 +611,218 @@ class ShumaDBEnhanced {
   /**
    * Save GIS screenshots to images table + shuma
    */
+  /**
+   * Convert base64 image to Buffer and save to file storage
+   * Uses Vercel Blob in production, local filesystem in development
+   * Returns URL instead of base64 to reduce DB size
+   */
+  static async _saveBase64ImageToFile(base64Data, sessionId, filename) {
+    try {
+      // Extract base64 data (remove data:image/png;base64, prefix if present)
+      const base64String = base64Data.includes(',') 
+        ? base64Data.split(',')[1] 
+        : base64Data
+      
+      // Convert base64 to Buffer
+      const buffer = Buffer.from(base64String, 'base64')
+      
+      // Check if we're in production (Vercel)
+      const isProduction = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production'
+      
+      if (isProduction && process.env.BLOB_READ_WRITE_TOKEN) {
+        // Use Vercel Blob in production
+        return await this._saveToVercelBlob(buffer, sessionId, filename)
+      } else {
+        // Use local filesystem in development
+        return await this._saveToLocalFilesystem(buffer, sessionId, filename)
+      }
+    } catch (error) {
+      console.error(`❌ Error saving image file:`, error)
+      throw error
+    }
+  }
+  
+  /**
+   * Save file to Vercel Blob (Production)
+   */
+  static async _saveToVercelBlob(buffer, sessionId, filename) {
+    try {
+      // Try to use @vercel/blob
+      let put
+      try {
+        const blobModule = require('@vercel/blob')
+        put = blobModule.put
+      } catch (e) {
+        throw new Error('@vercel/blob not available. Please install: npm install @vercel/blob')
+      }
+      
+      const pathname = `${sessionId}/${filename}`
+      
+      console.log('🔍 [BLOB] Uploading GIS screenshot:', {
+        sessionId,
+        filename,
+        size: buffer.length,
+        hasToken: !!process.env.BLOB_READ_WRITE_TOKEN
+      })
+      
+      const blob = await put(pathname, buffer, {
+        access: 'public',
+        addRandomSuffix: false,
+      })
+      
+      console.log('✅ [BLOB] GIS screenshot uploaded:', blob.url)
+      
+      return {
+        url: blob.url,
+        path: blob.pathname || pathname,
+        size: buffer.length
+      }
+    } catch (error) {
+      console.error('❌ [BLOB] Upload error:', error.message)
+      // Fallback to local if blob fails
+      console.warn('⚠️ Falling back to local filesystem...')
+      return await this._saveToLocalFilesystem(buffer, sessionId, filename)
+    }
+  }
+  
+  /**
+   * Save file to local filesystem (Development)
+   * Saves to frontend/uploads when running locally (since frontend serves from there)
+   */
+  static async _saveToLocalFilesystem(buffer, sessionId, filename) {
+    const fs = require('fs').promises
+    const path = require('path')
+    
+    // Determine the correct uploads directory
+    // Try frontend/uploads first (where the frontend expects files)
+    // Fallback to backend/uploads or process.cwd()/uploads
+    const possibleUploadDirs = [
+      path.join(process.cwd(), 'frontend', 'uploads', sessionId), // frontend/uploads (local dev)
+      path.join(process.cwd(), 'uploads', sessionId), // root/uploads
+      path.join(__dirname, '../../uploads', sessionId), // backend/uploads
+    ]
+    
+    // Try to find/create the first valid directory
+    let uploadsDir = null
+    for (const dir of possibleUploadDirs) {
+      try {
+        await fs.mkdir(dir, { recursive: true })
+        // Test if we can write here by checking if parent exists
+        const parentDir = path.dirname(dir)
+        await fs.access(parentDir)
+        uploadsDir = dir
+        console.log(`📁 Using upload directory: ${uploadsDir}`)
+        break
+      } catch (error) {
+        // Continue to next path
+        continue
+      }
+    }
+    
+    // Fallback to first option if all failed
+    if (!uploadsDir) {
+      uploadsDir = possibleUploadDirs[0]
+      await fs.mkdir(uploadsDir, { recursive: true })
+    }
+    
+    // Save file
+    const filePath = path.join(uploadsDir, filename)
+    await fs.writeFile(filePath, buffer)
+    
+    // Return URL for local access
+    const url = `/api/files/${sessionId}/${filename}`
+    
+    console.log(`✅ [LOCAL] Saved image file: ${filePath} (${buffer.length} bytes)`)
+    console.log(`📁 File URL: ${url}`)
+    
+    return { url, path: `${sessionId}/${filename}`, size: buffer.length }
+  }
+
+  /**
+   * Save GIS screenshots metadata to images table using URLs (files already saved)
+   */
+  static async _saveGISScreenshotsWithUrls(client, shumaId, sessionId, screenshotUrls, originalScreenshots) {
+    // screenshotUrls has URLs, originalScreenshots has base64 (for size info)
+    const imagesToSave = []
+    
+    if (screenshotUrls.cropMode0) {
+      const originalSize = originalScreenshots.cropMode0 ? originalScreenshots.cropMode0.length : 0
+      imagesToSave.push({
+        type: 'סקרין שוט GOVMAP',
+        filename: `gis-screenshot-clean-${sessionId}.png`,
+        url: screenshotUrls.cropMode0,
+        cropMode: '0',
+        originalSize
+      })
+    }
+    
+    if (screenshotUrls.cropMode1) {
+      const originalSize = originalScreenshots.cropMode1 ? originalScreenshots.cropMode1.length : 0
+      imagesToSave.push({
+        type: 'סקרין שוט תצ״א',
+        filename: `gis-screenshot-taba-${sessionId}.png`,
+        url: screenshotUrls.cropMode1,
+        cropMode: '1',
+        originalSize
+      })
+    }
+
+    for (const img of imagesToSave) {
+      try {
+        console.log(`💾 Saving image metadata: ${img.filename}, URL: ${img.url}`)
+        
+        // Save metadata to images table (no base64, just URL)
+        const imageType = this._truncateString(img.type || 'gis_screenshot', 50)
+        const metadataJson = JSON.stringify({
+          filename: img.filename,
+          mapType: img.mapType,
+          cropMode: img.cropMode,
+          timestamp: new Date().toISOString(),
+          storedAs: 'file',
+          originalBase64Size: img.originalSize
+        })
+        
+        const updateResult = await client.query(`
+          UPDATE images 
+          SET 
+            image_data = NULL,
+            image_url = $1,
+            metadata = $2
+          WHERE session_id = $3 AND image_type = $4
+        `, [
+          img.url, // Store URL, not base64
+          metadataJson,
+          sessionId,
+          imageType
+        ])
+        
+        // If no rows were updated, insert new record
+        if (updateResult.rowCount === 0) {
+          await client.query(`
+            INSERT INTO images (
+              shuma_id,
+              session_id,
+              image_type,
+              image_data,
+              image_url,
+              metadata
+            ) VALUES ($1, $2, $3, NULL, $4, $5)
+          `, [
+            shumaId,
+            sessionId,
+            imageType,
+            img.url, // Store URL, not base64
+            metadataJson
+          ])
+        }
+        console.log(`✅ Successfully saved image metadata: ${img.filename} (URL: ${img.url})`)
+      } catch (imgError) {
+        console.error(`❌ Error saving individual image ${img.filename}:`, imgError.message)
+        continue
+      }
+    }
+  }
+
   static async _saveGISScreenshots(client, shumaId, sessionId, gisScreenshots) {
     if (!gisScreenshots.cropMode0 && !gisScreenshots.cropMode1) {
       return
@@ -621,7 +834,8 @@ class ShumaDBEnhanced {
       imagesToSave.push({
         type: 'סקרין שוט GOVMAP',
         filename: `gis-screenshot-clean-${sessionId}.png`,
-        data: gisScreenshots.cropMode0
+        data: gisScreenshots.cropMode0,
+        cropMode: '0'
       })
     }
     
@@ -629,33 +843,84 @@ class ShumaDBEnhanced {
       imagesToSave.push({
         type: 'סקרין שוט תצ״א',
         filename: `gis-screenshot-taba-${sessionId}.png`,
-        data: gisScreenshots.cropMode1
+        data: gisScreenshots.cropMode1,
+        cropMode: '1'
       })
     }
 
     for (const img of imagesToSave) {
-      await client.query(`
-        INSERT INTO images (
-          shuma_id,
-          session_id,
-          image_type,
-          image_data,
-          image_url,
-          metadata
-        ) VALUES ($1, $2, $3, $4, $5, $6)
-        ON CONFLICT DO NOTHING
-      `, [
-        shumaId,
-        sessionId,
-        this._truncateString(img.type || 'gis_screenshot', 50),
-        img.data || null, // TEXT field for base64
-        img.url || `/uploads/${sessionId}/${img.filename || 'screenshot.png'}`, // TEXT field for URLs
-        JSON.stringify({
-          filename: img.filename,
-          mapType: img.mapType,
-          timestamp: new Date().toISOString()
-        })
-      ])
+      try {
+        const dataSize = img.data ? img.data.length : 0
+        console.log(`💾 Processing image: ${img.filename}, base64 size: ${dataSize} characters`)
+        
+        // Save image to file storage instead of storing base64 in DB
+        let imageUrl = null
+        try {
+          const fileResult = await this._saveBase64ImageToFile(img.data, sessionId, img.filename)
+          imageUrl = fileResult.url
+          console.log(`✅ Image saved to file storage: ${imageUrl}`)
+        } catch (fileError) {
+          console.error(`❌ Failed to save image file:`, fileError.message)
+          // Fallback: continue without file URL (save will continue with URL as null)
+        }
+        
+        // Save metadata to images table (no base64, just URL)
+        const updateResult = await client.query(`
+          UPDATE images 
+          SET 
+            image_data = NULL,
+            image_url = $4,
+            metadata = $5,
+            updated_at = NOW()
+          WHERE session_id = $2 AND image_type = $3
+        `, [
+          shumaId,
+          sessionId,
+          this._truncateString(img.type || 'gis_screenshot', 50),
+          imageUrl, // Store URL instead of base64
+          JSON.stringify({
+            filename: img.filename,
+            mapType: img.mapType,
+            cropMode: img.cropMode,
+            timestamp: new Date().toISOString(),
+            storedAs: 'file', // Indicate this is stored as file, not base64
+            originalSize: dataSize
+          })
+        ])
+        
+        // If no rows were updated, insert new record
+        if (updateResult.rowCount === 0) {
+          await client.query(`
+            INSERT INTO images (
+              shuma_id,
+              session_id,
+              image_type,
+              image_data,
+              image_url,
+              metadata
+            ) VALUES ($1, $2, $3, NULL, $4, $5)
+          `, [
+          shumaId,
+          sessionId,
+          this._truncateString(img.type || 'gis_screenshot', 50),
+          imageUrl, // Store URL, not base64
+          JSON.stringify({
+            filename: img.filename,
+            mapType: img.mapType,
+            cropMode: img.cropMode,
+            timestamp: new Date().toISOString(),
+            storedAs: 'file',
+            originalSize: dataSize
+          })
+          ])
+        }
+        console.log(`✅ Successfully saved image metadata: ${img.filename} (URL: ${imageUrl})`)
+      } catch (imgError) {
+        console.error(`❌ Error saving individual image ${img.filename}:`, imgError.message)
+        console.error(`❌ Image error stack:`, imgError.stack)
+        // Continue with other images even if one fails
+        continue
+      }
     }
   }
 
@@ -794,35 +1059,83 @@ class ShumaDBEnhanced {
         : (shumaResult.rows[0].gis_screenshots || {})
       
       // Merge new data with existing screenshots
-      const mergedScreenshots = {
+      let mergedScreenshots = {
         ...existingScreenshots,
         ...gisData
+      }
+      
+      // Process screenshots - convert base64 to URLs if needed (frontend now sends URLs directly)
+      const processedScreenshots = {}
+      for (const [key, value] of Object.entries(mergedScreenshots)) {
+        if (typeof value === 'string') {
+          // If it's already a URL (from file storage), use it directly
+          if (value.startsWith('/api/files/') || value.startsWith('http://') || value.startsWith('https://')) {
+            processedScreenshots[key] = value // Already a URL, no conversion needed
+            console.log(`✅ ${key} is already a URL: ${value.substring(0, 50)}...`)
+          } else if (value.startsWith('data:image')) {
+            // It's base64 - convert to file (for backwards compatibility)
+            const filename = `gis-screenshot-${key === 'cropMode0' ? 'clean' : 'taba'}-${sessionId}.png`
+            try {
+              const fileResult = await this._saveBase64ImageToFile(value, sessionId, filename)
+              processedScreenshots[key] = fileResult.url // Store URL instead of base64
+              console.log(`✅ Converted ${key} from base64 to file URL: ${fileResult.url}`)
+            } catch (fileError) {
+              console.warn(`⚠️ Failed to convert ${key} to file, keeping original:`, fileError.message)
+              processedScreenshots[key] = value // Fallback to original if file save fails
+            }
+          } else {
+            // Other string value, keep as-is
+            processedScreenshots[key] = value
+          }
+        } else {
+          // Non-string value, keep as-is
+          processedScreenshots[key] = value
+        }
       }
       
       console.log('📸 GIS Data Save:', {
         sessionId,
         existing: existingScreenshots,
         new: gisData,
-        merged: mergedScreenshots
+        processed: processedScreenshots
       })
       
-      // Update shuma table with merged data
-      await client.query(`
-        UPDATE shuma SET
-          gis_screenshots = $1,
-          updated_at = NOW()
-        WHERE session_id = $2
-      `, [JSON.stringify(mergedScreenshots), sessionId])
+      // Update shuma table with processed screenshots (URLs instead of base64)
+      const mergedJson = JSON.stringify(processedScreenshots)
+      console.log(`📊 Processed JSON size: ${mergedJson.length} characters (much smaller than base64!)`)
       
-      // Save to images table
-      await this._saveGISScreenshots(client, shumaId, sessionId, mergedScreenshots)
+      try {
+        await client.query(`
+          UPDATE shuma SET
+            gis_screenshots = $1,
+            updated_at = NOW()
+          WHERE session_id = $2
+        `, [mergedJson, sessionId])
+        console.log('✅ Updated shuma table with GIS screenshots')
+      } catch (updateError) {
+        console.error('❌ Error updating shuma table:', updateError.message)
+        throw updateError
+      }
+      
+      // Save to images table - files are already saved, just store URLs and metadata
+      // Use processedScreenshots which has URLs, not base64
+      try {
+        await this._saveGISScreenshotsWithUrls(client, shumaId, sessionId, processedScreenshots, mergedScreenshots)
+        console.log('✅ Saved GIS screenshots metadata to images table')
+      } catch (imagesError) {
+        console.error('❌ Error saving to images table:', imagesError.message)
+        // Don't fail the entire operation if images table save fails
+        // The main data is already in shuma.gis_screenshots
+        console.warn('⚠️ Continuing despite images table error')
+      }
       
       await client.query('COMMIT')
       return { success: true }
       
     } catch (error) {
       await client.query('ROLLBACK')
-      console.error('Error saving GIS data:', error)
+      console.error('❌ Error saving GIS data:', error)
+      console.error('❌ Error stack:', error.stack)
       return { error: error.message || 'Failed to save GIS data' }
     } finally {
       client.release()
@@ -831,6 +1144,7 @@ class ShumaDBEnhanced {
 
   /**
    * Save Garmushka data to shuma + garmushka table
+   * Converts base64 pngExport to file URL before saving
    */
   static async saveGarmushkaData(sessionId, garmushkaData) {
     const client = await db.client()
@@ -845,16 +1159,40 @@ class ShumaDBEnhanced {
       }
       const shumaId = shumaResult.rows[0].id
       
-      // Update shuma table
+      // Process pngExport: convert base64 to file URL if needed
+      let processedGarmushkaData = { ...garmushkaData }
+      
+      if (garmushkaData.pngExport && typeof garmushkaData.pngExport === 'string') {
+        // If it's already a URL, use it directly
+        if (garmushkaData.pngExport.startsWith('/api/files/') || 
+            garmushkaData.pngExport.startsWith('http://') || 
+            garmushkaData.pngExport.startsWith('https://')) {
+          console.log('✅ Garmushka pngExport is already a URL:', garmushkaData.pngExport.substring(0, 50))
+          processedGarmushkaData.pngExport = garmushkaData.pngExport
+        } else if (garmushkaData.pngExport.startsWith('data:image')) {
+          // It's base64 - convert to file
+          const filename = `garmushka-export-${sessionId}.png`
+          try {
+            const fileResult = await this._saveBase64ImageToFile(garmushkaData.pngExport, sessionId, filename)
+            processedGarmushkaData.pngExport = fileResult.url // Store URL instead of base64
+            console.log(`✅ Converted Garmushka pngExport from base64 to file URL: ${fileResult.url}`)
+          } catch (fileError) {
+            console.warn(`⚠️ Failed to convert Garmushka pngExport to file, keeping original:`, fileError.message)
+            processedGarmushkaData.pngExport = garmushkaData.pngExport // Fallback to original
+          }
+        }
+      }
+      
+      // Update shuma table with processed data (may contain URL instead of base64)
       await client.query(`
         UPDATE shuma SET
           garmushka_measurements = $1,
           updated_at = NOW()
         WHERE session_id = $2
-      `, [JSON.stringify(garmushkaData), sessionId])
+      `, [JSON.stringify(processedGarmushkaData), sessionId])
       
-      // Save to garmushka table
-      await this._saveGarmushkaData(client, shumaId, sessionId, garmushkaData)
+      // Save to garmushka table (with processed pngExport as URL)
+      await this._saveGarmushkaData(client, shumaId, sessionId, processedGarmushkaData)
       
       await client.query('COMMIT')
       return { success: true }

@@ -53,6 +53,7 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
   const [annotations, setAnnotations] = useState<AnnotationShape[]>([])
   const [isCapturing, setIsCapturing] = useState(false)
   const [isCapturingServer, setIsCapturingServer] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [currentIframeUrl, setCurrentIframeUrl] = useState<string | null>(null)
   const [cropArea, setCropArea] = useState({ x: 0, y: 0, width: 100, height: 100 })
   const [isDrawingCrop, setIsDrawingCrop] = useState(false)
@@ -60,6 +61,7 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
   const [cropEnd, setCropEnd] = useState({ x: 0, y: 0 })
   const [imageNaturalSize, setImageNaturalSize] = useState({ width: 0, height: 0 })
   const [isImageLoading, setIsImageLoading] = useState(false)
+  const [lastSyncedUrl, setLastSyncedUrl] = useState<string | null>(null)
   const imageRef = useRef<HTMLImageElement>(null)
   const cropContainerRef = useRef<HTMLDivElement>(null)
   const annotationImageRef = useRef<HTMLImageElement>(null)
@@ -95,6 +97,12 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
   const ensureDataUrlFormat = (imageData: string): string => {
     if (!imageData) return ''
     
+    // If it's a file URL (from file storage), return as is
+    if (imageData.startsWith('/api/files/') || imageData.startsWith('http://') || imageData.startsWith('https://')) {
+      console.log('✅ Image is a file URL, using as-is')
+      return imageData
+    }
+    
     // If it's already a proper data URL, return as is
     if (imageData.startsWith('data:image/')) {
       console.log('✅ Image already in data URL format')
@@ -109,6 +117,138 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
     
     return imageData
   }
+
+  // Update iframe src when currentIframeUrl changes (only for initial load or manual updates)
+  // Don't auto-update if user is navigating, to avoid reloads
+  useEffect(() => {
+    const iframe = iframeRef.current
+    if (!iframe) return
+
+    // Only set initial src if not already set, or if explicitly changed (not from auto-sync)
+    // We track the URL separately without forcing iframe reloads
+    const currentSrc = iframe.getAttribute('src')
+    if (!currentSrc && currentIframeUrl) {
+      iframe.src = currentIframeUrl
+      console.log('🔗 Setting initial iframe src:', currentIframeUrl.substring(0, 100))
+    }
+  }, []) // Only on mount - don't auto-reload on URL changes
+
+  // Sync iframe URL in real-time as user navigates
+  useEffect(() => {
+    const iframe = iframeRef.current
+    if (!iframe) return
+
+    // Function to sync iframe URL
+    const syncIframeUrl = () => {
+      try {
+        // Try to access iframe location (works if same-origin, fails silently if cross-origin)
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document
+        if (iframeDoc) {
+          const currentUrl = iframeDoc.location.href
+          if (currentUrl && currentUrl !== currentIframeUrl) {
+            console.log('🔄 Iframe URL changed:', currentUrl.substring(0, 100))
+            setCurrentIframeUrl(currentUrl)
+          }
+        } else {
+          // Cross-origin: Try to read from contentWindow.location (might fail)
+          try {
+            const currentUrl = iframe.contentWindow?.location.href
+            if (currentUrl && currentUrl !== currentIframeUrl && currentUrl.startsWith('http')) {
+              console.log('🔄 Iframe URL synced (cross-origin):', currentUrl.substring(0, 100))
+              setCurrentIframeUrl(currentUrl)
+            }
+          } catch (e) {
+            // Expected CORS error for cross-origin iframes - this is normal
+          }
+        }
+      } catch (error) {
+        // CORS error is expected for cross-origin iframes
+      }
+    }
+
+    // Listen for postMessage from iframe (GovMap might send URL updates)
+    const handleMessage = (event: MessageEvent) => {
+      // Only accept messages from GovMap domain
+      if (event.origin.includes('govmap.gov.il') || event.origin.includes('localhost')) {
+        if (event.data && typeof event.data === 'object') {
+          if (event.data.url || event.data.href) {
+            const url = event.data.url || event.data.href
+            if (url && url !== currentIframeUrl) {
+              console.log('📨 Received URL update from iframe:', url.substring(0, 100))
+              setCurrentIframeUrl(url)
+            }
+          }
+          // Handle coordinate/zoom updates
+          if (event.data.coordinates || event.data.zoom) {
+            console.log('📨 Received navigation update:', event.data)
+            // Try to construct URL from the data
+            if (iframe.src) {
+              try {
+                const urlObj = new URL(iframe.src)
+                if (event.data.coordinates) {
+                  urlObj.searchParams.set('c', `${event.data.coordinates.x},${event.data.coordinates.y}`)
+                }
+                if (event.data.zoom) {
+                  urlObj.searchParams.set('z', event.data.zoom.toString())
+                }
+                const newUrl = urlObj.toString()
+                if (newUrl !== currentIframeUrl) {
+                  setCurrentIframeUrl(newUrl)
+                }
+              } catch (e) {
+                console.warn('Failed to update URL from postMessage:', e)
+              }
+            }
+          }
+        } else if (typeof event.data === 'string' && event.data.startsWith('http')) {
+          // Direct URL in message
+          if (event.data !== currentIframeUrl) {
+            console.log('📨 Received URL from iframe:', event.data.substring(0, 100))
+            setCurrentIframeUrl(event.data)
+          }
+        }
+      }
+    }
+
+    // Listen for iframe load events
+    const handleIframeLoad = () => {
+      console.log('🔄 Iframe loaded, syncing URL...')
+      syncIframeUrl()
+    }
+
+    // Request URL from iframe (if GovMap supports it)
+    const requestUrl = () => {
+      try {
+        iframe.contentWindow?.postMessage({ type: 'getUrl' }, '*')
+        iframe.contentWindow?.postMessage({ type: 'getCurrentUrl' }, '*')
+        iframe.contentWindow?.postMessage({ type: 'requestUrl' }, '*')
+      } catch (e) {
+        // Expected for cross-origin
+      }
+    }
+
+    // Set up event listeners
+    window.addEventListener('message', handleMessage)
+    iframe.addEventListener('load', handleIframeLoad)
+
+    // Poll for URL changes (every 2 seconds) - fallback method
+    const pollInterval = setInterval(() => {
+      syncIframeUrl()
+      requestUrl() // Request URL update from iframe
+    }, 2000)
+
+    // Initial sync
+    setTimeout(() => {
+      syncIframeUrl()
+      requestUrl()
+    }, 1000)
+
+    return () => {
+      window.removeEventListener('message', handleMessage)
+      iframe.removeEventListener('load', handleIframeLoad)
+      clearInterval(pollInterval)
+    }
+  }, [currentIframeUrl, iframeRef])
 
   useEffect(() => {
     if (sessionId && data) {
@@ -177,14 +317,18 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
       
       // Load screenshots from ValuationData
       if (data.gisScreenshots) {
-        // Ensure screenshots are in proper base64 format for display
+        // Screenshots can be either URLs (from file storage) or base64 data URLs
+        // Both work with img src, but for annotation we might need base64
         const formattedScreenshots = {
-          cropMode0: data.gisScreenshots.cropMode0,
-          cropMode1: data.gisScreenshots.cropMode1
+          cropMode0: data.gisScreenshots.cropMode0 ? ensureDataUrlFormat(data.gisScreenshots.cropMode0) : undefined,
+          cropMode1: data.gisScreenshots.cropMode1 ? ensureDataUrlFormat(data.gisScreenshots.cropMode1) : undefined
         }
         
         setScreenshots(formattedScreenshots)
-        console.log('📸 Loaded existing screenshots from data:', formattedScreenshots)
+        console.log('📸 Loaded existing screenshots from data:', {
+          cropMode0: formattedScreenshots.cropMode0 ? (formattedScreenshots.cropMode0.startsWith('/') ? 'URL' : 'base64') : 'none',
+          cropMode1: formattedScreenshots.cropMode1 ? (formattedScreenshots.cropMode1.startsWith('/') ? 'URL' : 'base64') : 'none'
+        })
       }
       
       // If no data in props, try to load from session API (fallback)
@@ -349,25 +493,198 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
     return currentCropMode === '1' ? gisData.govmapUrls.cropMode1 : gisData.govmapUrls.cropMode0
   }
 
-  // Update iframe URL when crop mode changes
+  // Update iframe URL when crop mode changes - PRESERVES zoom from previous mode if available
   const handleCropModeChange = (mode: '0' | '1') => {
     setCurrentCropMode(mode)
     if (gisData?.govmapUrls) {
-      const newUrl = mode === '1' ? gisData.govmapUrls.cropMode1 : gisData.govmapUrls.cropMode0
+      let newUrl = mode === '1' ? gisData.govmapUrls.cropMode1 : gisData.govmapUrls.cropMode0
+      
+      // If we have a current URL with zoom, try to preserve that zoom in the new mode
+      const currentUrl = currentIframeUrl || lastSyncedUrl
+      if (currentUrl) {
+        try {
+          const currentUrlObj = new URL(currentUrl)
+          const currentZoom = currentUrlObj.searchParams.get('z')
+          
+          // If we have a zoom from the current view, apply it to the new crop mode URL
+          if (currentZoom) {
+            const newUrlObj = new URL(newUrl)
+            newUrlObj.searchParams.set('z', currentZoom)
+            newUrlObj.searchParams.delete('in') // Remove sidebar param
+            newUrl = newUrlObj.toString()
+            console.log(`📌 Preserved zoom ${currentZoom} when switching to crop mode ${mode}`)
+          }
+        } catch (e) {
+          console.warn('Could not preserve zoom:', e)
+        }
+      }
+      
       setCurrentIframeUrl(newUrl)
-      console.log(`🔄 Crop mode changed to ${mode}, URL: ${newUrl}`)
+      setLastSyncedUrl(newUrl)
+      
+      // Update gisData to store the updated URL
+      setGisData({
+        ...gisData,
+        govmapUrls: {
+          ...gisData.govmapUrls,
+          [`cropMode${mode}`]: newUrl
+        }
+      })
+      
+      console.log(`🔄 Crop mode changed to ${mode}, URL: ${newUrl.substring(0, 100)}`)
     }
+  }
+
+  // Helper to extract coordinates and zoom from URL
+  const getUrlParams = (url: string | null) => {
+    if (!url) return { coordinates: null, zoom: null }
+    try {
+      const urlObj = new URL(url)
+      const c = urlObj.searchParams.get('c')
+      const z = urlObj.searchParams.get('z')
+      return {
+        coordinates: c,
+        zoom: z
+      }
+    } catch (e) {
+      return { coordinates: null, zoom: null }
+    }
+  }
+
+  // Update zoom in the current URL and refresh iframe - PRESERVES all crop mode parameters
+  const updateZoom = (newZoom: number) => {
+    const currentUrl = lastSyncedUrl || currentIframeUrl
+    if (!currentUrl) return
+
+    try {
+      const urlObj = new URL(currentUrl)
+      
+      // CRITICAL: Only update the 'z' parameter, preserve ALL other parameters
+      // This ensures crop mode parameters (bs, b, bb, zb, lay, etc.) are maintained
+      urlObj.searchParams.set('z', newZoom.toString())
+      
+      // Remove 'in' parameter if present (to ensure no sidebar)
+      urlObj.searchParams.delete('in')
+      
+      const updatedUrl = urlObj.toString()
+      
+      console.log(`🔍 Updating zoom to ${newZoom}`)
+      console.log(`  Current crop mode: ${currentCropMode}`)
+      console.log(`  Preserving all params:`, {
+        c: urlObj.searchParams.get('c'),
+        z: urlObj.searchParams.get('z'),
+        bs: urlObj.searchParams.get('bs'),
+        b: urlObj.searchParams.get('b'),
+        bb: urlObj.searchParams.get('bb'),
+        zb: urlObj.searchParams.get('zb'),
+        lay: urlObj.searchParams.get('lay')
+      })
+      
+      // Update both state and iframe src
+      setCurrentIframeUrl(updatedUrl)
+      setLastSyncedUrl(updatedUrl)
+      
+      // Also update the gisData URLs to keep them in sync
+      if (gisData?.govmapUrls) {
+        setGisData({
+          ...gisData,
+          govmapUrls: {
+            ...gisData.govmapUrls,
+            [`cropMode${currentCropMode}`]: updatedUrl
+          }
+        })
+      }
+      
+      // Update iframe src immediately
+      const iframe = iframeRef.current
+      if (iframe) {
+        iframe.src = updatedUrl
+      }
+    } catch (error) {
+      console.error('❌ Error updating zoom:', error)
+      alert('שגיאה בעדכון הזום')
+    }
+  }
+
+  // Manually sync the iframe URL - tries multiple methods to get current URL
+  const syncIframeUrlNow = () => {
+    const iframe = iframeRef.current
+    if (!iframe) return null
+
+    let syncedUrl: string | null = null
+
+    // Method 1: Try to access iframe location directly
+    try {
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document
+      if (iframeDoc?.location?.href) {
+        syncedUrl = iframeDoc.location.href
+        console.log('✅ Synced URL via document.location:', syncedUrl.substring(0, 100))
+      }
+    } catch (e) {
+      // CORS - expected
+    }
+
+    // Method 2: Try contentWindow.location
+    if (!syncedUrl) {
+      try {
+        const url = iframe.contentWindow?.location?.href
+        if (url && url.startsWith('http')) {
+          syncedUrl = url
+          console.log('✅ Synced URL via contentWindow.location:', syncedUrl.substring(0, 100))
+        }
+      } catch (e) {
+        // CORS - expected
+      }
+    }
+
+    // Method 3: Request URL via postMessage
+    if (!syncedUrl) {
+      try {
+        iframe.contentWindow?.postMessage({ type: 'getCurrentUrl', action: 'sync' }, '*')
+      } catch (e) {
+        // Expected
+      }
+    }
+
+    // Method 4: Use current src if we have it (might be stale but better than nothing)
+    if (!syncedUrl && iframe.src) {
+      syncedUrl = iframe.src
+      console.log('⚠️ Using iframe.src (might be stale):', syncedUrl.substring(0, 100))
+    }
+
+    // Method 5: Try to extract from iframe src attribute
+    if (!syncedUrl) {
+      const src = iframe.getAttribute('src')
+      if (src) {
+        syncedUrl = src
+        console.log('⚠️ Using src attribute:', syncedUrl.substring(0, 100))
+      }
+    }
+
+    if (syncedUrl) {
+      if (syncedUrl !== currentIframeUrl) {
+        setCurrentIframeUrl(syncedUrl)
+      }
+      setLastSyncedUrl(syncedUrl)
+      return syncedUrl
+    }
+
+    return currentIframeUrl
   }
 
   // Main capture function - use the EXACT current iframe URL
   const captureScreenshot = async () => {
-    // Get the exact current URL from the iframe
-    let currentUrl = getCurrentIframeUrl()
+    // CRITICAL: Sync URL RIGHT BEFORE capturing to ensure we have the latest view
+    console.log('🔄 Syncing iframe URL before capture...')
+    const syncedUrl = syncIframeUrlNow()
+    
+    // Get the exact current URL from the iframe (use synced if available)
+    let currentUrl = syncedUrl || getCurrentIframeUrl()
     
     if (!currentUrl) {
       alert('לא ניתן לצלם - נתוני מפה לא זמינים')
-      return
-    }
+          return
+        }
 
     // Try to parse and ensure all parameters are included
     try {
@@ -508,14 +825,14 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
         break
       case 'arrow':
         if (annotation.x1 !== undefined && annotation.y1 !== undefined && annotation.x2 !== undefined && annotation.y2 !== undefined) {
-          drawArrow(ctx, annotation.x1, annotation.y1, annotation.x2, annotation.y2)
+        drawArrow(ctx, annotation.x1, annotation.y1, annotation.x2, annotation.y2)
         }
         break
       case 'text':
         if (annotation.x !== undefined && annotation.y !== undefined && annotation.text) {
           ctx.font = `${annotation.strokeWidth || 16}px Arial`
-          ctx.fillText(annotation.text, annotation.x, annotation.y)
-        }
+        ctx.fillText(annotation.text, annotation.x, annotation.y)
+      }
         break
       case 'freehand':
       case 'brush':
@@ -555,24 +872,45 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
       return
     }
 
-    setIsCapturing(true)
+    setIsSaving(true)
     try {
-      console.log('💾 Saving annotated screenshot to database...')
+      console.log('💾 Saving annotated screenshot...')
       
-      // Ensure the image is in proper data URL format
+      // STEP 1: Upload file first (not base64!)
+      console.log('📤 Step 1: Uploading image as file...')
       const formattedImageData = ensureDataUrlFormat(imageData)
-      console.log('📸 Image format:', formattedImageData.substring(0, 50) + '...')
       
-      // Update local state first
+      const uploadResponse = await fetch(`/api/session/${sessionId}/gis-upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageData: formattedImageData,
+          cropMode: currentCropMode
+        })
+      })
+
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.json()
+        throw new Error(errorData.error || 'Failed to upload image')
+      }
+
+      const uploadResult = await uploadResponse.json()
+      const fileUrl = uploadResult.url
+      
+      console.log('✅ Step 1 Complete: File uploaded, URL:', fileUrl)
+      
+      // STEP 2: Save URL to database (not base64!)
+      console.log('💾 Step 2: Saving URL to database...')
+      
+      // Update local state with URL (not base64)
       const updatedScreenshots = {
         ...screenshots,
-        [`cropMode${currentCropMode}`]: formattedImageData
+        [`cropMode${currentCropMode}`]: fileUrl // Store URL, not base64!
       }
 
       setScreenshots(updatedScreenshots)
       
-      // SAVE TO DATABASE - This is the critical part!
-      console.log('💾 Saving to database via saveGISData...')
+      // Save URL to database
       const saveResult = await saveGISData(sessionId, updatedScreenshots)
       
       if (saveResult.error) {
@@ -581,17 +919,17 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
         throw new Error(saveResult.error)
       }
       
-      console.log('✅ Successfully saved to database!')
+      console.log('✅ Step 2 Complete: URL saved to database!')
       
-      // Save to local storage as backup
+      // Save URL to local storage as backup (not base64)
       try {
-        localStorage.setItem(`gis-screenshot-${sessionId}-${currentCropMode}`, formattedImageData)
-        console.log(`✅ Saved to localStorage as backup`)
+        localStorage.setItem(`gis-screenshot-${sessionId}-${currentCropMode}`, fileUrl)
+        console.log(`✅ Saved URL to localStorage as backup`)
       } catch (e) {
         console.warn('Failed to save to localStorage:', e)
       }
 
-      console.log('✅ Screenshot saved successfully to database!')
+      console.log('✅ Screenshot saved successfully! File URL:', fileUrl)
       
       if (closeAfterSave) {
         console.log('🔒 Closing modals and cleaning up state')
@@ -609,9 +947,9 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
     } catch (error) {
       console.error('❌ Error saving screenshot:', error)
       alert(`שגיאה בשמירת התמונה: ${error instanceof Error ? error.message : 'Unknown error'}`)
-      setIsCapturing(false)
+      setIsSaving(false)
     } finally {
-      setIsCapturing(false)
+      setIsSaving(false)
     }
   }
 
@@ -794,7 +1132,7 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
       } else if (capturedImage) {
         console.log('📤 Saving captured image')
         await saveScreenshot(capturedImage, closeAfterSave)
-      } else {
+        } else {
         console.warn('⚠️ No image available to save!')
         alert('אין תמונה לשמירה')
       }
@@ -883,8 +1221,24 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
       {/* Map Viewer */}
       {gisData?.govmapUrls && (
         <div className="bg-white border border-gray-200 rounded-lg p-6">
-          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">מפה GIS</h3>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  const synced = syncIframeUrlNow()
+                  if (synced) {
+                    alert(`✅ סינכרון הושלם\nקואורדינטות נוכחיות: ${synced.match(/c=([^&]+)/)?.[1] || 'לא זמין'}\nזום: ${synced.match(/z=(\d+)/)?.[1] || 'לא זמין'}`)
+                  } else {
+                    alert('⚠️ לא ניתן לסנכרן - יש לנווט במפה ולנסות שוב')
+                  }
+                }}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center gap-2"
+                title="סנכרן את התצוגה הנוכחית"
+              >
+                <RefreshCw className="w-4 h-4" />
+                סנכרן תצוגה
+              </button>
               <button
               onClick={captureScreenshot}
               disabled={isCapturingServer}
@@ -894,11 +1248,88 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
               {isCapturingServer ? 'מצלם...' : 'צלם מפה'}
               </button>
             </div>
+          </div>
 
           {/* Info message */}
           <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
             💡 <strong>טיפ:</strong> נווט במפה למיקום המדויק הרצוי (גלול, זום, הזז) לפני לחיצה על "צלם מפה". הצילום יתבצע על התצוגה המדויקת שאתה רואה.
           </div>
+
+          {/* Current View Status */}
+          {(lastSyncedUrl || currentIframeUrl) && (
+            <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm">
+              <div className="font-semibold mb-3 text-gray-700">📍 מצב תצוגה נוכחי:</div>
+          <div className="space-y-3">
+                {(() => {
+                  const urlToShow = lastSyncedUrl || currentIframeUrl
+                  const params = getUrlParams(urlToShow)
+                  return (
+                    <>
+                      {params.coordinates && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-600 font-mono text-xs">קואורדינטות:</span>
+                          <span className="font-bold font-mono text-xs">{params.coordinates}</span>
+                        </div>
+                      )}
+                      {params.zoom && (
+                        <div className="flex items-center gap-3">
+                          <span className="text-gray-600 font-mono text-xs">זום:</span>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min="1"
+                              max="20"
+                              step="1"
+                              value={params.zoom || '13'}
+                              onChange={(e) => {
+                                const newZoom = parseInt(e.target.value)
+                                if (!isNaN(newZoom) && newZoom >= 1 && newZoom <= 20) {
+                                  updateZoom(newZoom)
+                                }
+                              }}
+                              onBlur={(e) => {
+                                const newZoom = parseInt(e.target.value)
+                                if (isNaN(newZoom) || newZoom < 1 || newZoom > 20) {
+                                  // Reset to current zoom
+                                  e.target.value = params.zoom || '16'
+                                }
+                              }}
+                              className="w-20 px-2 py-1 border border-gray-300 rounded text-sm font-mono text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                            <div className="flex gap-1">
+                <button
+                                onClick={() => {
+                                  const currentZoom = parseInt(params.zoom || '16')
+                                  if (currentZoom > 1) updateZoom(currentZoom - 1)
+                                }}
+                                className="px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded text-xs"
+                                title="הקטן זום"
+                              >
+                                -
+                </button>
+                <button
+                                onClick={() => {
+                                  const currentZoom = parseInt(params.zoom || '16')
+                                  if (currentZoom < 20) updateZoom(currentZoom + 1)
+                                }}
+                                className="px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded text-xs"
+                                title="הגדל זום"
+                              >
+                                +
+                </button>
+              </div>
+            </div>
+              </div>
+                      )}
+                      {!params.coordinates && !params.zoom && (
+                        <div className="text-gray-500 text-xs">לא ניתן לקרוא פרמטרים - לחץ על "סנכרן תצוגה"</div>
+                      )}
+                    </>
+                  )
+                })()}
+              </div>
+            </div>
+          )}
 
           {/* Map Mode Toggle */}
           <div className="flex gap-2 mb-4">
@@ -919,7 +1350,7 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
               עם תצ"א
                 </button>
             </div>
-
+            
           {/* Iframe Container */}
           <div
             ref={iframeContainerRef}
@@ -986,8 +1417,8 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
             
             <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
               💡 לחץ וגרור עם העכבר כדי לצייר מלבן סביב האזור שברצונך לשמור. זה יקטין את גודל התמונה.
-            </div>
-
+              </div>
+              
             {/* Image preview with interactive crop overlay */}
             <div 
               ref={cropContainerRef}
@@ -1023,54 +1454,54 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
                     <span className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold">
                       אזור חיתוך
                     </span>
-                  </div>
+              </div>
                   {/* Corner handles */}
                   <div className="absolute -top-1 -left-1 w-3 h-3 bg-blue-500 border border-white rounded-full"></div>
                   <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 border border-white rounded-full"></div>
                   <div className="absolute -bottom-1 -left-1 w-3 h-3 bg-blue-500 border border-white rounded-full"></div>
                   <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-blue-500 border border-white rounded-full"></div>
-                </div>
-              )}
+        </div>
+      )}
             </div>
-
+            
             {/* Crop info */}
             {cropArea.width > 0 && cropArea.height > 0 && (
               <div className="mb-4 p-2 bg-gray-50 border border-gray-200 rounded text-xs">
                 <div className="grid grid-cols-4 gap-2 text-center">
                   <div>
                     <span className="font-semibold">X:</span> {cropArea.x.toFixed(1)}%
-                  </div>
+                    </div>
                   <div>
                     <span className="font-semibold">Y:</span> {cropArea.y.toFixed(1)}%
-                  </div>
+                        </div>
                   <div>
                     <span className="font-semibold">רוחב:</span> {cropArea.width.toFixed(1)}%
-                  </div>
+                    </div>
                   <div>
                     <span className="font-semibold">גובה:</span> {cropArea.height.toFixed(1)}%
-                  </div>
+                    </div>
                 </div>
-              </div>
-            )}
+                      </div>
+                    )}
               
             {/* Action buttons */}
             <div className="flex gap-2 justify-center flex-wrap">
-              <button
+                          <button
                 onClick={handleCropComplete}
                 disabled={cropArea.width === 0 || cropArea.height === 0}
                 className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 ✂️ חתוך והמשך לעריכה
-              </button>
-              <button
+                          </button>
+                        <button
                 onClick={clearCropSelection}
                 disabled={cropArea.width === 0 && cropArea.height === 0}
                 className="px-6 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 🗑️ נקה בחירה
-              </button>
-              <button
-                onClick={() => {
+                        </button>
+                    <button
+                      onClick={() => {
                   // Skip cropping, go straight to annotation
                   setCroppedImage(capturedImage)
                   setShowCropModal(false)
@@ -1083,17 +1514,17 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
                 className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
                 דלג על חיתוך
-              </button>
-              <button
-                onClick={() => {
+                    </button>
+                    <button
+                      onClick={() => {
                   setShowCropModal(false)
                   setCapturedImage(null)
                   clearCropSelection()
                 }}
                 className="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
-              >
-                ביטול
-              </button>
+                    >
+                      ביטול
+                    </button>
             </div>
           </div>
         </div>
@@ -1124,6 +1555,25 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
           width={1200}
           height={800}
         />
+      )}
+
+      {/* Loading Overlay - Shows when saving to database */}
+      {isSaving && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
+          <div className="bg-white rounded-lg p-8 shadow-2xl flex flex-col items-center gap-4 min-w-[300px]">
+            <div className="relative w-16 h-16">
+              <div className="absolute inset-0 border-4 border-blue-200 rounded-full"></div>
+              <div className="absolute inset-0 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-semibold text-gray-800 mb-2">שומר במסד הנתונים...</p>
+              <p className="text-sm text-gray-600">אנא המתן, זה עשוי לקחת כמה שניות</p>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+              <div className="bg-blue-600 h-full rounded-full animate-pulse" style={{ width: '60%' }}></div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
