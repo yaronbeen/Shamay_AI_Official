@@ -111,28 +111,38 @@ router.post('/', async (req, res) => {
     const sessionIdToUse = sessionId || 'temp';
     
     // Determine upload directory
-    const possibleUploadDirs = [
-      path.join(process.cwd(), 'frontend', 'uploads', sessionIdToUse),
-      path.join(process.cwd(), 'uploads', sessionIdToUse),
-      path.join(__dirname, '../../uploads', sessionIdToUse),
-    ]
-
+    // Use /tmp for Vercel serverless (read-only filesystem)
     let uploadsDir = null
-    for (const dir of possibleUploadDirs) {
-      try {
-        await fs.mkdir(dir, { recursive: true })
-        await fs.access(dir)
-        uploadsDir = dir
-        console.log(`📁 Using upload directory: ${uploadsDir}`)
-        break
-      } catch (error) {
-        continue
-      }
-    }
-
-    if (!uploadsDir) {
-      uploadsDir = possibleUploadDirs[0]
+    
+    if (process.env.VERCEL) {
+      // Vercel: use /tmp directory
+      uploadsDir = path.join('/tmp', sessionIdToUse)
       await fs.mkdir(uploadsDir, { recursive: true })
+      console.log(`📁 Using Vercel temp directory: ${uploadsDir}`)
+    } else {
+      // Local dev: try multiple locations
+      const possibleUploadDirs = [
+        path.join(process.cwd(), 'frontend', 'uploads', sessionIdToUse),
+        path.join(process.cwd(), 'uploads', sessionIdToUse),
+        path.join(__dirname, '../../uploads', sessionIdToUse),
+      ]
+
+      for (const dir of possibleUploadDirs) {
+        try {
+          await fs.mkdir(dir, { recursive: true })
+          await fs.access(dir)
+          uploadsDir = dir
+          console.log(`📁 Using upload directory: ${uploadsDir}`)
+          break
+        } catch (error) {
+          continue
+        }
+      }
+
+      if (!uploadsDir) {
+        uploadsDir = possibleUploadDirs[0]
+        await fs.mkdir(uploadsDir, { recursive: true })
+      }
     }
 
     const filePath = path.join(uploadsDir, filename)

@@ -7,11 +7,17 @@ const fs = require('fs').promises;
 const { ShumaDB } = require('../models/ShumaDB');
 const logger = require('../config/logger');
 
+// Determine upload base path: /tmp for Vercel, local uploads for dev
+const getUploadBasePath = () => {
+  return process.env.VERCEL ? '/tmp' : path.join(__dirname, '../../uploads');
+};
+
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: async (req, file, cb) => {
     const sessionId = req.params.sessionId || req.body.sessionId || 'default';
-    const uploadPath = path.join(__dirname, '../../uploads', sessionId);
+    const basePath = getUploadBasePath();
+    const uploadPath = path.join(basePath, sessionId);
     
     // Create directory if it doesn't exist
     try {

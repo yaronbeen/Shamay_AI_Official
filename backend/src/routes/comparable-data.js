@@ -3,6 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
+const fsSync = require('fs');
 
 // Dynamic import wrapper since the module uses ES modules
 let comparableDataModule = null;
@@ -15,8 +16,20 @@ const loadModule = async () => {
 };
 
 // Configure multer for CSV file uploads
+// Use /tmp for Vercel serverless functions (read-only filesystem)
+const uploadDir = process.env.VERCEL ? '/tmp/comparable-data' : 'uploads/comparable-data';
+
+// Ensure upload directory exists
+try {
+  if (!fsSync.existsSync(uploadDir)) {
+    fsSync.mkdirSync(uploadDir, { recursive: true });
+  }
+} catch (error) {
+  console.warn('⚠️ Upload directory creation skipped:', error.message);
+}
+
 const upload = multer({
-  dest: 'uploads/comparable-data/',
+  dest: uploadDir,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter: (req, file, cb) => {
     if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {

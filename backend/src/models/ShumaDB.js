@@ -694,35 +694,44 @@ class ShumaDBEnhanced {
     const path = require('path')
     
     // Determine the correct uploads directory
-    // Try frontend/uploads first (where the frontend expects files)
-    // Fallback to backend/uploads or process.cwd()/uploads
-    const possibleUploadDirs = [
-      path.join(process.cwd(), 'frontend', 'uploads', sessionId), // frontend/uploads (local dev)
-      path.join(process.cwd(), 'uploads', sessionId), // root/uploads
-      path.join(__dirname, '../../uploads', sessionId), // backend/uploads
-    ]
-    
-    // Try to find/create the first valid directory
+    // Use /tmp for Vercel serverless (read-only filesystem)
+    // Try frontend/uploads first for local dev (where the frontend expects files)
     let uploadsDir = null
-    for (const dir of possibleUploadDirs) {
-      try {
-        await fs.mkdir(dir, { recursive: true })
-        // Test if we can write here by checking if parent exists
-        const parentDir = path.dirname(dir)
-        await fs.access(parentDir)
-        uploadsDir = dir
-        console.log(`📁 Using upload directory: ${uploadsDir}`)
-        break
-      } catch (error) {
-        // Continue to next path
-        continue
-      }
-    }
     
-    // Fallback to first option if all failed
-    if (!uploadsDir) {
-      uploadsDir = possibleUploadDirs[0]
+    if (process.env.VERCEL) {
+      // Vercel: use /tmp directory
+      uploadsDir = path.join('/tmp', sessionId)
       await fs.mkdir(uploadsDir, { recursive: true })
+      console.log(`📁 Using Vercel temp directory: ${uploadsDir}`)
+    } else {
+      // Local dev: try multiple locations
+      const possibleUploadDirs = [
+        path.join(process.cwd(), 'frontend', 'uploads', sessionId), // frontend/uploads (local dev)
+        path.join(process.cwd(), 'uploads', sessionId), // root/uploads
+        path.join(__dirname, '../../uploads', sessionId), // backend/uploads
+      ]
+      
+      // Try to find/create the first valid directory
+      for (const dir of possibleUploadDirs) {
+        try {
+          await fs.mkdir(dir, { recursive: true })
+          // Test if we can write here by checking if parent exists
+          const parentDir = path.dirname(dir)
+          await fs.access(parentDir)
+          uploadsDir = dir
+          console.log(`📁 Using upload directory: ${uploadsDir}`)
+          break
+        } catch (error) {
+          // Continue to next path
+          continue
+        }
+      }
+      
+      // Fallback to first option if all failed
+      if (!uploadsDir) {
+        uploadsDir = possibleUploadDirs[0]
+        await fs.mkdir(uploadsDir, { recursive: true })
+      }
     }
     
     // Save file
