@@ -107,48 +107,72 @@ export function generateDocumentHTML(data: ValuationData, isPreview: boolean = t
     const ones = ['', 'אחד', 'שניים', 'שלושה', 'ארבעה', 'חמישה', 'שישה', 'שבעה', 'שמונה', 'תשעה']
     const tens = ['', 'עשרה', 'עשרים', 'שלושים', 'ארבעים', 'חמישים', 'שישים', 'שבעים', 'שמונים', 'תשעים']
     const hundreds = ['', 'מאה', 'מאתיים', 'שלוש מאות', 'ארבע מאות', 'חמש מאות', 'שש מאות', 'שבע מאות', 'שמונה מאות', 'תשע מאות']
-    const thousands = ['', 'אלף', 'אלפיים', 'שלושת אלפים', 'ארבעת אלפים', 'חמשת אלפים', 'ששת אלפים', 'שבעת אלפים', 'שמונת אלפים', 'תשעת אלפים']
-    const millions = ['', 'מיליון', 'שני מיליונים', 'שלושה מיליונים', 'ארבעה מיליונים', 'חמישה מיליונים', 'שישה מיליונים', 'שבעה מיליונים', 'שמונה מיליונים', 'תשעה מיליונים']
 
     if (num === 0) return 'אפס'
     if (num < 0) return 'מינוס ' + numberToHebrewText(-num)
     if (num > 999999999) return 'מספר גדול מדי להמרה אוטומטית'
 
+    const convertUpTo999 = (n: number): string => {
+      let result = ''
+      
+      // Hundreds
+      if (n >= 100) {
+        const hundredsPart = Math.floor(n / 100)
+        result += hundreds[hundredsPart] + ' '
+        n %= 100
+      }
+      
+      // Tens and ones
+      if (n >= 20) {
+        const tensPart = Math.floor(n / 10)
+        const onesPart = n % 10
+        result += tens[tensPart]
+        if (onesPart > 0) {
+          result += ' ו' + ones[onesPart]
+        }
+      } else if (n >= 10) {
+        result += tens[1]
+        if (n > 10) {
+          result += ' ו' + ones[n - 10]
+        }
+      } else if (n > 0) {
+        result += ones[n]
+      }
+      
+      return result.trim()
+    }
+
     let result = ''
     
-    // Millions
+    // Millions (1,000,000 - 999,999,999)
     if (num >= 1000000) {
       const millionsPart = Math.floor(num / 1000000)
-      result += millions[millionsPart] + ' '
+      if (millionsPart === 1) {
+        result += 'מיליון '
+      } else if (millionsPart === 2) {
+        result += 'שני מיליון '
+      } else {
+        result += convertUpTo999(millionsPart) + ' מיליון '
+      }
       num %= 1000000
     }
     
-    // Thousands
+    // Thousands (1,000 - 999,999)
     if (num >= 1000) {
       const thousandsPart = Math.floor(num / 1000)
-      result += thousands[thousandsPart] + ' '
+      if (thousandsPart === 1) {
+        result += 'אלף '
+      } else if (thousandsPart === 2) {
+        result += 'אלפיים '
+      } else {
+        result += convertUpTo999(thousandsPart) + ' אלף '
+      }
       num %= 1000
     }
     
-    // Hundreds
-    if (num >= 100) {
-      const hundredsPart = Math.floor(num / 100)
-      result += hundreds[hundredsPart] + ' '
-      num %= 100
-    }
-    
-    // Tens and ones
-    if (num >= 20) {
-      const tensPart = Math.floor(num / 10)
-      const onesPart = num % 10
-      result += tens[tensPart]
-      if (onesPart > 0) {
-        result += ' ו' + ones[onesPart]
-      }
-    } else if (num >= 10) {
-      result += tens[num - 10]
-    } else if (num > 0) {
-      result += ones[num]
+    // Remaining (0 - 999)
+    if (num > 0) {
+      result += convertUpTo999(num)
     }
     
     return result.trim()
@@ -631,8 +655,42 @@ export function generateDocumentHTML(data: ValuationData, isPreview: boolean = t
               עפ״י דיווחים במערכת מידע-נדל״ן של רשות המיסים ומידע משלים מתוך היתרי הבניה.
             </p>
             
-            ${data.comparableData && data.comparableData.length > 0 ? `
+            ${data.marketAnalysis ? `
               <div>
+                <!-- Market Analysis Summary -->
+                ${(data as any).marketAnalysis ? `
+                  <div style="background-color: #fff3e0; padding: 10px; border-radius: 4px; margin-bottom: 12px; font-size: 10pt;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+                      <div>
+                        <strong>מחיר ממוצע:</strong> ₪${((data as any).marketAnalysis.avg_price || (data as any).marketAnalysis.averagePrice || 0).toLocaleString()}
+                      </div>
+                      <div>
+                        <strong>מחיר חציוני:</strong> ₪${((data as any).marketAnalysis.median_price || (data as any).marketAnalysis.medianPrice || 0).toLocaleString()}
+                      </div>
+                      <div>
+                        <strong>נכסים להשוואה:</strong> ${(data as any).marketAnalysis.total_comparables || (data as any).marketAnalysis.totalComparables || data.comparableData.length}
+                      </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 8px;">
+                      <div>
+                        <strong>ממוצע למ"ר:</strong> ₪${((data as any).marketAnalysis.avg_price_per_sqm || (data as any).marketAnalysis.averagePricePerSqm || 0).toLocaleString()}
+                      </div>
+                      <div>
+                        <strong>חציון למ"ר:</strong> ₪${((data as any).marketAnalysis.median_price_per_sqm || (data as any).marketAnalysis.medianPricePerSqm || 0).toLocaleString()}
+                      </div>
+                      <div>
+                        <strong>מגמת שוק:</strong> ${(data as any).marketAnalysis.market_trends || 'יציב'}
+                      </div>
+                    </div>
+                    ${(data as any).marketAnalysis.price_range ? `
+                      <div style="margin-top: 8px;">
+                        <strong>טווח מחירים:</strong> ₪${((data as any).marketAnalysis.price_range.min || 0).toLocaleString()} - ₪${((data as any).marketAnalysis.price_range.max || 0).toLocaleString()}
+                      </div>
+                    ` : ''}
+                  </div>
+                ` : ''}
+                
+                <!-- Comparable Data Table -->
                 <table style="width: 100%; border-collapse: collapse; border: 1px solid #ccc; font-size: 10pt;">
                   <thead>
                     <tr style="background-color: #f5f5f5;">
@@ -642,29 +700,27 @@ export function generateDocumentHTML(data: ValuationData, isPreview: boolean = t
                       <th style="border: 1px solid #ccc; padding: 8px;">שטח (מ"ר)</th>
                       <th style="border: 1px solid #ccc; padding: 8px;">מחיר (₪)</th>
                       <th style="border: 1px solid #ccc; padding: 8px;">מחיר למ"ר (₪)</th>
-                      <th style="border: 1px solid #ccc; padding: 8px;">תאריך מכירה</th>
                     </tr>
                   </thead>
                   <tbody>
-                    ${data.comparableData.slice(0, 5).map(item => `
+                    ${((data as any).marketAnalysis.comparables || []).slice(0, 10).map((item: any) => `
                       <tr>
-                        <td style="border: 1px solid #ccc; padding: 8px;">${item.address}</td>
-                        <td style="border: 1px solid #ccc; padding: 8px;">${item.rooms}</td>
-                        <td style="border: 1px solid #ccc; padding: 8px;">${item.floor}</td>
-                        <td style="border: 1px solid #ccc; padding: 8px;">${item.area}</td>
-                        <td style="border: 1px solid #ccc; padding: 8px;">${item.price?.toLocaleString()}</td>
-                        <td style="border: 1px solid #ccc; padding: 8px;">${item.price_per_sqm?.toLocaleString()}</td>
-                        <td style="border: 1px solid #ccc; padding: 8px;">${formatDate(item.sale_date || '')}</td>
+                        <td style="border: 1px solid #ccc; padding: 8px;">${item.address || 'N/A'}</td>
+                        <td style="border: 1px solid #ccc; padding: 8px;">${item.rooms || 'N/A'}</td>
+                        <td style="border: 1px solid #ccc; padding: 8px;">${item.floor ?? 'N/A'}</td>
+                        <td style="border: 1px solid #ccc; padding: 8px;">${item.size || item.area || 'N/A'}</td>
+                        <td style="border: 1px solid #ccc; padding: 8px;">₪${(item.price || 0).toLocaleString()}</td>
+                        <td style="border: 1px solid #ccc; padding: 8px;">₪${(item.price_per_sqm || 0).toLocaleString()}</td>
                       </tr>
                     `).join('')}
                   </tbody>
                 </table>
-                <p style="margin-top: 8px; font-size: 11pt;">
-                  ממוצע מחיר למ"ר: ₪${data.pricePerSqm?.toLocaleString() || '[חישוב]'}
+                <p style="margin-top: 8px; font-size: 10pt; color: #666; font-style: italic;">
+                  * מוצגים עד 10 נכסים מתוך ${((data as any).marketAnalysis.comparables || []).length} נכסים שנותחו
                 </p>
               </div>
             ` : `
-              <p style="color: #666;">[נתוני השוואה יוצגו כאן לאחר העלאת קובץ CSV]</p>
+              <p style="color: #666;">[נתוני השוואה יוצגו כאן לאחר ניתוח נתוני שוק בשלב 4]</p>
             `}
           </div>
         <!-- Calculation Table -->
@@ -675,7 +731,7 @@ export function generateDocumentHTML(data: ValuationData, isPreview: boolean = t
           <div style="background-color: #f0f9ff; padding: 12px; border-radius: 4px; font-size: 11pt;">
             <p style="margin-bottom: 12px;">
               <strong>בשים לב לנתוני השוואה שלעיל, תוך כדי ביצוע התאמות נדרשות לנכס נשוא השומה, 
-              שווי מ"ר בנוי אקו' לנכס נשוא השומה מוערך כ-₪${data.pricePerSqm?.toLocaleString() || '[חישוב]'}.</strong>
+              שווי מ"ר בנוי אקו' לנכס נשוא השומה מוערך כ-₪${((data as any).marketAnalysis.avg_price_per_sqm || (data as any).marketAnalysis.averagePricePerSqm || 0).toLocaleString()}.</strong>
             </p>
             
             <table style="width: 100%; border-collapse: collapse; border: 1px solid #ccc; font-size: 10pt;">
@@ -692,7 +748,7 @@ export function generateDocumentHTML(data: ValuationData, isPreview: boolean = t
               <tbody>
                 <tr>
                   <td style="border: 1px solid #ccc; padding: 8px;">${data.propertyEssence || '[תיאור הנכס]'}</td>
-                  <td style="border: 1px solid #ccc; padding: 8px;">${data.extractedData?.builtArea || data.builtArea || (data as any).registeredArea || '[שטח בנוי]'}</td>
+                  <td style="border: 1px solid #ccc; padding: 8px;">${data.extractedData?.builtArea || (data as any).area || (data as any).registeredArea || '[שטח בנוי]'}</td>
                   <td style="border: 1px solid #ccc; padding: 8px;">${(data.extractedData as any)?.balconyArea || (data as any).balconyArea || '0'}</td>
                   <td style="border: 1px solid #ccc; padding: 8px;">
                     ${data.extractedData?.builtArea || data.builtArea || (data as any).registeredArea ? 
@@ -700,8 +756,8 @@ export function generateDocumentHTML(data: ValuationData, isPreview: boolean = t
                       '[חישוב]'
                     }
                   </td>
-                  <td style="border: 1px solid #ccc; padding: 8px;">${data.pricePerSqm?.toLocaleString() || '[חישוב]'}</td>
-                  <td style="border: 1px solid #ccc; padding: 8px;">${data.finalValuation?.toLocaleString() || '[חישוב]'}</td>
+                  <td style="border: 1px solid #ccc; padding: 8px;">${(data as any).pricePerSqm?.toLocaleString() || '[חישוב]'}</td>
+                  <td style="border: 1px solid #ccc; padding: 8px;">${((data as any).marketAnalysis.median_price_per_sqm || (data as any).marketAnalysis.medianPricePerSqm || 0).toLocaleString()}</td>
                 </tr>
               </tbody>
             </table>
@@ -717,7 +773,7 @@ export function generateDocumentHTML(data: ValuationData, isPreview: boolean = t
           <p style="margin-bottom: 16px;">
             בשים לב למיקומו של הנכס, לשטחו, ולכל שאר הנתונים כאמור וכמפורט לעיל,
             ובהביאי בחשבון שווים של נכסים דומים רלוונטיים,
-            <strong> שווי הנכס בגבולות ₪<span data-field="finalValuation" data-editable="true">${data.finalValuation?.toLocaleString() || '[חישוב]'}</span> (${numberToHebrewText(data.finalValuation || 0)} שקל).</strong>
+            <strong> שווי הנכס בגבולות ₪<span data-field="finalValuation" data-editable="true">${((data as any).marketAnalysis.median_price || (data as any).marketAnalysis.medianPrice || 0).toLocaleString() || '[חישוב]'}</span> (${numberToHebrewText((data as any).marketAnalysis.median_price || (data as any).marketAnalysis.medianPrice || 0)} שקל).</strong>
           </p>
           <p style="margin-bottom: 16px;">
             השווי כולל מע"מ.

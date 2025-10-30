@@ -21,6 +21,7 @@ import {
 import { ValuationData } from '../ValuationWizard'
 import GISMapViewer from '../ui/GISMapViewer'
 import GarmushkaMeasurementViewer from '../ui/GarmushkaMeasurementViewer'
+import ComparableDataViewer from '../ui/ComparableDataViewer'
 
 interface Step4AIAnalysisProps {
   data: ValuationData
@@ -212,30 +213,43 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
 
   const renderMarketAnalysisSection = () => (
     <div className="space-y-6">
-      <div className="bg-green-50 border border-green-200 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-green-900 mb-4 flex items-center gap-2">
-          <BarChart3 className="w-5 h-5" />
-          ניתוח נתוני שוק
-        </h3>
-        <p className="text-green-700 text-sm mb-4">
-          העלה קובץ CSV עם נתוני נכסים להשוואה לניתוח שוק מבוסס AI
-        </p>
-        
-        <div className="flex gap-4">
-          <button className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
-            <Upload className="w-4 h-4" />
-            הוסף קובץ CSV
-          </button>
-          <button 
-            onClick={handleMarketAnalysis}
-            disabled={isProcessing}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50"
-          >
-            {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <BarChart3 className="w-4 h-4" />}
-            נתח נתוני שוק
-          </button>
+      {sessionId ? (
+        <ComparableDataViewer
+          data={data}
+          sessionId={sessionId}
+          onAnalysisComplete={(analysis) => {
+            console.log('📊 Step4AIAnalysis: Comparable data analysis completed', analysis)
+            
+            // Update local state
+            setAnalysisResults((prev: any) => ({
+              ...prev,
+              marketAnalysis: analysis
+            }))
+            
+            // Save to session - update both comparableDataAnalysis AND comparableData for document
+            updateData({
+              comparableDataAnalysis: analysis,
+              comparableData: analysis.comparables || [],
+              pricePerSqm: analysis.averagePricePerSqm || data.pricePerSqm || 0,
+              marketAnalysis: {
+                ...data.marketAnalysis,
+                averagePricePerSqm: analysis.averagePricePerSqm || 0,
+                marketTrend: (analysis as any).market_trends || data.marketAnalysis?.marketTrend || '',
+                priceRange: (analysis as any).price_range 
+                  ? `₪${(analysis as any).price_range.min?.toLocaleString()} - ₪${(analysis as any).price_range.max?.toLocaleString()}`
+                  : data.marketAnalysis?.priceRange || ''
+              }
+            })
+            
+            console.log('✅ Step4AIAnalysis: Comparable data analysis updated in session and document data')
+          }}
+        />
+      ) : (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+          <BarChart3 className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+          <p className="text-gray-600">לא זמין - נדרש session ID</p>
         </div>
-      </div>
+      )}
     </div>
   )
 

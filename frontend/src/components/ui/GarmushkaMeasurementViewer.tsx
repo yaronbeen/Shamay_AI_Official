@@ -29,6 +29,7 @@ interface GarmushkaMeasurementViewerProps {
   sessionId: string
   onMeasurementComplete: (measurementData: any) => void
   initialMeasurements?: any
+  initialFileUrl?: string // optional: pass selected file URL from Step 3
 }
 
 interface Point {
@@ -152,9 +153,11 @@ const KonvaImageComponent: React.FC<{ src: string }> = ({ src }) => {
 export default function GarmushkaMeasurementViewer({ 
   sessionId, 
   onMeasurementComplete,
-  initialMeasurements
+  initialMeasurements,
+  initialFileUrl
 }: GarmushkaMeasurementViewerProps) {
   const [isClient, setIsClient] = useState(false)
+  const [isRestoring, setIsRestoring] = useState<boolean>(true)
   const [imageUrl, setImageUrl] = useState<string>('')
   const [error, setError] = useState<string>('')
   const [isLoading, setIsLoading] = useState<boolean>(false)
@@ -269,8 +272,7 @@ export default function GarmushkaMeasurementViewer({
 
     setIsLoading(true)
     setError('')
-    setIsPdfMode(false)
-    setPdfPages([])
+    // Do not clear canvas state here; preserve unless user explicitly clears
 
     try {
       if (file.type === 'application/pdf') {
@@ -297,6 +299,12 @@ export default function GarmushkaMeasurementViewer({
           setSelectedPageIndex(0)
           setImageUrl(firstPage.imageUrl)
           setIsPdfMode(true)
+          // Persist last uploaded preview so canvas is restored on revisit
+          try {
+            sessionStorage.setItem(`garmushka:${sessionId}:fileType`, 'pdf')
+            sessionStorage.setItem(`garmushka:${sessionId}:fileData`, firstPage.imageUrl || '')
+            sessionStorage.setItem(`garmushka:${sessionId}:updatedAt`, new Date().toISOString())
+          } catch {}
           setIsLoading(false)
         } catch (pdfError) {
           console.error('PDF processing failed:', pdfError)
@@ -311,6 +319,12 @@ export default function GarmushkaMeasurementViewer({
           const result = e.target?.result as string
           if (result) {
             setImageUrl(result)
+            // Persist last uploaded image for restoring later
+            try {
+              localStorage.setItem('garmushka:lastFileType', 'image')
+              localStorage.setItem('garmushka:lastFileData', result)
+              localStorage.setItem('garmushka:lastUpdatedAt', new Date().toISOString())
+            } catch {}
             setError('')
           }
           setIsLoading(false)
@@ -331,6 +345,155 @@ export default function GarmushkaMeasurementViewer({
     }
   }
 
+  // Restore last uploaded file on mount to avoid clearing canvas between steps (sessionStorage only)
+  React.useEffect(() => {
+    try {
+      if (!imageUrl) {
+        const lastType = sessionStorage.getItem(`garmushka:${sessionId}:fileType`)
+        const lastData = sessionStorage.getItem(`garmushka:${sessionId}:fileData`)
+        if (lastData) {
+          if (lastType === 'pdf') {
+            setIsPdfMode(true)
+          }
+          setImageUrl(lastData)
+        }
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Load from URL (similar to Step3Validation display logic) and render to canvas
+  const loadFromUrl = useCallback(async (fileUrl: string) => {
+    try {
+      if (!fileUrl) return
+      const lower = fileUrl.toLowerCase()
+      const isPdf = lower.endsWith('.pdf') || lower.includes('application/pdf')
+
+      setIsLoading(true)
+      setError('')
+
+      if (isPdf) {
+        const pdfjsLib = await loadPdfJs()
+        // Prefer opening by URL (lets PDF.js stream the file)
+        const pdf = await pdfjsLib.getDocument({ url: fileUrl, withCredentials: false }).promise
+        const firstPage = await renderPDFPage(pdf, 1)
+        setPdfPages([firstPage])
+        setSelectedPageIndex(0)
+        setImageUrl(firstPage.imageUrl)
+        setIsPdfMode(true)
+        try {
+          sessionStorage.setItem(`garmushka:${sessionId}:fileType`, 'pdf')
+          sessionStorage.setItem(`garmushka:${sessionId}:fileData`, firstPage.imageUrl || '')
+          sessionStorage.setItem(`garmushka:${sessionId}:fileUrl`, fileUrl)
+          sessionStorage.setItem(`garmushka:${sessionId}:updatedAt`, new Date().toISOString())
+        } catch {}
+      } else {
+        // Assume it's an image URL
+        setIsPdfMode(false)
+        setPdfPages([])
+        setSelectedPageIndex(0)
+        setImageUrl(fileUrl)
+        try {
+          sessionStorage.setItem(`garmushka:${sessionId}:fileType`, 'image')
+          sessionStorage.setItem(`garmushka:${sessionId}:fileData`, fileUrl)
+          sessionStorage.setItem(`garmushka:${sessionId}:fileUrl`, fileUrl)
+          sessionStorage.setItem(`garmushka:${sessionId}:updatedAt`, new Date().toISOString())
+        } catch {}
+      }
+    } catch (e: any) {
+      console.error('Failed to load file from URL:', e)
+      setError('טעינת קובץ מהקישור נכשלה')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [renderPDFPage, sessionId])
+
+  // Try to restore by URL first (more consistent with Step3), fallback to data URL
+  useEffect(() => {
+    let didCancel = false
+    const restore = async () => {
+      try {
+        // Priority: sessionStorage for this session, then prop, then localStorage
+        const sessionUrl = sessionStorage.getItem(`garmushka:${sessionId}:fileUrl`)
+        const storedUrl = sessionUrl || initialFileUrl || ''
+        const storedType = sessionStorage.getItem(`garmushka:${sessionId}:fileType`)
+        const storedData = sessionStorage.getItem(`garmushka:${sessionId}:fileData`)
+        if (storedUrl) {
+          try {
+            await loadFromUrl(storedUrl)
+          } catch (err) {
+            // Fallback to data URL if URL loading fails (CORS, auth, etc.)
+            if (storedData) {
+              if (storedType === 'pdf') {
+                setIsPdfMode(true)
+              }
+              setImageUrl(storedData)
+            }
+          }
+        } else if (storedData) {
+          if (storedType === 'pdf') {
+            // storedData is a data URL of the first page; just apply it
+            setIsPdfMode(true)
+          }
+          setImageUrl(storedData)
+        }
+      } catch (e) {
+        // ignore
+      } finally {
+        if (!didCancel) setIsRestoring(false)
+      }
+    }
+    restore()
+    return () => { didCancel = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFileUrl, sessionId])
+
+  // Load from session uploads if nothing restored
+  useEffect(() => {
+    const loadSessionData = async () => {
+      if (!sessionId) return
+      if (imageUrl) return
+      try {
+        const response = await fetch(`/api/session/${sessionId}`)
+        if (!response.ok) return
+        const sessionData = await response.json()
+        const uploads = sessionData?.data?.uploads
+        if (Array.isArray(uploads) && uploads.length > 0) {
+          // Only consider Garmushka-generated uploads (just like Step 3 logic but inverted)
+          const garmushkaUploads = uploads.filter((u: any) => {
+            const name = (u.name || '').toLowerCase()
+            const url = (u.url || '').toLowerCase()
+            const type = (u.type || u.mimeType || '').toLowerCase()
+            return name.includes('garmushka') || url.includes('garmushka') || type.includes('garmushka')
+          })
+          if (garmushkaUploads.length === 0) return
+          const preferred =
+            garmushkaUploads.find((u: any) => (u.mimeType || u.type || '').includes('pdf')) ||
+            garmushkaUploads.find((u: any) => (u.mimeType || u.type || '').startsWith('image/')) ||
+            garmushkaUploads[0]
+          const url = preferred?.url
+          if (url) {
+            await loadFromUrl(url)
+          }
+        }
+      } catch {}
+    }
+    loadSessionData()
+  }, [sessionId, imageUrl, loadFromUrl])
+
+  // Provide an explicit clear action that also clears persistence
+  const clearCanvasAndMemory = React.useCallback(() => {
+    setPdfPages([])
+    setSelectedPageIndex(0)
+    setIsPdfMode(false)
+    setImageUrl('')
+    try {
+      localStorage.removeItem('garmushka:lastFileType')
+      localStorage.removeItem('garmushka:lastFileData')
+      localStorage.removeItem('garmushka:lastUpdatedAt')
+    } catch {}
+  }, [])
+
   const handlePageSelect = (pageIndex: number) => {
     if (pdfPages[pageIndex]) {
       setSelectedPageIndex(pageIndex)
@@ -350,6 +513,12 @@ export default function GarmushkaMeasurementViewer({
     setScale(1)
     setStagePosition({ x: 0, y: 0 })
     setSelectedShapeId(null)
+    try {
+      sessionStorage.removeItem(`garmushka:${sessionId}:fileType`)
+      sessionStorage.removeItem(`garmushka:${sessionId}:fileData`)
+      sessionStorage.removeItem(`garmushka:${sessionId}:fileUrl`)
+      sessionStorage.removeItem(`garmushka:${sessionId}:updatedAt`)
+    } catch {}
   }
 
   // Measurement utility functions
@@ -1008,8 +1177,8 @@ export default function GarmushkaMeasurementViewer({
     }
   }, [imageUrl])
 
-  // Don't render on server side
-  if (!isClient) {
+  // Don't render on server side or while restoring persisted state
+  if (!isClient || isRestoring) {
     return <div className="bg-white rounded-lg shadow-lg p-6">
       <h3 className="text-lg font-semibold mb-4">מדידות גרמושקה</h3>
       <div className="text-center py-8">טוען...</div>

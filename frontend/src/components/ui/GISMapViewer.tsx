@@ -881,7 +881,7 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
       const formattedImageData = ensureDataUrlFormat(imageData)
       
       const uploadResponse = await fetch(`/api/session/${sessionId}/gis-upload`, {
-        method: 'POST',
+          method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           imageData: formattedImageData,
@@ -903,7 +903,7 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
       console.log('💾 Step 2: Saving URL to database...')
       
       // Update local state with URL (not base64)
-      const updatedScreenshots = {
+        const updatedScreenshots = {
         ...screenshots,
         [`cropMode${currentCropMode}`]: fileUrl // Store URL, not base64!
       }
