@@ -53,7 +53,7 @@ export async function POST(
         ...sessionData,
         gisScreenshots: updatedScreenshots,
         gisScreenshotMetadata: {
-          ...(sessionData.gisScreenshotMetadata || {}),
+          ...((sessionData as any).gisScreenshotMetadata || {}),
           [`cropMode${cropMode}`]: {
             address,
             coordinates,

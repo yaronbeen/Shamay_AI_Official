@@ -237,7 +237,9 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
                 marketTrend: (analysis as any).market_trends || data.marketAnalysis?.marketTrend || '',
                 priceRange: (analysis as any).price_range 
                   ? `₪${(analysis as any).price_range.min?.toLocaleString()} - ₪${(analysis as any).price_range.max?.toLocaleString()}`
-                  : data.marketAnalysis?.priceRange || ''
+                  : data.marketAnalysis?.priceRange || '',
+                demandLevel: data.marketAnalysis?.demandLevel || '',
+                competition: data.marketAnalysis?.competition || ''
               }
             })
             

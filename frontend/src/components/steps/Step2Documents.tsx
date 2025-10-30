@@ -739,7 +739,8 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
     const imageData = imageUploads.map(u => ({
       name: u.file.name,
       preview: u.preview,
-      isSelected: u.isSelected || false
+      isSelected: u.isSelected || false,
+      type: u.type
     }))
     
     // Set first image as selected if none is selected

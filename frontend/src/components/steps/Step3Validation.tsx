@@ -117,7 +117,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
   const [tempValue, setTempValue] = useState<string>('')
   const [currentFileIndex, setCurrentFileIndex] = useState(0)
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [allFiles, setAllFiles] = useState<Array<{type: string, name: string, preview?: string, url?: string, file?: File}>>([])
+  const [allFiles, setAllFiles] = useState<Array<{type: string, name: string, preview?: string, url?: string, file?: File, source?: string}>>([])
   const [filesLoading, setFilesLoading] = useState(true)
   const [showProvenanceViewer, setShowProvenanceViewer] = useState(false)
   const [showPDFViewer, setShowPDFViewer] = useState(false)

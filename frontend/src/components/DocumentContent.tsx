@@ -337,7 +337,7 @@ export function DocumentContent({ data, isPreview = true }: DocumentContentProps
           </h3>
           <div className="bg-green-50 p-3 rounded" style={{ fontSize: '11pt' }}>
             <p>
-              נשוא השומה הינה {data.land_registrysubParcel || '[תיאור תת החלקה]'}, 
+              נשוא השומה הינה {data.subParcel || '[תיאור תת החלקה]'}, 
               המהווה {data.propertyEssence || '[מהות הנכס]'}, 
               הממוקמת בקומה {data.floor || '[קומה]'}, 
               {data.airDirections ? `פונה לכיוונים ${data.airDirections}` : ''}.

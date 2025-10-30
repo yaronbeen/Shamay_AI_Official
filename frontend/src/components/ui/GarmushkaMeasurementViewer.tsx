@@ -30,6 +30,7 @@ interface GarmushkaMeasurementViewerProps {
   onMeasurementComplete: (measurementData: any) => void
   initialMeasurements?: any
   initialFileUrl?: string // optional: pass selected file URL from Step 3
+  data?: any // ValuationData for accessing buildingImage, exteriorImage, etc.
 }
 
 interface Point {

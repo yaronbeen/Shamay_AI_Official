@@ -31,6 +31,7 @@ export interface ValuationData {
   referenceNumber?: string
   shamayName: string
   shamaySerialNumber: string
+  valuationType?: string
   
   // ✅ NEW: Legal Status Fields
   gush?: string
@@ -89,6 +90,7 @@ export interface ValuationData {
     demandLevel: string
     competition: string
   }
+  comparableDataAnalysis?: any
   riskAssessment?: {
     legalRisks: string
     marketRisks: string

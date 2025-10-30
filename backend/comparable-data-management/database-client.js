@@ -1,26 +1,45 @@
-import pg from 'pg';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const { Client } = pg;
+// Conditional import for Neon serverless vs standard pg
+let Client, neonConfig;
+try {
+  const neonModule = await import('@neondatabase/serverless');
+  neonConfig = neonModule.neonConfig;
+  Client = neonModule.Client;
+  console.log('✅ Using @neondatabase/serverless for comparable data');
+} catch (e) {
+  const pg = await import('pg');
+  Client = pg.default.Client;
+  console.log('✅ Using pg for comparable data (local development)');
+}
 
 export class ComparableDataDatabaseClient {
   constructor() {
     const isLocal = process.env.DB_HOST === 'localhost' || !process.env.DB_HOST || process.env.DB_HOST.includes('127.0.0.1');
+    const useNeon = process.env.VERCEL || process.env.DATABASE_URL;
     
-    this.client = new Client({
-      host: process.env.DB_HOST || 'localhost',
-      port: process.env.DB_PORT || 5432,
-      database: process.env.DB_NAME || 'shamay_land_registry',
-      user: process.env.DB_USER || 'postgres',
-      password: process.env.DB_PASSWORD || 'postgres123',
-      // Add SSL configuration for remote databases
-      ssl: isLocal ? false : {
-        rejectUnauthorized: false,
-        require: true
-      }
-    });
+    // Use DATABASE_URL if available (Vercel/Neon), otherwise use individual env vars
+    if (useNeon && process.env.DATABASE_URL) {
+      this.client = new Client({
+        connectionString: process.env.DATABASE_URL,
+        ssl: { rejectUnauthorized: false }
+      });
+    } else {
+      this.client = new Client({
+        host: process.env.DB_HOST || 'localhost',
+        port: process.env.DB_PORT || 5432,
+        database: process.env.DB_NAME || 'shamay_land_registry',
+        user: process.env.DB_USER || 'postgres',
+        password: process.env.DB_PASSWORD || 'postgres123',
+        // Add SSL configuration for remote databases
+        ssl: isLocal ? false : {
+          rejectUnauthorized: false,
+          require: true
+        }
+      });
+    }
     this.connected = false;
   }
 
