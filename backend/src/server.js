@@ -73,11 +73,8 @@ app.use('/api/files', require('./routes/files'));
 app.use('/api/ai', require('./routes/ai'));
 app.use('/api/gis', require('./routes/gis'));
 app.use('/api/gis-screenshot', require('./routes/gis-screenshot'));
-app.use('/api/address-to-govmap', require('./routes/address-to-govmap'));
 app.use('/api/garmushka', require('./routes/garmushka'));
 app.use('/api/export', require('./routes/export'));
-app.use('/api/pdf-to-image', require('./routes/pdf-to-image'));
-app.use('/api/comparable-data', require('./routes/comparable-data'));
 
 // Static file serving for uploads
 app.use('/uploads', express.static('uploads'));

@@ -810,7 +810,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
               const type = (f.type || f.file?.type || '').toLowerCase()
               const isPdf = type === 'application/pdf' || name.endsWith('.pdf') || url.endsWith('.pdf')
               const isGarmushka = source.includes('garmushka') || name.includes('garmushka') || url.includes('garmushka') || type.includes('garmushka') 
-              const isFromUploads = url.includes('/frontend/uploads/') || url.includes('/uploads/') || url.includes('/api/files/') || source.includes('step2') || source.includes('documents') || source.includes('upload')
+              const isFromUploads = url.includes('/frontend/uploads/') || url.includes('vercel-storage') || url.includes('/uploads/') || url.includes('/api/files/') || source.includes('step2') || source.includes('documents') || source.includes('upload')
               return isPdf && isFromUploads && !isGarmushka
             })).map((file, index) => (
               <button
@@ -841,7 +841,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
               const type = (f.type || f.file?.type || '').toLowerCase()
               const isPdf = type === 'application/pdf' || name.endsWith('.pdf') || url.endsWith('.pdf')
               const isGarmushka = source.includes('garmushka') || name.includes('garmushka') || url.includes('garmushka')
-              const isFromUploads = url.includes('/frontend/uploads/') || url.includes('/uploads/') || url.includes('/api/files/') || source.includes('step2') || source.includes('documents') || source.includes('upload')
+              const isFromUploads = url.includes('/frontend/uploads/') || url.includes('vercel-storage') || url.includes('/uploads/') || url.includes('/api/files/') || source.includes('step2') || source.includes('documents') || source.includes('upload')
               return isPdf && isFromUploads && !isGarmushka
             })).length > 0 ? (
               <div className="text-center w-full h-full flex items-center justify-center">
@@ -853,7 +853,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
                     const type = (f.type || f.file?.type || '').toLowerCase()
                     const isPdf = type === 'application/pdf' || name.endsWith('.pdf') || url.endsWith('.pdf')
                     const isGarmushka = source.includes('garmushka') || name.includes('garmushka') || url.includes('garmushka')
-                    const isFromUploads = url.includes('/frontend/uploads/') || url.includes('/uploads/') || url.includes('/api/files/') || source.includes('step2') || source.includes('documents') || source.includes('upload')
+                    const isFromUploads = url.includes('/frontend/uploads/') || url.includes('vercel-storage') || url.includes('/uploads/') || url.includes('/api/files/') || source.includes('step2') || source.includes('documents') || source.includes('upload')
                     return isPdf && isFromUploads && !isGarmushka
                   })
                   const safeIndex = Math.min(currentFileIndex, Math.max(files.length - 1, 0))
@@ -949,7 +949,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
               const type = (f.type || f.file?.type || '').toLowerCase()
               const isPdf = type === 'application/pdf' || name.endsWith('.pdf') || url.endsWith('.pdf')
               const isGarmushka = source.includes('garmushka') || name.includes('garmushka') || url.includes('garmushka')
-              const isFromUploads = url.includes('/frontend/uploads/') || url.includes('/uploads/') || url.includes('/api/files/') || source.includes('step2') || source.includes('documents') || source.includes('upload')
+              const isFromUploads = url.includes('/frontend/uploads/') || url.includes('vercel-storage') || url.includes('/uploads/') || url.includes('/api/files/') || source.includes('step2') || source.includes('documents') || source.includes('upload')
               return isPdf && isFromUploads && !isGarmushka
             })).length
             return filesCount > 1 && (

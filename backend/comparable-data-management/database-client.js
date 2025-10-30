@@ -1,24 +1,41 @@
-import dotenv from 'dotenv';
-
+const dotenv = require('dotenv');
 dotenv.config();
 
-// Conditional import for Neon serverless vs standard pg
-let Client, neonConfig;
-try {
-  const neonModule = await import('@neondatabase/serverless');
-  neonConfig = neonModule.neonConfig;
-  Client = neonModule.Client;
-  console.log('✅ Using @neondatabase/serverless for comparable data');
-} catch (e) {
-  const pg = await import('pg');
-  Client = pg.default.Client;
-  console.log('✅ Using pg for comparable data (local development)');
+// Lazy-load database client based on environment
+let ClientClass = null;
+
+function getClientClass() {
+  if (ClientClass) return ClientClass;
+  
+  try {
+    // Try Neon serverless first (for Vercel)
+    if (process.env.VERCEL || process.env.DATABASE_URL) {
+      const neon = require('@neondatabase/serverless');
+      ClientClass = neon.Client;
+      console.log('✅ Using @neondatabase/serverless for comparable data');
+    } else {
+      // Use standard pg for local development
+      const pg = require('pg');
+      ClientClass = pg.Client;
+      console.log('✅ Using pg for comparable data (local development)');
+    }
+  } catch (e) {
+    // Fallback to pg if Neon not available
+    const pg = require('pg');
+    ClientClass = pg.Client;
+    console.log('✅ Using pg for comparable data (fallback)');
+  }
+  
+  return ClientClass;
 }
 
-export class ComparableDataDatabaseClient {
+class ComparableDataDatabaseClient {
   constructor() {
     const isLocal = process.env.DB_HOST === 'localhost' || !process.env.DB_HOST || process.env.DB_HOST.includes('127.0.0.1');
     const useNeon = process.env.VERCEL || process.env.DATABASE_URL;
+    
+    // Get the appropriate Client class
+    const Client = getClientClass();
     
     // Use DATABASE_URL if available (Vercel/Neon), otherwise use individual env vars
     if (useNeon && process.env.DATABASE_URL) {
@@ -604,3 +621,5 @@ export class ComparableDataDatabaseClient {
     }
   }
 }
+
+module.exports = { ComparableDataDatabaseClient };

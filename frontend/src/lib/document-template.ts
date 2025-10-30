@@ -662,10 +662,10 @@ export function generateDocumentHTML(data: ValuationData, isPreview: boolean = t
                   <div style="background-color: #fff3e0; padding: 10px; border-radius: 4px; margin-bottom: 12px; font-size: 10pt;">
                     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
                       <div>
-                        <strong>מחיר ממוצע:</strong> ₪${((data as any).marketAnalysis.avg_price || (data as any).marketAnalysis.averagePrice || 0).toLocaleString()}
+                        <strong>מחיר ממוצע:</strong> ₪${((data as any).marketAnalysis?.avg_price || (data as any).marketAnalysis?.averagePrice || 0).toLocaleString()}
                       </div>
                       <div>
-                        <strong>מחיר חציוני:</strong> ₪${((data as any).marketAnalysis.median_price || (data as any).marketAnalysis.medianPrice || 0).toLocaleString()}
+                        <strong>מחיר חציוני:</strong> ₪${((data as any).marketAnalysis?.median_price || (data as any).marketAnalysis?.medianPrice || 0).toLocaleString()}
                       </div>
                       <div>
                         <strong>נכסים להשוואה:</strong> ${(data as any).marketAnalysis.total_comparables || (data as any).marketAnalysis.totalComparables || data.comparableData.length}
@@ -673,18 +673,18 @@ export function generateDocumentHTML(data: ValuationData, isPreview: boolean = t
                     </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 8px;">
                       <div>
-                        <strong>ממוצע למ"ר:</strong> ₪${((data as any).marketAnalysis.avg_price_per_sqm || (data as any).marketAnalysis.averagePricePerSqm || 0).toLocaleString()}
+                        <strong>ממוצע למ"ר:</strong> ₪${((data as any).marketAnalysis?.avg_price_per_sqm || (data as any).marketAnalysis?.averagePricePerSqm || 0).toLocaleString()}
                       </div>
                       <div>
-                        <strong>חציון למ"ר:</strong> ₪${((data as any).marketAnalysis.median_price_per_sqm || (data as any).marketAnalysis.medianPricePerSqm || 0).toLocaleString()}
+                        <strong>חציון למ"ר:</strong> ₪${((data as any).marketAnalysis?.median_price_per_sqm || (data as any).marketAnalysis?.medianPricePerSqm || 0).toLocaleString()}
                       </div>
                       <div>
-                        <strong>מגמת שוק:</strong> ${(data as any).marketAnalysis.market_trends || 'יציב'}
+                        <strong>מגמת שוק:</strong> ${(data as any).marketAnalysis?.market_trends || 'יציב'}
                       </div>
                     </div>
-                    ${(data as any).marketAnalysis.price_range ? `
+                    ${(data as any).marketAnalysis?.price_range ? `
                       <div style="margin-top: 8px;">
-                        <strong>טווח מחירים:</strong> ₪${((data as any).marketAnalysis.price_range.min || 0).toLocaleString()} - ₪${((data as any).marketAnalysis.price_range.max || 0).toLocaleString()}
+                        <strong>טווח מחירים:</strong> ₪${((data as any).marketAnalysis?.price_range.min || 0).toLocaleString()} - ₪${((data as any).marketAnalysis?.price_range.max || 0).toLocaleString()}
                       </div>
                     ` : ''}
                   </div>
@@ -731,7 +731,7 @@ export function generateDocumentHTML(data: ValuationData, isPreview: boolean = t
           <div style="background-color: #f0f9ff; padding: 12px; border-radius: 4px; font-size: 11pt;">
             <p style="margin-bottom: 12px;">
               <strong>בשים לב לנתוני השוואה שלעיל, תוך כדי ביצוע התאמות נדרשות לנכס נשוא השומה, 
-              שווי מ"ר בנוי אקו' לנכס נשוא השומה מוערך כ-₪${((data as any).marketAnalysis.avg_price_per_sqm || (data as any).marketAnalysis.averagePricePerSqm || 0).toLocaleString()}.</strong>
+              שווי מ"ר בנוי אקו' לנכס נשוא השומה מוערך כ-₪${((data as any).marketAnalysis?.avg_price_per_sqm || (data as any).marketAnalysis?.averagePricePerSqm || 0).toLocaleString()}.</strong>
             </p>
             
             <table style="width: 100%; border-collapse: collapse; border: 1px solid #ccc; font-size: 10pt;">
@@ -757,7 +757,7 @@ export function generateDocumentHTML(data: ValuationData, isPreview: boolean = t
                     }
                   </td>
                   <td style="border: 1px solid #ccc; padding: 8px;">${(data as any).pricePerSqm?.toLocaleString() || '[חישוב]'}</td>
-                  <td style="border: 1px solid #ccc; padding: 8px;">${((data as any).marketAnalysis.median_price_per_sqm || (data as any).marketAnalysis.medianPricePerSqm || 0).toLocaleString()}</td>
+                  <td style="border: 1px solid #ccc; padding: 8px;">${((data as any).marketAnalysis?.median_price_per_sqm || (data as any).marketAnalysis?.medianPricePerSqm || 0).toLocaleString()}</td>
                 </tr>
               </tbody>
             </table>
@@ -773,7 +773,7 @@ export function generateDocumentHTML(data: ValuationData, isPreview: boolean = t
           <p style="margin-bottom: 16px;">
             בשים לב למיקומו של הנכס, לשטחו, ולכל שאר הנתונים כאמור וכמפורט לעיל,
             ובהביאי בחשבון שווים של נכסים דומים רלוונטיים,
-            <strong> שווי הנכס בגבולות ₪<span data-field="finalValuation" data-editable="true">${((data as any).marketAnalysis.median_price || (data as any).marketAnalysis.medianPrice || 0).toLocaleString() || '[חישוב]'}</span> (${numberToHebrewText((data as any).marketAnalysis.median_price || (data as any).marketAnalysis.medianPrice || 0)} שקל).</strong>
+            <strong> שווי הנכס בגבולות ₪<span data-field="finalValuation" data-editable="true">${((data as any).marketAnalysis?.median_price || (data as any).marketAnalysis?.medianPrice || 0).toLocaleString() || '[חישוב]'}</span> (${numberToHebrewText((data as any).marketAnalysis?.median_price || (data as any).marketAnalysis?.medianPrice || 0)} שקל).</strong>
           </p>
           <p style="margin-bottom: 16px;">
             השווי כולל מע"מ.

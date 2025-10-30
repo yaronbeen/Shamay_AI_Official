@@ -30,7 +30,7 @@ async function getGovMapExactCoordinates(address) {
 
         // Create GovMap URL with just address query
         const searchAddress = encodeURIComponent(address.trim());
-        const initialUrl = `https://www.govmap.gov.il/?q=${searchAddress}&z=16`;
+        const initialUrl = `https://www.govmap.gov.il/?q=${searchAddress}&13`;
         
         console.log('🌐 Loading GovMap URL:', initialUrl);
 
@@ -399,7 +399,7 @@ function buildGovMapUrl(easting, northing, options = {}) {
     };
 
     const config = {
-        zoom: 16, // Increased zoom level for better address visibility
+        zoom: 13, // Increased zoom level for better address visibility
         showTazea: true,      // Show land registry overlay (affects lay and bs parameters)
         showBorder: true,     // bb=1
         showZoomBorder: true, // zb=1
@@ -445,15 +445,18 @@ function buildGovMapUrl(easting, northing, options = {}) {
     const layers = showTazea ? '21,15' : '15';
     params.append('lay', layers);
 
-    // Address query (if provided)
+    // Address query (for display/search context)
+    // With the marker coordinates in 'bs', the 'q' parameter shouldn't cause redirect
     if (address && typeof address === 'string' && address.trim().length > 0) {
         params.append('q', address.trim());
     }
 
-    // Building selection layers (bs parameter)
-    // bs parameter should only contain layer numbers, not coordinates
+    // Building selection layers (bs parameter) WITH marker coordinates
+    // Format: bs=LAYERS|EASTING,NORTHING
+    // This tells GovMap where to place the marker/select the building
     const bsLayers = showTazea ? '15,21' : '15';
-    params.append('bs', bsLayers);
+    const bsValue = `${bsLayers}|${eastingRounded},${northingRounded}`;
+    params.append('bs', bsValue);
 
     // Additional toggles
     if (showTazea) {
@@ -469,9 +472,11 @@ function buildGovMapUrl(easting, northing, options = {}) {
         params.append('in', '1');
     }
 
-    // URLSearchParams encodes commas as %2C, but GovMap expects raw commas
-    // Only pipes (|) should be encoded as %7C
-    const urlString = params.toString().replace(/%2C/g, ',');
+    // URLSearchParams encodes special chars, but GovMap expects them raw
+    // Decode: %2C → ,  and  %7C → |
+    const urlString = params.toString()
+        .replace(/%2C/g, ',')  // Commas must be unencoded
+        .replace(/%7C/g, '|'); // Pipes must be unencoded for bs parameter
     return `${GOVMAP_BASE_URL}?${urlString}`;
 }
 
