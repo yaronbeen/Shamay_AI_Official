@@ -14,7 +14,7 @@ class SharedBuildingAIExtractor {
       apiKey: apiKey || process.env.ANTHROPIC_API_KEY
     });
     
-    this.model = 'claude-3-5-sonnet-20241022'; // User-specified model
+    this.model = 'claude-sonnet-4-20250514'; // Latest Sonnet model
   }
 
   /**
@@ -177,7 +177,7 @@ The document should have around 55 individual sub-plot entries across multiple p
 
       const message = await this.client.messages.create({
         model: this.model,
-        max_tokens: 8000, // Increased for detailed table extraction
+        max_tokens: 4000, // Max 4096 for Opus model
         temperature: 0,
         system: systemPrompt,
         messages: [

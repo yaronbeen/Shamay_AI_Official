@@ -6,7 +6,7 @@ const router = express.Router();
  * Captures a screenshot of a GIS map URL using Puppeteer
  */
 router.post('/', async (req, res) => {
-  const { govmapUrl, cropMode } = req.body;
+  const { govmapUrl, cropMode, sessionId } = req.body;
 
   if (!govmapUrl || !cropMode) {
     return res.status(400).json({
@@ -105,12 +105,39 @@ router.post('/', async (req, res) => {
 
     console.log(`✅ Screenshot captured successfully - ${screenshotBuffer.length} bytes`);
 
-    // Return screenshot as base64
+    // Default response fields
+    let screenshotUrl = null;
+    let savedFilename = null;
+
+    // If sessionId provided, save PNG using the same logic as other file saves
+    if (sessionId) {
+      try {
+        const { ShumaDB } = require('../models/ShumaDB');
+        
+        savedFilename = `gis-screenshot-mode${cropMode}-${Date.now()}.png`;
+        
+        // Use ShumaDB's save method which handles local/Vercel automatically
+        // Convert buffer to base64 for the save function
+        const base64Screenshot = screenshotBuffer.toString('base64');
+        const dataUrl = `data:image/png;base64,${base64Screenshot}`;
+        
+        const fileResult = await ShumaDB._saveBase64ImageToFile(dataUrl, sessionId, savedFilename);
+        screenshotUrl = fileResult.url;
+        
+        console.log(`💾 Screenshot saved: ${screenshotUrl}`);
+      } catch (saveErr) {
+        console.warn('⚠️ Failed to save screenshot:', saveErr.message);
+      }
+    }
+
+    // Return both base64 (for immediate UI) and URL if available (for persistence)
     const base64Screenshot = screenshotBuffer.toString('base64');
 
     return res.json({
       success: true,
       screenshot: base64Screenshot,
+      screenshotUrl,
+      filename: savedFilename,
       cropMode,
       message: 'Screenshot captured successfully'
     });

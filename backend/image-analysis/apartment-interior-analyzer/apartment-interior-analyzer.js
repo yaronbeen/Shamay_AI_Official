@@ -55,7 +55,7 @@ class ApartmentInteriorAnalyzer {
 
             // Send to Anthropic
             const response = await this.anthropic.messages.create({
-                model: 'claude-3-5-sonnet-20240620',
+                model: 'claude-sonnet-4-20250514', // Latest Sonnet model
                 max_tokens: 2000,
                 messages: [{
                     role: 'user',

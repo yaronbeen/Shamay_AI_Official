@@ -14,15 +14,21 @@ interface Step3ValidationProps {
   sessionId?: string
 }
 
-interface ExtractedData {
-  // Land Registry Data (from Tabu) - as object not array
+type ExtractedData = ValuationData['extractedData'] & {
+  // Support nested structures for backward compatibility
   land_registry?: {
     registration_office?: string
     gush?: number | string
     chelka?: number | string
     sub_chelka?: string
     ownership_type?: string
-    attachments?: string
+    attachments?: string | Array<{
+      type?: string
+      area?: number
+      color?: string
+      symbol?: string
+      description?: string
+    }>
     owners?: Array<any>
     owners_count?: number
     registered_area?: number | string
@@ -81,31 +87,6 @@ interface ExtractedData {
     building_year?: string
     [key: string]: any
   }
-  
-  // Legacy flat fields for backward compatibility
-  parcel?: string
-  ownershipType?: string
-  attachments?: string
-  sharedAreas?: string
-  buildingRights?: string
-  permittedUse?: string
-  buildingYear?: string
-  floor?: string
-  builtArea?: string
-  buildingDescription?: string
-  rooms?: string
-  propertyCondition?: string
-  finishLevel?: string
-  propertyLayoutDescription?: string
-  roomAnalysis?: Array<any>
-  conditionAssessment?: string
-  buildingCondition?: string
-  buildingFeatures?: string
-  buildingType?: string
-  overallAssessment?: string
-  averagePricePerSqm?: string
-  medianPricePerSqm?: string
-  adjustmentFactor?: string
   
   [key: string]: any
 }
@@ -1009,7 +990,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
               </div>
               <div className="text-sm text-gray-600">
                 <p>שנה: {extractedData.buildingYear || 'לא נמצא'}</p>
-                <p>שטח: {extractedData.builtArea || 'לא נמצא'} מ"ר</p>
+                <p>שטח: {extractedData?.land_registry?.apartment_registered_area || 'לא נמצא'} מ"ר</p>
                 <p>שימוש: {extractedData.permittedUse || 'לא נמצא'}</p>
               </div>
             </div>
@@ -1026,7 +1007,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
               </div>
             </div>
 
-            <div className="bg-white rounded-lg p-4 border border-blue-200">
+            {/* <div className="bg-white rounded-lg p-4 border border-blue-200">
               <div className="flex items-center gap-2 mb-2">
                 <MapPin className="w-5 h-5 text-red-600" />
                 <h4 className="font-medium text-gray-900">מכירות דומות</h4>
@@ -1036,7 +1017,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
                 <p>חציוני: {extractedData.medianPricePerSqm || 'לא נמצא'}</p>
                 <p>התאמה: {extractedData.adjustmentFactor || 'לא נמצא'}</p>
               </div>
-            </div>
+            </div> */}
                   </div>
                 </div>
       )}
@@ -1121,7 +1102,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
                   <>
                     <span className="flex-1 text-right">{extractedData.gush || 'לא נמצא'}</span>
                     <button
-                      onClick={() => handleFieldEdit('gush', extractedData.gush || '')}
+                      onClick={() => handleFieldEdit('gush', extractedData.gush ? String(extractedData.gush) : '')}
                       className="p-1 text-blue-600 hover:bg-blue-100 rounded"
                     >
                       <Edit3 className="w-4 h-4" />
@@ -1161,9 +1142,9 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
                   </div>
                 ) : (
                   <>
-                    <span className="flex-1 text-right">{extractedData.parcel || 'לא נמצא'}</span>
+                    <span className="flex-1 text-right">{extractedData.chelka || 'לא נמצא'}</span>
                     <button
-                      onClick={() => handleFieldEdit('parcel', extractedData.parcel || '')}
+                      onClick={() => handleFieldEdit('chelka', extractedData.chelka ? String(extractedData.chelka) : '')}
                       className="p-1 text-blue-600 hover:bg-blue-100 rounded"
                     >
                       <Edit3 className="w-4 h-4" />
@@ -1969,7 +1950,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
     )}
 
     {/* Comparable Sales Section - Only show if data has been processed */}
-    {hasExtractedData && (
+    {/* {hasExtractedData && (
       <div className="bg-white rounded-lg border border-gray-200 p-6">
       <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">מכירות דומות</h3>
       
@@ -2101,7 +2082,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
         </div>
         </div>
       </div>
-    )}
+    )} */}
 
     </div>
   )

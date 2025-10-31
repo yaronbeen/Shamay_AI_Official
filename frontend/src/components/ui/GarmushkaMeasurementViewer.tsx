@@ -276,6 +276,37 @@ export default function GarmushkaMeasurementViewer({
     // Do not clear canvas state here; preserve unless user explicitly clears
 
     try {
+      // First, upload the file to storage (like GIS screenshots and other documents)
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('type', 'garmushka') // Type for garmushka measurements
+
+      console.log(`📤 Uploading Garmushka file: ${file.name} (${file.size} bytes)`)
+
+      const uploadResponse = await fetch(`/api/session/${sessionId}/upload`, {
+        method: 'POST',
+        body: formData
+      })
+
+      if (!uploadResponse.ok) {
+        throw new Error(`File upload failed: ${uploadResponse.statusText}`)
+      }
+
+      const uploadResult = await uploadResponse.json()
+      console.log(`✅ File uploaded successfully:`, uploadResult)
+
+      // Get the file URL from upload result
+      const fileUrl = uploadResult.uploadEntry?.url || uploadResult.file?.url || `/api/files/${sessionId}/${uploadResult.file?.fileName || file.name}`
+
+      // Store the file URL (not data URL) for persistence
+      try {
+        sessionStorage.setItem(`garmushka:${sessionId}:fileType`, file.type === 'application/pdf' ? 'pdf' : 'image')
+        sessionStorage.setItem(`garmushka:${sessionId}:fileUrl`, fileUrl)
+        sessionStorage.setItem(`garmushka:${sessionId}:fileName`, file.name)
+        sessionStorage.setItem(`garmushka:${sessionId}:updatedAt`, new Date().toISOString())
+      } catch {}
+
+      // Now process the file for display
       if (file.type === 'application/pdf') {
         // Handle PDF files with improved error handling
         try {
@@ -300,11 +331,11 @@ export default function GarmushkaMeasurementViewer({
           setSelectedPageIndex(0)
           setImageUrl(firstPage.imageUrl)
           setIsPdfMode(true)
-          // Persist last uploaded preview so canvas is restored on revisit
+          
+          // Store file URL (not data URL) for later loading
           try {
-            sessionStorage.setItem(`garmushka:${sessionId}:fileType`, 'pdf')
-            sessionStorage.setItem(`garmushka:${sessionId}:fileData`, firstPage.imageUrl || '')
-            sessionStorage.setItem(`garmushka:${sessionId}:updatedAt`, new Date().toISOString())
+            sessionStorage.setItem(`garmushka:${sessionId}:fileData`, firstPage.imageUrl || '') // Keep data URL for canvas rendering
+            sessionStorage.setItem(`garmushka:${sessionId}:fileUrl`, fileUrl) // Store server URL for persistence
           } catch {}
           setIsLoading(false)
         } catch (pdfError) {
@@ -315,26 +346,13 @@ export default function GarmushkaMeasurementViewer({
         
       } else if (file.type.startsWith('image/') || file.type === 'image/svg+xml') {
         // Handle regular image files
-        const reader = new FileReader()
-        reader.onload = (e) => {
-          const result = e.target?.result as string
-          if (result) {
-            setImageUrl(result)
-            // Persist last uploaded image for restoring later
-            try {
-              localStorage.setItem('garmushka:lastFileType', 'image')
-              localStorage.setItem('garmushka:lastFileData', result)
-              localStorage.setItem('garmushka:lastUpdatedAt', new Date().toISOString())
-            } catch {}
-            setError('')
-          }
-          setIsLoading(false)
-        }
-        reader.onerror = () => {
-          setError('קריאת הקובץ נכשלה')
-          setIsLoading(false)
-        }
-        reader.readAsDataURL(file)
+        // Use the uploaded file URL directly (no need for data URL if file is on server)
+        setImageUrl(fileUrl)
+        setIsPdfMode(false)
+        setPdfPages([])
+        setSelectedPageIndex(0)
+        setError('')
+        setIsLoading(false)
       } else {
         setError('נא להעלות קובץ PDF או תמונה (PDF, JPG, PNG, SVG)')
         setIsLoading(false)
@@ -414,11 +432,52 @@ export default function GarmushkaMeasurementViewer({
     let didCancel = false
     const restore = async () => {
       try {
-        // Priority: sessionStorage for this session, then prop, then localStorage
+        // Priority: 
+        // 1. Check session uploads for garmushka files (uploaded files)
+        // 2. sessionStorage URL for this session
+        // 3. initialFileUrl prop
+        // 4. sessionStorage data URL (fallback)
+        
+        // First check session uploads
+        if (sessionId && !imageUrl) {
+          try {
+            const response = await fetch(`/api/session/${sessionId}`)
+            if (response.ok) {
+              const sessionData = await response.json()
+              const uploads = sessionData?.data?.uploads || []
+              // Find garmushka uploads
+              const garmushkaUploads = uploads.filter((u: any) => {
+                const type = (u.type || '').toLowerCase()
+                return type === 'garmushka'
+              })
+              
+              if (garmushkaUploads.length > 0) {
+                const lastUpload = garmushkaUploads[garmushkaUploads.length - 1] // Get most recent
+                const fileUrl = lastUpload.url || lastUpload.preview
+                if (fileUrl) {
+                  console.log(`📁 Restoring Garmushka file from session uploads: ${fileUrl}`)
+                  try {
+                    await loadFromUrl(fileUrl)
+                    return // Success, exit early
+                  } catch (err) {
+                    console.warn('Failed to load from upload URL:', err)
+                    // Continue to fallbacks
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('Failed to check session uploads:', e)
+            // Continue to fallbacks
+          }
+        }
+        
+        // Fallback to sessionStorage URL
         const sessionUrl = sessionStorage.getItem(`garmushka:${sessionId}:fileUrl`)
         const storedUrl = sessionUrl || initialFileUrl || ''
         const storedType = sessionStorage.getItem(`garmushka:${sessionId}:fileType`)
         const storedData = sessionStorage.getItem(`garmushka:${sessionId}:fileData`)
+        
         if (storedUrl) {
           try {
             await loadFromUrl(storedUrl)
@@ -449,38 +508,6 @@ export default function GarmushkaMeasurementViewer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialFileUrl, sessionId])
 
-  // Load from session uploads if nothing restored
-  useEffect(() => {
-    const loadSessionData = async () => {
-      if (!sessionId) return
-      if (imageUrl) return
-      try {
-        const response = await fetch(`/api/session/${sessionId}`)
-        if (!response.ok) return
-        const sessionData = await response.json()
-        const uploads = sessionData?.data?.uploads
-        if (Array.isArray(uploads) && uploads.length > 0) {
-          // Only consider Garmushka-generated uploads (just like Step 3 logic but inverted)
-          const garmushkaUploads = uploads.filter((u: any) => {
-            const name = (u.name || '').toLowerCase()
-            const url = (u.url || '').toLowerCase()
-            const type = (u.type || u.mimeType || '').toLowerCase()
-            return name.includes('garmushka') || url.includes('garmushka') || type.includes('garmushka')
-          })
-          if (garmushkaUploads.length === 0) return
-          const preferred =
-            garmushkaUploads.find((u: any) => (u.mimeType || u.type || '').includes('pdf')) ||
-            garmushkaUploads.find((u: any) => (u.mimeType || u.type || '').startsWith('image/')) ||
-            garmushkaUploads[0]
-          const url = preferred?.url
-          if (url) {
-            await loadFromUrl(url)
-          }
-        }
-      } catch {}
-    }
-    loadSessionData()
-  }, [sessionId, imageUrl, loadFromUrl])
 
   // Provide an explicit clear action that also clears persistence
   const clearCanvasAndMemory = React.useCallback(() => {

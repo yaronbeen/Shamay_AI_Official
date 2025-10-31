@@ -15,7 +15,7 @@ class LandRegistryComprehensiveAIExtractor {
       apiKey: apiKey || process.env.ANTHROPIC_API_KEY
     });
 
-    this.model = 'claude-3-5-sonnet-20240620';
+    this.model = 'claude-sonnet-4-20250514'; // Latest Sonnet model
   }
 
   /**
@@ -432,7 +432,7 @@ Return ONLY the JSON object with this structure:
 
     const message = await this.client.messages.create({
       model: this.model,
-      max_tokens: 8000,
+      max_tokens: 4000, // Max 4096 for Opus model
       temperature: 0,
       system: systemPrompt,
       messages: messages

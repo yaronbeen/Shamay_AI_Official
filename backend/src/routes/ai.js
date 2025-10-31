@@ -442,9 +442,10 @@ router.post('/interior-analysis', async (req, res) => {
       // Convert API URL to file system path if needed
       let imagePath = image.data || image.url;
       if (imagePath && imagePath.startsWith('/api/files/')) {
-        // Convert /api/files/sessionId/filename to uploads/sessionId/filename
+        // Convert /api/files/sessionId/filename to frontend/uploads/sessionId/filename
         const pathParts = imagePath.split('/api/files/')[1];
-        imagePath = path.join(__dirname, '../../uploads', pathParts);
+        // Files are stored in frontend/uploads, not backend/uploads
+        imagePath = path.join(__dirname, '../../../frontend/uploads', pathParts);
         console.log(`📁 Converted URL to path: ${imagePath}`);
       }
       
@@ -532,9 +533,10 @@ router.post('/exterior-analysis', async (req, res) => {
       // Convert API URL to file system path if needed
       let imagePath = image.data || image.url;
       if (imagePath && imagePath.startsWith('/api/files/')) {
-        // Convert /api/files/sessionId/filename to uploads/sessionId/filename
+        // Convert /api/files/sessionId/filename to frontend/uploads/sessionId/filename
         const pathParts = imagePath.split('/api/files/')[1];
-        imagePath = path.join(__dirname, '../../uploads', pathParts);
+        // Files are stored in frontend/uploads, not backend/uploads
+        imagePath = path.join(__dirname, '../../../frontend/uploads', pathParts);
         console.log(`📁 Converted URL to path: ${imagePath}`);
       }
       

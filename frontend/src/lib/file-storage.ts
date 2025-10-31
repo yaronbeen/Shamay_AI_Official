@@ -92,12 +92,26 @@ export class FileStorageService {
     mimeType?: string
   ): Promise<{ url: string; path: string; size: number }> {
     try {
-      const sessionDir = path.join(this.UPLOADS_DIR, sessionId)
+      // Use frontend/uploads directory for local dev
+      const projectRoot = path.resolve(process.cwd())
+      const uploadsDir = path.join(projectRoot, 'uploads', sessionId)
       
       // Create session directory if it doesn't exist
-      await fs.mkdir(sessionDir, { recursive: true })
+      await fs.mkdir(uploadsDir, { recursive: true })
       
-      const filePath = path.join(sessionDir, filename)
+      // Handle nested paths (e.g., "images/filename.jpg")
+      const filenameParts = filename.split('/')
+      const actualFilename = filenameParts[filenameParts.length - 1]
+      const subDir = filenameParts.length > 1 ? filenameParts.slice(0, -1).join('/') : ''
+      
+      let filePath: string
+      if (subDir) {
+        const subDirPath = path.join(uploadsDir, subDir)
+        await fs.mkdir(subDirPath, { recursive: true })
+        filePath = path.join(subDirPath, actualFilename)
+      } else {
+        filePath = path.join(uploadsDir, actualFilename)
+      }
       
       // Write file to disk
       await fs.writeFile(filePath, file)

@@ -78,7 +78,7 @@ export class EnvironmentDatabaseClient {
         analysisData.tokens_used || 0, // 14
         analysisData.cost || 0, // 15
         'anthropic_claude_environment', // 16
-        'claude-3-5-sonnet-20241022', // 17
+        'claude-sonnet-4-20250514', // 17 - Latest Sonnet model
         (analysisData.raw_response || '').length > 50000 ? 
           (analysisData.raw_response || '').substring(0, 50000) : 
           (analysisData.raw_response || ''), // 18

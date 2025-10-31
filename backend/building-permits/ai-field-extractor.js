@@ -14,7 +14,7 @@ class BuildingPermitAIExtractor {
       apiKey: apiKey || process.env.ANTHROPIC_API_KEY
     });
     
-    this.model = 'claude-3-5-sonnet-20240620'; // Updated model
+    this.model = 'claude-sonnet-4-20250514'; // Latest Sonnet model
   }
 
   /**

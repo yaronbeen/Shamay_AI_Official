@@ -9,7 +9,15 @@ const logger = require('../config/logger');
 
 // Determine upload base path: /tmp for Vercel, local uploads for dev
 const getUploadBasePath = () => {
-  return process.env.VERCEL ? '/tmp' : path.join(__dirname, '../../uploads');
+  if (process.env.VERCEL) {
+    return '/tmp';
+  } else {
+    // Local dev: Always save to frontend/uploads
+    // __dirname = backend/src/routes
+    // Go up 2 levels to backend, then up to project root, then to frontend/uploads
+    const projectRoot = path.resolve(__dirname, '../../..');
+    return path.join(projectRoot, 'frontend', 'uploads');
+  }
 };
 
 // Configure multer for file uploads
@@ -187,10 +195,12 @@ router.get('/:sessionId/:filename', async (req, res) => {
     const { sessionId, filename } = req.params;
     
     // Try multiple possible upload locations
+    // Priority: frontend/uploads (where files should be saved)
+    const projectRoot = path.resolve(__dirname, '../../..');
     const possiblePaths = [
-      path.join(__dirname, '../../uploads', sessionId, filename), // backend/uploads
-      path.join(__dirname, '../../../frontend/uploads', sessionId, filename), // frontend/uploads
-      path.join(process.cwd(), 'uploads', sessionId, filename) // from CWD
+      path.join(projectRoot, 'frontend', 'uploads', sessionId, filename), // frontend/uploads (correct location)
+      path.join(__dirname, '../../uploads', sessionId, filename), // backend/uploads (legacy)
+      path.join(process.cwd(), 'uploads', sessionId, filename) // from CWD (fallback)
     ];
     
     let filePath = null;

@@ -1,801 +1,128 @@
 'use client'
 
-import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { MapPin, Settings, Camera, Save, Eye, RefreshCw } from 'lucide-react'
-import ReactCrop, { Crop, PixelCrop, centerCrop, makeAspectCrop } from 'react-image-crop'
-import { ValuationData } from '../ValuationWizard'
-import 'react-image-crop/dist/ReactCrop.css'
-import { useShumaDB } from '@/hooks/useShumaDB'
-
-interface GovMapData {
-  coordinates: {
-    x: number
-    y: number
-    lat: number
-    lng: number
-  }
-  govmapUrls: {
-    cropMode0: string  // Clean map (no תצ"א)
-    cropMode1: string  // With תצ"א overlay
-  }
-  extractedAt: string
-  status: string
-  confidence?: number
-  address?: string
-  annotations?: Annotation[]
-  annotationCanvasData?: string
-  screenshots?: Screenshots
-}
-
-interface Annotation {
-  id?: string
-  type: 'line' | 'rectangle' | 'circle' | 'arrow' | 'text' | 'freehand'
-  x?: number
-  y?: number
-  x1?: number
-  y1?: number
-  x2?: number
-  y2?: number
-  width?: number
-  height?: number
-  radius?: number
-  text?: string
-  color: string
-  points?: { x: number, y: number }[]
-}
-
-interface Screenshots {
-  cropMode0?: string
-  cropMode1?: string
-}
+import React, { useEffect, useRef, useState } from 'react'
 
 interface GISMapViewerProps {
-  sessionId: string
-  data: ValuationData
-  initialScreenshots?: Screenshots
-  onAnalysisComplete?: (measurements: GovMapData) => void
+  sessionId?: string
+  data?: any
+  initialScreenshots?: { cropMode0?: string, cropMode1?: string }
 }
 
-export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GISMapViewerProps) {
-  const { saveGISData } = useShumaDB()
-  const [gisData, setGisData] = useState<GovMapData | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [screenshots, setScreenshots] = useState<Screenshots>({})
-  const [selectedCropMode, setSelectedCropMode] = useState<'0' | '1' | undefined>(undefined)
-  const [currentCropMode, setCurrentCropMode] = useState<'0' | '1'>('0')
-  const [isCapturing, setIsCapturing] = useState(false)
-  const [capturedImage, setCapturedImage] = useState<string | null>(null)
-  const [showEditModal, setShowEditModal] = useState(false)
-  const [editedImage, setEditedImage] = useState<string | null>(null)
-  const [showCropTool, setShowCropTool] = useState(false)
-  const [cropData, setCropData] = useState<{x: number, y: number, width: number, height: number} | null>(null)
-  const iframeRef = useRef<HTMLIFrameElement>(null)
-  
-  // Cropping state
-  const [crop, setCrop] = useState<Crop>()
-  const [completedCrop, setCompletedCrop] = useState<PixelCrop>()
-  const [serverScreenshot, setServerScreenshot] = useState<string | null>(null)
-  const [isCapturingServer, setIsCapturingServer] = useState(false)
-  const imgRef = useRef<HTMLImageElement>(null)
-
-
-  
-  // Annotation drawing state
-  const [isDrawing, setIsDrawing] = useState(false)
-  const [drawingMode, setDrawingMode] = useState<'line' | 'rectangle' | 'circle' | 'arrow' | 'text' | 'freehand' | null>(null)
-  const [annotations, setAnnotations] = useState<Annotation[]>([])
-  const [selectedAnnotation, setSelectedAnnotation] = useState<Annotation | null>(null)
+export default function GISMapViewer({ sessionId, data, initialScreenshots }: GISMapViewerProps = {}) {
+  // State - exactly matching HTML logic
+  const [addressStreet, setAddressStreet] = useState('')
+  const [addressNumber, setAddressNumber] = useState('')
+  const [addressCity, setAddressCity] = useState('')
+  const [searchMessage, setSearchMessage] = useState('')
+  const [notes, setNotes] = useState('')
+  const [isMapLocked, setIsMapLocked] = useState(false)
+  const [currentTool, setCurrentTool] = useState<'select' | 'freehand' | 'line' | 'rectangle' | 'circle' | 'arrow' | 'text'>('select')
   const [currentColor, setCurrentColor] = useState('#ff0000')
-  const [annotationHistory, setAnnotationHistory] = useState<Annotation[][]>([])
-  const [historyIndex, setHistoryIndex] = useState(-1)
-  const [startX, setStartX] = useState(0)
-  const [startY, setStartY] = useState(0)
+  const [isDrawing, setIsDrawing] = useState(false)
+  const [annotations, setAnnotations] = useState<any[]>([])
+  const [savedMaps, setSavedMaps] = useState<any[]>([])
+  const [currentMapId, setCurrentMapId] = useState<string | null>(null)
+  const [govmapUrl, setGovmapUrl] = useState<string>('')
+  const [coords, setCoords] = useState<{ wgs84?: { lat: number, lon: number }, itm?: { easting: number, northing: number } }>({})
+  const [govmapData, setGovmapData] = useState<any>(null)
+  const [currentMapMode, setCurrentMapMode] = useState<'0' | '1'>('0') // 0 = without תצ״א, 1 = with תצ״א
+  
+  const iframeRef = useRef<HTMLIFrameElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const startXYRef = useRef<{ x: number, y: number } | null>(null)
+  const fileInputRef0 = useRef<HTMLInputElement>(null)
+  const fileInputRef1 = useRef<HTMLInputElement>(null)
 
+  // Message helper
+  const showMessage = (text: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setSearchMessage(text)
+    if (type === 'success' || type === 'info') {
+      setTimeout(() => setSearchMessage(''), 3000)
+    }
+  }
+
+  // Initialize - load saved maps and initial screenshots
   useEffect(() => {
-    if (sessionId && data) {
-      loadGISAnalysis()
-    }
-  }, [sessionId, data])
-  
-  console.log('🔍 GISMapViewer data:', data)
-  
-  const loadGISAnalysis = async () => {
     try {
-      console.log('📊 Loading existing GovMap analysis from session data...')
-      
-      // Safety check: ensure data is defined
-      if (!data) {
-        console.log('⚠️ Data prop is undefined, skipping load')
-        return
+      const raw = localStorage.getItem('govmap-saved-maps')
+      if (raw) setSavedMaps(JSON.parse(raw))
+    } catch {}
+
+    // Load initial screenshots from props if available
+    if (initialScreenshots) {
+      setScreenshots(initialScreenshots)
+      // Convert to URLs if they're file paths
+      const urls: { cropMode0?: string, cropMode1?: string } = {}
+      if (initialScreenshots.cropMode0 && initialScreenshots.cropMode0.startsWith('/uploads/')) {
+        urls.cropMode0 = initialScreenshots.cropMode0
       }
-      
-      // Load GIS analysis from ValuationData prop
-      if (data.gisScreenshots) {
-        console.log('📊 Setting GovMap data from props:', data.gisScreenshots)
-        setGisData(data.gisScreenshots as GovMapData)
+      if (initialScreenshots.cropMode1 && initialScreenshots.cropMode1.startsWith('/uploads/')) {
+        urls.cropMode1 = initialScreenshots.cropMode1
       }
-      
-      // Load screenshots from ValuationData
-      if (data.gisScreenshots) {
-        // Ensure screenshots are in proper base64 format for display
-        const formattedScreenshots = {
-          cropMode0: data.gisScreenshots.cropMode0,
-          cropMode1: data.gisScreenshots.cropMode1
-        }
-        
-        setScreenshots(formattedScreenshots)
-        console.log('📸 Loaded existing screenshots from data:', formattedScreenshots)
+      if (Object.keys(urls).length > 0) {
+        setScreenshotUrls(urls)
       }
-      
-      // If no data in props, try to load from session API (fallback)
-      if (!data.gisAnalysis) {
-        const response = await fetch(`/api/session/${sessionId}/gis-analysis`)
-        if (response.ok) {
-          const result = await response.json()
-          if (result.success && result.measurements) {
-            console.log('📊 Setting GovMap data from API:', result.measurements)
-            setGisData(result.measurements)
-          }
-        }
-      }
-    } catch (error) {
-      console.error('❌ Error loading GovMap analysis:', error)
-      setError('Failed to load GovMap analysis')
-    }
-  }
-
-  // Debug function to check session data directly
-  const debugSessionData = async () => {
-    try {
-      console.log('🔍 DEBUG: Checking session data directly...')
-      const response = await fetch(`/api/session/${sessionId}`)
-      const sessionData = await response.json()
-      console.log('🔍 DEBUG: Full session data:', sessionData)
-      console.log('🔍 DEBUG: Session data.data:', sessionData?.data)
-      console.log('🔍 DEBUG: Session data.data.gisScreenshots:', sessionData?.data?.gisScreenshots)
-      return sessionData
-    } catch (error) {
-      console.error('🔍 DEBUG: Error fetching session data:', error)
-      return null
-    }
-  }
-
-  const runGISAnalysis = async () => {
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      console.log('🗺️ Starting GovMap analysis...')
-      const response = await fetch(`/api/session/${sessionId}/gis-analysis`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        if (data.success) {
-          console.log('📊 GovMap analysis response:', data.measurements)
-          setGisData(data.measurements)
-          onAnalysisComplete?.(data.measurements)
-          console.log('✅ GovMap analysis completed successfully')
-        } else {
-          setError(data.error || 'GovMap analysis failed')
-        }
-      } else {
-        const errorData = await response.json()
-        setError(errorData.error || 'GovMap analysis failed')
-      }
-    } catch (error) {
-      console.error('❌ GovMap analysis error:', error)
-      setError('Failed to run GovMap analysis')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const getCurrentIframeUrl = () => {
-    if (!gisData?.govmapUrls) return undefined
-    const url = currentCropMode === '1' ? gisData.govmapUrls.cropMode1 : gisData.govmapUrls.cropMode0
-    console.log(`🗺️ getCurrentIframeUrl - cropMode: ${currentCropMode}, URL length: ${url?.length || 0}`)
-    console.log(`🗺️ Full URL:`, url)
-    return url
-  }
-
-  const formatCoordinates = () => {
-    if (!gisData?.coordinates) return 'לא זמין'
-    const { x, y, lat, lng } = gisData.coordinates
-    return `ITM: ${x.toFixed(2)}, ${y.toFixed(2)} | WGS84: ${lat.toFixed(6)}, ${lng.toFixed(6)}`
-  }
-
-  const captureServerScreenshot = async (cropMode: '0' | '1') => {
-    if (!gisData?.govmapUrls) {
-      alert('לא ניתן לצלם - נתוני מפה לא זמינים')
-      return
     }
 
-    setIsCapturingServer(true)
-    try {
-      console.log(`📸 Capturing server-side screenshot for mode ${cropMode}`)
-      
-      const govmapUrl = cropMode === '0' ? gisData.govmapUrls.cropMode0 : gisData.govmapUrls.cropMode1
-      
-      const response = await fetch(`/api/session/${sessionId}/gis-screenshot`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cropMode,
-          govmapUrl,
-          annotations: [], // Don't include annotations yet - add them during cropping
-          coordinates: gisData.coordinates
-        })
-      })
-      
-      if (!response.ok) {
-        // Handle 501 (Not Implemented) for serverless limitation
-        if (response.status === 501) {
-          const errorData = await response.json()
-          alert(errorData.message || 'צילום אוטומטי לא זמין בסביבת הענן. אנא השתמש בכלי החיתוך הידני.')
-          setIsCapturingServer(false)
-          return
-        }
-        throw new Error(`Server screenshot failed: ${response.statusText}`)
-      }
-      
-      const result = await response.json()
-      console.log(`📸 Server screenshot result:`, result)
-      
-      if (result.success) {
-        // Convert file path to base64 for display
-        const imageResponse = await fetch(result.screenshotUrl)
-        const imageBlob = await imageResponse.blob()
-        const reader = new FileReader()
-        reader.onload = () => {
-          const base64Data = reader.result as string
-          setServerScreenshot(base64Data)
-          setSelectedCropMode(cropMode)
-          // Don't open cropping modal yet - show image with crop button
-          setShowEditModal(true)
-          // Clear annotations for fresh start during cropping
-          setAnnotations([])
-        }
-        reader.readAsDataURL(imageBlob)
-      } else {
-        throw new Error(result.error || 'Screenshot failed')
-      }
-        
-    } catch (error) {
-      console.error('❌ Error capturing server screenshot:', error)
-      alert('שגיאה בצילום המפה מהשרת')
-    } finally {
-      setIsCapturingServer(false)
+    // Set currentMapId from sessionId if provided
+    if (sessionId) {
+      setCurrentMapId(sessionId)
     }
-  }
+  }, [sessionId, initialScreenshots])
 
-  // Manual screenshot upload handler
-  const handleManualScreenshotUpload = async (event: React.ChangeEvent<HTMLInputElement>, cropMode: '0' | '1') => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    // Check if it's an image
-    if (!file.type.startsWith('image/')) {
-      alert('נא להעלות קובץ תמונה בלבד')
-      return
+  // Resize canvas when iframe changes
+  useEffect(() => {
+    const resizeCanvas = () => {
+      const canvas = canvasRef.current
+    const iframe = iframeRef.current
+      if (!canvas || !iframe) return
+      const rect = iframe.getBoundingClientRect()
+      canvas.width = rect.width
+      canvas.height = rect.height
+      redraw()
     }
-
-    try {
-      // Convert to base64 for preview
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        const base64Data = e.target?.result as string
-        setServerScreenshot(base64Data)
-        setSelectedCropMode(cropMode)
-        setShowEditModal(true)
-        setAnnotations([])
-      }
-      reader.readAsDataURL(file)
-    } catch (error) {
-      console.error('❌ Error uploading screenshot:', error)
-      alert('שגיאה בהעלאת התמונה')
+    if (govmapUrl) {
+      resizeCanvas()
+      window.addEventListener('resize', resizeCanvas)
+      return () => window.removeEventListener('resize', resizeCanvas)
     }
-  }
-
-  const saveEditedImage = async (editedImageData: string) => {
-    if (!selectedCropMode) return
-
-    console.log(`📸 Saving edited image for crop mode ${selectedCropMode}`)
-    
-    setIsCapturing(true)
-    try {
-      // Ensure the image data is in proper base64 format
-      const base64Data = ensureBase64Format(editedImageData)
-      console.log(`📸 Saving screenshot for cropMode${selectedCropMode}:`, base64Data.substring(0, 100) + '...')
-
-      // First, get the latest session data to ensure we have current screenshots
-      const sessionResponse = await fetch(`/api/session/${sessionId}`)
-      const sessionData = await sessionResponse.json()
-      console.log(`📊 Current session data:`, sessionData)
-      console.log(`📊 Session data.gisScreenshots:`, sessionData?.data?.gisScreenshots)
-      
-      const existingScreenshots = sessionData?.data?.gisScreenshots || {}
-      console.log(`📊 Existing screenshots from session:`, existingScreenshots)
-      
-      const updatedScreenshots = {
-        ...existingScreenshots,
-        [`cropMode${selectedCropMode}`]: base64Data
-      }
-      
-      const requestBody = {
-        data: {
-          ...sessionData.data,
-          gisScreenshots: updatedScreenshots
-        }
-      }
-      console.log(`📤 Sending request body:`, requestBody)
-      console.log(`📤 Existing screenshots:`, existingScreenshots)
-      console.log(`📤 Updated screenshots:`, updatedScreenshots)
-
-      // Save directly to database with base64 data
-      const result = await saveGISData(sessionId, updatedScreenshots)
-
-      if (result.success) {
-        console.log(`✅ Database save successful`)
-        
-        setScreenshots(prev => ({
-          ...prev,
-          [`cropMode${selectedCropMode}`]: base64Data
-        }))
-
-        setShowEditModal(false)
-        setCapturedImage(null)
-        setEditedImage(null)
-        setSelectedCropMode(undefined)
-        
-        alert(`תמונת מפה ערוכה נשמרה בהצלחה! (מצב ${selectedCropMode === '0' ? 'נקייה' : 'תצ"א'})`)
-      } else {
-        const errorData = await result.error as string
-        console.error('❌ Failed to save edited image:', errorData)
-        alert('שגיאה בשמירת התמונה הערוכה')
-      }
-    } catch (error) {
-      console.error('❌ Error saving edited image:', error)
-      alert('שגיאה בשמירת התמונה הערוכה')
-    } finally {
-      setIsCapturing(false)
-    }
-  }
-
-  const handleEditComplete = (editedData: string) => {
-    setEditedImage(editedData)
-  }
-
-  const handleSaveToSession = () => {
-    if (editedImage) {
-      saveEditedImage(editedImage)
-    } else if (capturedImage) {
-      saveEditedImage(capturedImage)
-    }
-  }
-
-  const ensureBase64Format = (imageData: string): string => {
-    console.log('🔍 ensureBase64Format input:', imageData?.substring(0, 100) + '...')
-    
-    // Check if already in base64 format
-    if (imageData.startsWith('data:image/')) {
-      console.log('✅ Already in data:image format')
-      return imageData
-    }
-    
-    // If it's raw base64 data (no comma), add the data URL prefix
-    if (imageData && !imageData.includes(',')) {
-      const result = `data:image/png;base64,${imageData}`
-      console.log('✅ Added data:image prefix to raw base64')
-      return result
-    }
-    
-    // If it's already base64 with comma, return as is
-    if (imageData.includes(',')) {
-      console.log('✅ Already has comma, returning as-is')
-      return imageData
-    }
-    
-    // Default: assume it's raw base64 and add prefix
-    const result = `data:image/png;base64,${imageData}`
-    console.log('✅ Default case: added data:image prefix')
-    return result
-  }
-
-  // Cropping functions
-  const onImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
-    const { width, height } = e.currentTarget
-    setCrop(centerCrop(
-      makeAspectCrop(
-        {
-          unit: '%',
-          width: 90,
-        },
-        16 / 9,
-        width,
-        height
-      ),
-      width,
-      height
-    ))
-  }, [])
-
-  const getCroppedImg = useCallback((
-    image: HTMLImageElement,
-    crop: PixelCrop,
-    fileName: string
-  ): Promise<File> => {
-    const canvas = document.createElement('canvas')
-    const ctx = canvas.getContext('2d')
-    
-    if (!ctx) {
-      throw new Error('No 2d context')
-    }
-
-    const scaleX = image.naturalWidth / image.width
-    const scaleY = image.naturalHeight / image.height
-    const pixelRatio = window.devicePixelRatio
-
-    canvas.width = Math.floor(crop.width * scaleX * pixelRatio)
-    canvas.height = Math.floor(crop.height * scaleY * pixelRatio)
-
-    ctx.scale(pixelRatio, pixelRatio)
-    ctx.imageSmoothingQuality = 'high'
-
-    const cropX = crop.x * scaleX
-    const cropY = crop.y * scaleY
-
-    ctx.save()
-
-    ctx.translate(-cropX, -cropY)
-    ctx.drawImage(
-      image,
-      0,
-      0,
-      image.naturalWidth,
-      image.naturalHeight,
-      0,
-      0,
-      image.naturalWidth,
-      image.naturalHeight
-    )
-
-    ctx.restore()
-
-    return new Promise((resolve, reject) => {
-      canvas.toBlob((blob) => {
-        if (!blob) {
-          reject(new Error('Canvas is empty'))
-          return
-        }
-        const file = new File([blob], fileName, { type: 'image/png' })
-        resolve(file)
-      }, 'image/png')
-    })
-  }, [])
-
-  // Undo/Redo functions
-  const saveToHistory = useCallback((newAnnotations: Annotation[]) => {
-    const newHistory = annotationHistory.slice(0, historyIndex + 1)
-    newHistory.push([...newAnnotations])
-    setAnnotationHistory(newHistory)
-    setHistoryIndex(newHistory.length - 1)
-  }, [annotationHistory, historyIndex])
-
-  const undo = useCallback(() => {
-    if (historyIndex > 0) {
-      const newIndex = historyIndex - 1
-      setHistoryIndex(newIndex)
-      setAnnotations([...annotationHistory[newIndex]])
-    }
-  }, [historyIndex, annotationHistory])
-
-  const redo = useCallback(() => {
-    if (historyIndex < annotationHistory.length - 1) {
-      const newIndex = historyIndex + 1
-      setHistoryIndex(newIndex)
-      setAnnotations([...annotationHistory[newIndex]])
-    }
-  }, [historyIndex, annotationHistory])
+  }, [govmapUrl, annotations])
 
   // Redraw annotations on canvas
-  const redrawAnnotations = useCallback(() => {
-    const canvas = canvasRef.current
-    const img = imgRef.current
-    if (!canvas || !img) return
-
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    // Set canvas size to match image display size
-    canvas.width = img.offsetWidth
-    canvas.height = img.offsetHeight
-
-    // Clear canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-
-    // Draw annotations using display coordinates directly
-    annotations.forEach(annotation => {
-      ctx.strokeStyle = annotation.color
-      ctx.fillStyle = annotation.color
-      ctx.lineWidth = 3
-
-      if (annotation.type === 'line' && annotation.x1 !== undefined && annotation.y1 !== undefined && annotation.x2 !== undefined && annotation.y2 !== undefined) {
-        ctx.beginPath()
-        ctx.moveTo(annotation.x1, annotation.y1)
-        ctx.lineTo(annotation.x2, annotation.y2)
-        ctx.stroke()
-      } else if (annotation.type === 'arrow' && annotation.x1 !== undefined && annotation.y1 !== undefined && annotation.x2 !== undefined && annotation.y2 !== undefined) {
-        drawArrow(ctx, annotation.x1, annotation.y1, annotation.x2, annotation.y2)
-      } else if (annotation.type === 'rectangle' && annotation.x !== undefined && annotation.y !== undefined && annotation.width !== undefined && annotation.height !== undefined) {
-        ctx.strokeRect(annotation.x, annotation.y, annotation.width, annotation.height)
-      } else if (annotation.type === 'circle' && annotation.x !== undefined && annotation.y !== undefined && annotation.radius !== undefined) {
-        ctx.beginPath()
-        ctx.arc(annotation.x, annotation.y, annotation.radius, 0, 2 * Math.PI)
-        ctx.stroke()
-      } else if (annotation.type === 'text' && annotation.x !== undefined && annotation.y !== undefined && annotation.text) {
-        ctx.font = 'bold 16px Arial'
-        ctx.fillText(annotation.text, annotation.x, annotation.y)
-      }
-    })
-  }, [annotations])
-
-  // Redraw when annotations change
-  useEffect(() => {
-    redrawAnnotations()
-  }, [redrawAnnotations])
-
-  // Auto-capture screenshot when cropping modal opens
-  useEffect(() => {
-    if (showCropTool && !serverScreenshot && gisData?.govmapUrls) {
-      console.log('📸 Auto-capturing screenshot for cropping...')
-      // Default to cropMode0 (clean map) for cropping
-      captureServerScreenshot('0')
-    }
-  }, [showCropTool, serverScreenshot, gisData?.govmapUrls])
-
-  const handleCropComplete = async () => {
-    if (!serverScreenshot || !crop || !imgRef.current) return
-
-    try {
-      // Convert crop to pixel crop if needed
-      const pixelCrop = crop.unit === 'px' ? crop : {
-        unit: 'px' as const,
-        x: (crop.x / 100) * imgRef.current.width,
-        y: (crop.y / 100) * imgRef.current.height,
-        width: (crop.width / 100) * imgRef.current.width,
-        height: (crop.height / 100) * imgRef.current.height
-      }
-      
-      const croppedImage = await getCroppedImg(
-        imgRef.current,
-        pixelCrop as any,
-        `cropped_${selectedCropMode}_${Date.now()}.png`
-      )
-
-      const reader = new FileReader()
-      reader.onload = async () => {
-        const croppedDataUrl = reader.result as string
-        
-        console.log(`📸 Saving cropped image for crop mode ${selectedCropMode}`)
-        
-        // 1. Save file locally first
-        const formData = new FormData()
-        formData.append('file', croppedImage)
-        formData.append('cropMode', selectedCropMode || '0')
-        formData.append('annotations', JSON.stringify(annotations))
-        
-        const localSaveResponse = await fetch(`/api/session/${sessionId}/gis-screenshot`, {
-          method: 'POST',
-          body: formData
-        })
-        
-        if (localSaveResponse.ok) {
-          const localSaveResult = await localSaveResponse.json()
-          console.log(`✅ File saved locally: ${localSaveResult.filePath}`)
-        }
-        
-        // 2. Save base64 to database
-        const updatedScreenshots = {
-          [`cropMode${selectedCropMode}`]: croppedDataUrl
-        }
-        
-        const result = await saveGISData(sessionId, updatedScreenshots)
-
-        if (result.success) {
-          console.log(`✅ Database save successful`)
-          
-          // Update local state
-          setScreenshots(prev => ({
-            ...prev,
-            [`cropMode${selectedCropMode}`]: croppedDataUrl
-          }))
-          
-          // Close cropping modal
-          setShowCropTool(false)
-          setServerScreenshot(null)
-          setCrop(undefined)
-          setCompletedCrop(undefined)
-          setAnnotations([])
-          
-          alert('התמונה נחתכה ונשמרה בהצלחה!')
-        } else {
-          throw new Error('Failed to save to session')
-        }
-      }
-      reader.readAsDataURL(croppedImage)
-    } catch (error) {
-      console.error('❌ Error cropping and saving image:', error)
-      alert('שגיאה בגזירת התמונה ושמירתה')
-    }
-  }
-
-  const handleCropImage = () => {
-    if (!capturedImage) return
-    
-    const canvas = document.createElement('canvas')
-    const ctx = canvas.getContext('2d')
-    const img = new Image()
-    
-    img.onload = () => {
-      if (!cropData) {
-        // No crop data, use full image
-        canvas.width = img.width
-        canvas.height = img.height
-        ctx?.drawImage(img, 0, 0)
-        handleEditComplete(canvas.toDataURL('image/png'))
-        setShowCropTool(false)
-        return
-      }
-      
-      // Apply crop
-      canvas.width = cropData.width
-      canvas.height = cropData.height
-      ctx?.drawImage(
-        img,
-        cropData.x, cropData.y, cropData.width, cropData.height,
-        0, 0, cropData.width, cropData.height
-      )
-      
-      handleEditComplete(canvas.toDataURL('image/png'))
-      setShowCropTool(false)
-    }
-    
-    img.src = capturedImage
-  }
-
-  const handleImageClick = (e: React.MouseEvent<HTMLImageElement>) => {
-    if (!drawingMode) return
-    
-    const img = e.currentTarget
-    const rect = img.getBoundingClientRect()
-    
-    // Use display coordinates (not natural coordinates)
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
-    
-    if (drawingMode === 'text') {
-      const text = prompt('הזן טקסט:')
-      if (text) {
-        const newAnnotation: Annotation = {
-          type: 'text',
-          x,
-          y,
-          text,
-          color: currentColor
-        }
-        const newAnnotations = [...annotations, newAnnotation]
-        setAnnotations(newAnnotations)
-        saveToHistory(newAnnotations)
-      }
-    } else if (drawingMode === 'line' || drawingMode === 'arrow') {
-      if (!isDrawing) {
-        setIsDrawing(true)
-        setStartX(x)
-        setStartY(y)
-      } else {
-        const newAnnotation: Annotation = {
-          type: drawingMode,
-          x1: startX,
-          y1: startY,
-          x2: x,
-          y2: y,
-          color: currentColor
-        }
-        const newAnnotations = [...annotations, newAnnotation]
-        setAnnotations(newAnnotations)
-        saveToHistory(newAnnotations)
-        setIsDrawing(false)
-      }
-    } else if (drawingMode === 'circle') {
-      const radius = Math.sqrt(Math.pow(x - startX, 2) + Math.pow(y - startY, 2))
-      const newAnnotation: Annotation = {
-        type: 'circle',
-        x: startX,
-        y: startY,
-        radius,
-        color: currentColor
-      }
-      const newAnnotations = [...annotations, newAnnotation]
-      setAnnotations(newAnnotations)
-      saveToHistory(newAnnotations)
-    } else if (drawingMode === 'rectangle') {
-      const newAnnotation: Annotation = {
-        type: 'rectangle',
-        x: Math.min(startX, x),
-        y: Math.min(startY, y),
-        width: Math.abs(x - startX),
-        height: Math.abs(y - startY),
-        color: currentColor
-      }
-      const newAnnotations = [...annotations, newAnnotation]
-      setAnnotations(newAnnotations)
-      saveToHistory(newAnnotations)
-    }
-  }
-
-  // Annotation drawing functions
-  const startDrawing = (mode: 'line' | 'rectangle' | 'circle' | 'arrow' | 'text' | 'freehand') => {
-    setDrawingMode(mode)
-    setIsDrawing(true)
-  }
-
-  const clearAnnotations = () => {
-    setAnnotations([])
-    redrawCanvas()
-    console.log('🗑️ Annotations cleared')
-  }
-
-  const undoLastAnnotation = () => {
-    if (annotations.length > 0) {
-      setAnnotations(prev => prev.slice(0, -1))
-      redrawCanvas()
-      console.log('↩️ Last annotation undone')
-    }
-  }
-
-  const redrawCanvas = () => {
+  const redraw = () => {
     const canvas = canvasRef.current
     if (!canvas) return
-
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.lineWidth = 3
 
-    // Draw all annotations
     annotations.forEach(annotation => {
       ctx.strokeStyle = annotation.color
       ctx.fillStyle = annotation.color
-      ctx.lineWidth = 3
 
       if (annotation.type === 'freehand' && annotation.points) {
         ctx.beginPath()
-        annotation.points.forEach((p, i) => {
+        annotation.points.forEach((p: any, i: number) => {
           if (i === 0) ctx.moveTo(p.x, p.y)
           else ctx.lineTo(p.x, p.y)
         })
         ctx.stroke()
-      } else if (annotation.type === 'rectangle' && annotation.x && annotation.y && annotation.width && annotation.height) {
+      } else if (annotation.type === 'rectangle') {
         ctx.strokeRect(annotation.x, annotation.y, annotation.width, annotation.height)
-      } else if (annotation.type === 'circle' && annotation.x && annotation.y && annotation.radius) {
+      } else if (annotation.type === 'circle') {
         ctx.beginPath()
         ctx.arc(annotation.x, annotation.y, annotation.radius, 0, 2 * Math.PI)
         ctx.stroke()
-      } else if (annotation.type === 'line' && annotation.x1 && annotation.y1 && annotation.x2 && annotation.y2) {
+      } else if (annotation.type === 'line') {
         ctx.beginPath()
         ctx.moveTo(annotation.x1, annotation.y1)
         ctx.lineTo(annotation.x2, annotation.y2)
         ctx.stroke()
-      } else if (annotation.type === 'arrow' && annotation.x1 && annotation.y1 && annotation.x2 && annotation.y2) {
+      } else if (annotation.type === 'arrow') {
         drawArrow(ctx, annotation.x1, annotation.y1, annotation.x2, annotation.y2)
-      } else if (annotation.type === 'text' && annotation.x && annotation.y && annotation.text) {
+      } else if (annotation.type === 'text') {
         ctx.font = '20px Arial'
         ctx.fillText(annotation.text, annotation.x, annotation.y)
       }
@@ -819,51 +146,58 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
     ctx.stroke()
   }
 
-  const drawPreviewShape = (ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number) => {
-    ctx.strokeStyle = currentColor
-    ctx.lineWidth = 2
-    ctx.setLineDash([5, 5])
-
-    if (drawingMode === 'rectangle') {
-      ctx.strokeRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1))
-    } else if (drawingMode === 'circle') {
-      const radius = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2))
-      ctx.beginPath()
-      ctx.arc(x1, y1, radius, 0, 2 * Math.PI)
-      ctx.stroke()
-    } else if (drawingMode === 'line') {
-      ctx.beginPath()
-      ctx.moveTo(x1, y1)
-      ctx.lineTo(x2, y2)
-      ctx.stroke()
-    } else if (drawingMode === 'arrow') {
-      drawArrow(ctx, x1, y1, x2, y2)
+  // Toggle map lock
+  const toggleMapLock = () => {
+    if (!govmapData) {
+      showMessage('נא לחפש כתובת תחילה', 'error')
+      return
     }
 
-    ctx.setLineDash([])
+    const locked = !isMapLocked
+    setIsMapLocked(locked)
+
+    const iframe = iframeRef.current
+    const canvas = canvasRef.current
+
+    if (locked) {
+      // Lock - enable drawing
+      if (iframe) iframe.classList.add('locked')
+      if (canvas) {
+        canvas.classList.add('drawing-enabled')
+        canvas.style.pointerEvents = 'auto'
+      }
+      showMessage('המפה נעולה - כעת תוכלו לצייר סימונים', 'success')
+        } else {
+      // Unlock - enable navigation
+      if (iframe) iframe.classList.remove('locked')
+      if (canvas) {
+        canvas.classList.remove('drawing-enabled')
+        canvas.classList.remove('select-mode')
+        canvas.style.pointerEvents = 'none'
+      }
+      setCurrentTool('select')
+      showMessage('המפה משוחררת - תוכלו לנווט במפה', 'info')
+    }
   }
 
-  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!drawingMode) return
+  // Canvas drawing handlers
+  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (currentTool === 'select' || !isMapLocked) return
 
-    const canvas = canvasRef.current
-    if (!canvas) return
-
-    const rect = canvas.getBoundingClientRect()
+    const rect = (e.target as HTMLCanvasElement).getBoundingClientRect()
     const x = e.clientX - rect.left
     const y = e.clientY - rect.top
 
-    setStartX(x)
-    setStartY(y)
     setIsDrawing(true)
+    startXYRef.current = { x, y }
 
-    if (drawingMode === 'freehand') {
+    if (currentTool === 'freehand') {
       setAnnotations(prev => [...prev, {
         type: 'freehand',
         color: currentColor,
         points: [{ x, y }]
       }])
-    } else if (drawingMode === 'text') {
+    } else if (currentTool === 'text') {
       const text = prompt('הזן טקסט:')
       if (text) {
         setAnnotations(prev => [...prev, {
@@ -873,752 +207,1082 @@ export default function GISMapViewer({ sessionId, data, onAnalysisComplete }: GI
           y,
           text
         }])
-        redrawCanvas()
+        redraw()
+        updateAnnotationsList()
       }
       setIsDrawing(false)
     }
   }
 
-  const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing || !drawingMode) return
+  const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawing) return
 
-    const canvas = canvasRef.current
-    if (!canvas) return
-
-    const rect = canvas.getBoundingClientRect()
+    const rect = (e.target as HTMLCanvasElement).getBoundingClientRect()
     const x = e.clientX - rect.left
     const y = e.clientY - rect.top
 
-    if (drawingMode === 'freehand') {
+    if (currentTool === 'freehand') {
       setAnnotations(prev => {
-        const newAnnotations = [...prev]
-        const lastAnnotation = newAnnotations[newAnnotations.length - 1]
-        if (lastAnnotation && lastAnnotation.points) {
-          lastAnnotation.points.push({ x, y })
-        }
-        return newAnnotations
+        const next = [...prev]
+        const last = next[next.length - 1]
+        if (last?.points) last.points.push({ x, y })
+        return next
       })
-      redrawCanvas()
+      redraw()
     } else {
       // Preview shape
-      redrawCanvas()
-      const ctx = canvas.getContext('2d')
-      if (ctx) {
-        drawPreviewShape(ctx, startX, startY, x, y)
-      }
+      redraw()
+      drawPreviewShape(startXYRef.current!.x, startXYRef.current!.y, x, y)
     }
   }
 
-  const handleCanvasMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing || !drawingMode) return
+  const stopDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawing || !startXYRef.current) return
 
-    const canvas = canvasRef.current
-    if (!canvas) return
-
-    const rect = canvas.getBoundingClientRect()
+    const rect = (e.target as HTMLCanvasElement).getBoundingClientRect()
     const x = e.clientX - rect.left
     const y = e.clientY - rect.top
+    const { x: sx, y: sy } = startXYRef.current
 
-    if (drawingMode === 'rectangle') {
+    if (currentTool === 'rectangle') {
       setAnnotations(prev => [...prev, {
         type: 'rectangle',
         color: currentColor,
-        x: Math.min(startX, x),
-        y: Math.min(startY, y),
-        width: Math.abs(x - startX),
-        height: Math.abs(y - startY)
+        x: Math.min(sx, x),
+        y: Math.min(sy, y),
+        width: Math.abs(x - sx),
+        height: Math.abs(y - sy)
       }])
-    } else if (drawingMode === 'circle') {
-      const radius = Math.sqrt(Math.pow(x - startX, 2) + Math.pow(y - startY, 2))
+    } else if (currentTool === 'circle') {
+      const radius = Math.sqrt(Math.pow(x - sx, 2) + Math.pow(y - sy, 2))
       setAnnotations(prev => [...prev, {
         type: 'circle',
         color: currentColor,
-        x: startX,
-        y: startY,
+        x: sx,
+        y: sy,
         radius
       }])
-    } else if (drawingMode === 'line') {
+    } else if (currentTool === 'line') {
       setAnnotations(prev => [...prev, {
         type: 'line',
         color: currentColor,
-        x1: startX,
-        y1: startY,
+        x1: sx,
+        y1: sy,
         x2: x,
         y2: y
       }])
-    } else if (drawingMode === 'arrow') {
+    } else if (currentTool === 'arrow') {
       setAnnotations(prev => [...prev, {
         type: 'arrow',
         color: currentColor,
-        x1: startX,
-        y1: startY,
+        x1: sx,
+        y1: sy,
         x2: x,
         y2: y
       }])
     }
 
     setIsDrawing(false)
-    redrawCanvas()
+    startXYRef.current = null
+    redraw()
+    updateAnnotationsList()
   }
 
-  console.log('🔍 GISData:', gisData)
+  const drawPreviewShape = (x1: number, y1: number, x2: number, y2: number) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
 
-  const saveAnnotations = async () => {
-    if (!gisData || annotations.length === 0) return
+    ctx.strokeStyle = currentColor
+    ctx.lineWidth = 2
+    ctx.setLineDash([5, 5])
+
+    if (currentTool === 'rectangle') {
+      ctx.strokeRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1))
+    } else if (currentTool === 'circle') {
+      const radius = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2))
+      ctx.beginPath()
+      ctx.arc(x1, y1, radius, 0, 2 * Math.PI)
+      ctx.stroke()
+    } else if (currentTool === 'line') {
+      ctx.beginPath()
+      ctx.moveTo(x1, y1)
+      ctx.lineTo(x2, y2)
+      ctx.stroke()
+    } else if (currentTool === 'arrow') {
+      drawArrow(ctx, x1, y1, x2, y2)
+    }
+
+    ctx.setLineDash([])
+  }
+
+  // Search address
+  const searchAddress = async () => {
+    const street = addressStreet.trim()
+    const number = addressNumber.trim()
+    const city = addressCity.trim()
+
+    if (!street || !city) {
+      showMessage('נא להזין רחוב ועיר לפחות', 'error')
+      return
+    }
+
+    const address = `${street} ${number} ${city}`.trim()
+    const displayAddress = `${street} ${number}, ${city}`
+
+    showMessage('מחפש כתובת...', 'info')
 
     try {
-      // Generate canvas data
-      const canvas = canvasRef.current
-      if (canvas) {
-        const canvasData = canvas.toDataURL('image/png')
-        
-        // Save annotations to session
-        const response = await fetch(`/api/session/${sessionId}/gis-annotations`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            annotations,
-            annotationCanvasData: canvasData,
-            govmapUrls: gisData.govmapUrls
-          })
-        })
+      const response = await fetch('/api/address-to-govmap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address, options: { zoom: 13, showTazea: true } })
+      })
 
-        if (response.ok) {
-          console.log('✅ Annotations saved successfully')
-        } else {
-          console.error('❌ Failed to save annotations')
-        }
+      const result = await response.json()
+
+      if (!result.success) {
+        showMessage(result.error || 'כתובת לא נמצאה', 'error')
+        return
       }
-    } catch (error) {
-      console.error('❌ Error saving annotations:', error)
+
+      const data = { ...result, displayAddress }
+      setGovmapData(data)
+    // Set initial map mode to without תצ״א (cropMode0)
+    setCurrentMapMode('0')
+    const initialUrl = result.govmap.urlWithoutTazea || result.govmap.url
+    setGovmapUrl(initialUrl)
+    setCoords({ wgs84: result.coordinates.wgs84, itm: result.coordinates.itm })
+    showMessage(`נמצא: ${result.address.normalized}`, 'success')
+
+    // Load map image
+    await loadMapImage(initialUrl)
+
+    } catch (error: any) {
+      showMessage(`שגיאה: ${error.message}`, 'error')
     }
   }
 
-  return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-          <MapPin className="w-5 h-5 text-blue-600" />
-          מפת GovMap - מיקום הנכס
-        </h3>
+  const loadMapImage = async (govmapUrl: string) => {
+    showMessage('מציג מפה GovMap... נווטו במפה ואז נעלו אותה לציור', 'success')
+
+    const iframe = iframeRef.current
+    if (iframe) {
+      iframe.src = govmapUrl
+      iframe.style.display = 'block'
+      iframe.classList.remove('locked')
+    }
+
+    // Reset lock state
+    setIsMapLocked(false)
+    const canvas = canvasRef.current
+    if (canvas) {
+      canvas.classList.remove('drawing-enabled')
+      canvas.classList.remove('select-mode')
+      canvas.style.pointerEvents = 'none'
+    }
+
+    // Clear canvas
+    const ctx = canvas?.getContext('2d')
+    if (ctx && canvas) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+    }
+  }
+
+  // Toggle map mode (with/without תצ״א)
+  const toggleMapMode = (mode: '0' | '1') => {
+    if (!govmapData) {
+      showMessage('נא לחפש כתובת תחילה', 'error')
+      return
+    }
+
+    setCurrentMapMode(mode)
+    
+    // Get the appropriate URL based on mode
+    const newUrl = mode === '0'
+      ? (govmapData.govmap?.urlWithoutTazea || govmapData.govmap?.url || govmapUrl)
+      : (govmapData.govmap?.urlWithTazea || govmapData.govmap?.url || govmapUrl)
+
+    setGovmapUrl(newUrl)
+    
+    // Update iframe src
+    const iframe = iframeRef.current
+    if (iframe) {
+      iframe.src = newUrl
+    }
+
+    showMessage(`מציג מפה ${mode === '0' ? 'ללא תצ״א' : 'עם תצ״א'}`, 'success')
+  }
+
+  // Update annotations list
+  const updateAnnotationsList = () => {
+    // This is handled by React rendering, no DOM manipulation needed
+  }
+
+  const getAnnotationName = (annotation: any) => {
+    const names: Record<string, string> = {
+      freehand: 'ציור חופשי',
+      line: 'קו ישר',
+      rectangle: 'מלבן',
+      circle: 'עיגול',
+      arrow: 'חץ',
+      text: `טקסט: ${annotation.text}`
+    }
+    return names[annotation.type] || annotation.type
+  }
+
+  const deleteAnnotation = (index: number) => {
+    setAnnotations(prev => {
+      const next = [...prev]
+      next.splice(index, 1)
+      return next
+    })
+    redraw()
+    updateAnnotationsList()
+  }
+
+  const undoLastAnnotation = () => {
+    if (annotations.length > 0) {
+      setAnnotations(prev => prev.slice(0, -1))
+      redraw()
+      updateAnnotationsList()
+    }
+  }
+
+  // Save map to database and locally
+  const saveMapLocal = async () => {
+    if (!govmapData) {
+      showMessage('נא לחפש כתובת תחילה', 'error')
+      return
+    }
+
+    let annotationCanvasData: string | null = null
+    if (canvasRef.current) {
+      try {
+        annotationCanvasData = canvasRef.current.toDataURL('image/png')
+      } catch {}
+    }
+
+    // Generate map ID if not exists (for first save)
+    const mapId = currentMapId || `map-${Date.now()}`
+
+    // Build gisScreenshots object with URLs (cropMode0 and cropMode1)
+    // Note: URLs should be relative paths like /uploads/sessionId/filename.png
+    const gisScreenshots: { cropMode0?: string, cropMode1?: string } = {}
+    if (screenshotUrls.cropMode0) {
+      // Ensure URL uses the correct sessionId (map ID)
+      const url = screenshotUrls.cropMode0.startsWith('/uploads/') 
+        ? screenshotUrls.cropMode0 
+        : `/uploads/${mapId}/${screenshotUrls.cropMode0}`
+      gisScreenshots.cropMode0 = url
+    }
+    if (screenshotUrls.cropMode1) {
+      // Ensure URL uses the correct sessionId (map ID)
+      const url = screenshotUrls.cropMode1.startsWith('/uploads/') 
+        ? screenshotUrls.cropMode1 
+        : `/uploads/${mapId}/${screenshotUrls.cropMode1}`
+      gisScreenshots.cropMode1 = url
+    }
+
+    const map = {
+      id: mapId,
+      address_input: govmapData.displayAddress || `${addressStreet} ${addressNumber}, ${addressCity}`,
+      address_normalized: govmapData.address?.normalized || '',
+      latitude: govmapData.coordinates?.wgs84?.lat,
+      longitude: govmapData.coordinates?.wgs84?.lon,
+      itm_easting: govmapData.coordinates?.itm?.easting,
+      itm_northing: govmapData.coordinates?.itm?.northing,
+      confidence: govmapData.confidence,
+      address_details: govmapData.address?.details || {},
+      govmap_url: govmapData.govmap?.url || govmapUrl,
+      govmap_url_with_tazea: govmapData.govmap?.urlWithTazea,
+      govmap_url_without_tazea: govmapData.govmap?.urlWithoutTazea,
+      govmap_iframe_html: govmapData.govmap?.iframeHtml,
+      annotations: annotations,
+      annotation_canvas_data: annotationCanvasData,
+      gisScreenshots: Object.keys(gisScreenshots).length > 0 ? gisScreenshots : undefined,
+      notes: notes || null,
+      zoom_level: 15,
+      show_tazea: false
+    }
+
+    // Save to database via API
+    showMessage('שומר למסד הנתונים...', 'info')
+    try {
+      const response = await fetch('/api/govmap-address-maps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(map)
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        // Also save locally for quick access
+        const existingIndex = savedMaps.findIndex((m: any) => m.id === result.id)
+        let updated
+        if (existingIndex >= 0) {
+          updated = [...savedMaps]
+          updated[existingIndex] = { ...map, id: result.id, created_at: new Date().toISOString() }
+        } else {
+          updated = [{ ...map, id: result.id, created_at: new Date().toISOString() }, ...savedMaps]
+        }
+
+        setSavedMaps(updated)
+        localStorage.setItem('govmap-saved-maps', JSON.stringify(updated))
+        setCurrentMapId(result.id)
+        showMessage('המפה נשמרה בהצלחה במסד הנתונים!', 'success')
+      } else {
+        showMessage(`שגיאה בשמירה למסד הנתונים: ${result.error}`, 'error')
+      }
+    } catch (error: any) {
+      console.error('Error saving to database:', error)
+      showMessage(`שגיאה בשמירה למסד הנתונים: ${error.message}`, 'error')
+    }
+  }
+
+  const loadSavedMaps = async () => {
+    try {
+      const raw = localStorage.getItem('govmap-saved-maps')
+      if (raw) {
+        const maps = JSON.parse(raw)
+        setSavedMaps(maps)
+      }
+    } catch (error) {
+      console.error('Error loading saved maps:', error)
+    }
+  }
+
+  const loadMapLocal = (id: string) => {
+    const map = savedMaps.find((m: any) => m.id === id)
+    if (!map) return
+
+    // Parse address back into components
+    const parts = (map.address_input || '').split(',')
+    const streetAndNumber = (parts[0] || '').trim().split(' ')
+    const number = streetAndNumber.pop() || ''
+    const street = streetAndNumber.join(' ')
+    const city = (parts[1] || '').trim()
+
+    setAddressStreet(street)
+    setAddressNumber(number)
+    setAddressCity(city)
+
+    setGovmapData({
+      address: {
+        normalized: map.address_normalized || '',
+        details: map.address_details || {}
+      },
+      coordinates: {
+        wgs84: { lat: map.latitude, lon: map.longitude },
+        itm: { easting: map.itm_easting, northing: map.itm_northing }
+      },
+      govmap: {
+        url: map.govmap_url || '',
+        iframeHtml: map.govmap_iframe_html
+      },
+      confidence: map.confidence,
+      displayAddress: map.address_input
+    })
+
+    setCoords({
+      wgs84: { lat: map.latitude, lon: map.longitude },
+      itm: { easting: map.itm_easting, northing: map.itm_northing }
+    })
+
+    setGovmapUrl(map.govmap_url || '')
+    setAnnotations(map.annotations || [])
+    setNotes(map.notes || '')
+    setCurrentMapId(id)
+
+    // Load screenshots if available
+    if (map.gisScreenshots) {
+      setScreenshotUrls({
+        cropMode0: map.gisScreenshots.cropMode0,
+        cropMode1: map.gisScreenshots.cropMode1
+      })
+      // Convert URLs to data URLs for display (if they're file paths)
+      if (map.gisScreenshots.cropMode0) {
+        try {
+          const img = new Image()
+          img.crossOrigin = 'anonymous'
+          img.onload = () => {
+            const canvas = document.createElement('canvas')
+            canvas.width = img.width
+            canvas.height = img.height
+            const ctx = canvas.getContext('2d')
+            if (ctx) {
+              ctx.drawImage(img, 0, 0)
+              const dataUrl = canvas.toDataURL('image/png')
+              setScreenshots(prev => ({ ...prev, cropMode0: dataUrl }))
+            }
+          }
+          img.src = map.gisScreenshots.cropMode0
+        } catch {}
+      }
+      if (map.gisScreenshots.cropMode1) {
+        try {
+          const img = new Image()
+          img.crossOrigin = 'anonymous'
+          img.onload = () => {
+            const canvas = document.createElement('canvas')
+            canvas.width = img.width
+            canvas.height = img.height
+            const ctx = canvas.getContext('2d')
+            if (ctx) {
+              ctx.drawImage(img, 0, 0)
+              const dataUrl = canvas.toDataURL('image/png')
+              setScreenshots(prev => ({ ...prev, cropMode1: dataUrl }))
+            }
+          }
+          img.src = map.gisScreenshots.cropMode1
+        } catch {}
+      }
+    }
+
+    loadMapImage(map.govmap_url || '')
+    redraw()
+    updateAnnotationsList()
+
+    showMessage('מפה נטענה', 'success')
+  }
+
+  // Delete saved map
+  const deleteSavedMap = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation() // Prevent loading the map when clicking delete
+
+    if (!confirm('האם אתה בטוח שברצונך למחוק מפה זו?')) return
+
+    const updated = savedMaps.filter((m: any) => m.id !== id)
+    setSavedMaps(updated)
+    localStorage.setItem('govmap-saved-maps', JSON.stringify(updated))
+
+    if (currentMapId === id) {
+      setCurrentMapId(null)
+    }
+
+    showMessage('המפה נמחקה', 'success')
+  }
+
+  const clearAll = () => {
+    if (annotations.length > 0 || govmapData) {
+      if (!confirm('למחוק את כל הסימונים והמפה?')) return
+    }
+
+    setAddressStreet('')
+    setAddressNumber('')
+    setAddressCity('')
+    setNotes('')
+    setGovmapUrl('')
+    setCoords({})
+    setGovmapData(null)
+        setAnnotations([])
+    setIsMapLocked(false)
+    setCurrentMapId(null)
+
+    const iframe = iframeRef.current
+    if (iframe) {
+      iframe.style.display = 'none'
+      iframe.src = ''
+      iframe.classList.remove('locked')
+    }
+
+    const canvas = canvasRef.current
+    if (canvas) {
+      canvas.classList.remove('drawing-enabled')
+      canvas.classList.remove('select-mode')
+      const ctx = canvas.getContext('2d')
+      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height)
+    }
+
+    updateAnnotationsList()
+    showMessage('נוקה', 'info')
+  }
+
+  const copyGovMapUrl = () => {
+    const url = govmapUrl
+    navigator.clipboard.writeText(url).then(() => {
+      showMessage('✓ הועתק!', 'success')
+    }).catch(err => {
+      console.error('Failed to copy:', err)
+    })
+  }
+
+  // Screenshot capture functions
+  const [isCapturing, setIsCapturing] = useState(false)
+  const [screenshots, setScreenshots] = useState<{ cropMode0?: string, cropMode1?: string }>({}) // Base64 for display
+  const [screenshotUrls, setScreenshotUrls] = useState<{ cropMode0?: string, cropMode1?: string }>({}) // URLs for saving
+
+  // Save screenshot to shuma table under gisScreenshots
+  const saveScreenshotToDB = async (screenshotUrl: string, cropMode: '0' | '1', mapId: string) => {
+    if (!govmapData) {
+      console.warn('No govmapData available, cannot save to DB')
+        return
+      }
+      
+    // Use sessionId from props if available, otherwise use mapId
+    const actualSessionId = sessionId || mapId
+    
+    if (!actualSessionId) {
+      console.error('No sessionId available, cannot save to DB')
+      return
+    }
+    
+    try {
+      // Build current gisScreenshots object - merge with existing screenshots
+      const currentScreenshots = { ...screenshotUrls }
+      currentScreenshots[`cropMode${cropMode}`] = screenshotUrl
+
+      console.log(`💾 Saving screenshot to shuma table for session: ${actualSessionId}`)
+      console.log(`💾 Screenshots:`, currentScreenshots)
+
+      // Use save_gis_data action which only updates gisScreenshots field
+      // First check if shuma exists, if not create it
+      const checkResponse = await fetch('/api/sessions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+          action: 'load_from_db',
+          sessionId: actualSessionId
+        })
+      })
+
+      const checkResult = await checkResponse.json()
+      
+      // If shuma doesn't exist, create it first
+      if (!checkResult.success || !checkResult.valuationData) {
+        console.log(`📝 Creating new shuma record for session: ${actualSessionId}`)
+        const createResponse = await fetch('/api/sessions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'save_to_db',
+            sessionId: actualSessionId,
+            organizationId: 'default-org',
+            userId: 'system',
+            valuationData: {
+              full_address: govmapData.displayAddress || `${addressStreet} ${addressNumber}, ${addressCity}`,
+              street: addressStreet,
+              building_number: addressNumber,
+              city: addressCity,
+              gisScreenshots: {
+                cropMode0: currentScreenshots.cropMode0,
+                cropMode1: currentScreenshots.cropMode1
+              }
+            }
+          })
+        })
+        const createResult = await createResponse.json()
+        if (!createResult.success) {
+          console.error('Error creating shuma record:', createResult.error)
+        return
+        }
+            } else {
+        // Shuma exists, update only gisScreenshots
+        console.log(`📝 Updating gisScreenshots for existing session: ${actualSessionId}`)
+        const updateResponse = await fetch('/api/sessions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'save_gis_data',
+            sessionId: actualSessionId,
+            gisData: {
+              cropMode0: currentScreenshots.cropMode0,
+              cropMode1: currentScreenshots.cropMode1
+            }
+          })
+        })
+        const updateResult = await updateResponse.json()
+        if (!updateResult.success) {
+          console.error('Error updating gisScreenshots:', updateResult.error)
+        return
+        }
+      }
+
+      // Update currentMapId if this was a new map
+      if (!currentMapId && actualSessionId) {
+        setCurrentMapId(actualSessionId)
+      }
+      console.log(`✅ Screenshot ${cropMode === '0' ? 'cropMode0' : 'cropMode1'} saved to shuma table for session ${actualSessionId}`)
+    } catch (error: any) {
+      console.error('Error saving screenshot to shuma table:', error)
+    }
+  }
+
+  const captureScreenshot = async (cropMode: '0' | '1') => {
+    if (!govmapData || !govmapUrl) {
+      showMessage('נא לחפש כתובת תחילה', 'error')
+      return
+    }
+
+    setIsCapturing(true)
+    showMessage('מצלם מפה...', 'info')
+
+    try {
+      // Use the govmap URL with or without תצ״א based on cropMode
+      const urlToCapture = cropMode === '0' 
+        ? (govmapData.govmap?.urlWithoutTazea || govmapUrl)
+        : (govmapData.govmap?.urlWithTazea || govmapUrl)
+
+      // Use sessionId from props first, then currentMapId, otherwise generate new one
+      // This ensures screenshots are saved to the correct session in the database
+      const mapSessionId = sessionId || currentMapId || `map-${Date.now()}`
+
+      const response = await fetch('/api/gis-screenshot', {
+          method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          govmapUrl: urlToCapture,
+          cropMode,
+          sessionId: mapSessionId // Use consistent sessionId for file saving
+        })
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        // Store screenshot data URL for display
+        const screenshotData = `data:image/png;base64,${result.screenshot}`
+        setScreenshots(prev => ({
+          ...prev,
+          [`cropMode${cropMode}`]: screenshotData
+        }))
         
-        <div className="flex gap-2">
+        // Store screenshot URL for saving (if available)
+        if (result.screenshotUrl) {
+          setScreenshotUrls(prev => ({
+            ...prev,
+            [`cropMode${cropMode}`]: result.screenshotUrl
+          }))
+
+          // Save screenshot path to database immediately
+          await saveScreenshotToDB(result.screenshotUrl, cropMode, mapSessionId)
+        }
+        
+        showMessage(`צילום מפה ${cropMode === '0' ? 'ללא תצ״א' : 'עם תצ״א'} נשמר בהצלחה!`, 'success')
+        console.log('Screenshot saved:', result.screenshotUrl || result.filename)
+      } else {
+        showMessage(`שגיאה בצילום: ${result.error}`, 'error')
+      }
+    } catch (error: any) {
+      console.error('Screenshot capture error:', error)
+      showMessage(`שגיאה בצילום: ${error.message}`, 'error')
+    } finally {
+      setIsCapturing(false)
+    }
+  }
+
+  // Manual screenshot upload handler
+  const handleManualScreenshotUpload = async (event: React.ChangeEvent<HTMLInputElement>, cropMode: '0' | '1') => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Check if it's an image
+    if (!file.type.startsWith('image/')) {
+      showMessage('נא להעלות קובץ תמונה בלבד', 'error')
+      return
+    }
+    
+    try {
+      showMessage('מעלה תמונה...', 'info')
+
+      // Create FormData for file upload
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('type', `gis-screenshot-mode${cropMode}`)
+
+      // Use sessionId from props first, then currentMapId, otherwise generate new one
+      const mapSessionId = sessionId || currentMapId || `map-${Date.now()}`
+
+      // Upload file to backend
+      const uploadResponse = await fetch(`/api/files/${mapSessionId}/upload`, {
+        method: 'POST',
+        body: formData
+      })
+
+      const uploadResult = await uploadResponse.json()
+
+      if (uploadResult.success) {
+        // Store screenshot data URL for display
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          const base64Data = e.target?.result as string
+          setScreenshots(prev => ({
+            ...prev,
+            [`cropMode${cropMode}`]: base64Data
+          }))
+        }
+        reader.readAsDataURL(file)
+
+        // Store screenshot URL for saving
+        setScreenshotUrls(prev => ({
+          ...prev,
+          [`cropMode${cropMode}`]: uploadResult.uploadEntry.url
+        }))
+
+        // Save screenshot path to database immediately
+        await saveScreenshotToDB(uploadResult.uploadEntry.url, cropMode, mapSessionId)
+
+        showMessage(`תמונה ${cropMode === '0' ? 'ללא תצ״א' : 'עם תצ״א'} הועלתה ונשמרה בהצלחה!`, 'success')
+        } else {
+        showMessage(`שגיאה בהעלאת התמונה: ${uploadResult.error}`, 'error')
+      }
+    } catch (error: any) {
+      console.error('Upload error:', error)
+      showMessage(`שגיאה בהעלאת התמונה: ${error.message}`, 'error')
+    }
+
+    // Reset file input
+    event.target.value = ''
+  }
+
+  useEffect(() => {
+    loadSavedMaps()
+  }, [])
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-5" dir="rtl">
+      <div className="max-w-7xl mx-auto">
+        <header className="bg-white rounded-lg p-6 mb-4 shadow-sm border border-gray-200 text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">🗺️ מפות כתובות עם סימונים</h1>
+          <p className="text-gray-600">חפשו כתובת, הוסיפו סימונים על המפה ושמרו לעיון מאוחר</p>
+        </header>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5" style={{ height: 'calc(100vh - 160px)' }}>
+          {/* Left Sidebar */}
+          <div className="lg:col-span-3 bg-white rounded-lg p-5 shadow-sm border border-gray-200 overflow-y-auto">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-300">חיפוש כתובת</h2>
+
+            <div className="mb-6">
+              <div className="mb-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">רחוב</label>
+            <input
+              type="text"
+                  value={addressStreet}
+                  onChange={(e) => setAddressStreet(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && searchAddress()}
+                  className="w-full p-3 border-2 border-gray-300 rounded-lg text-right focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                  placeholder="נורדאו / Nordau"
+            />
+          </div>
+          
+              <div className="mb-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">מספר בית</label>
+            <input
+              type="text"
+                  value={addressNumber}
+                  onChange={(e) => setAddressNumber(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && searchAddress()}
+                  className="w-full p-3 border-2 border-gray-300 rounded-lg text-right focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                  placeholder="8"
+            />
+          </div>
+          
+              <div className="mb-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">עיר</label>
+            <input
+              type="text"
+                  value={addressCity}
+                  onChange={(e) => setAddressCity(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && searchAddress()}
+                  className="w-full p-3 border-2 border-gray-300 rounded-lg text-right focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                  placeholder="רעננה / Raanana"
+                />
+        </div>
+        
           <button
-            onClick={runGISAnalysis}
-            disabled={isLoading}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={searchAddress}
+                className="w-full bg-blue-600 text-white p-3 rounded-lg font-medium hover:bg-blue-700 transition-colors"
           >
-            {isLoading ? (
-              <RefreshCw className="w-4 h-4 animate-spin" />
-            ) : (
-              <Settings className="w-4 h-4" />
-            )}
-            {isLoading ? 'מנתח...' : 'הפעל ניתוח GovMap'}
+                🔍 חפש כתובת
           </button>
           
-          
-          
-          
+              {searchMessage && (
+                <div className={`mt-3 p-3 rounded-lg ${
+                  searchMessage.includes('שגיאה') ? 'bg-red-100 text-red-800 border border-red-300' :
+                  searchMessage.includes('נמצא') ? 'bg-green-100 text-green-800 border border-green-300' :
+                  'bg-blue-100 text-blue-800 border border-blue-300'
+                }`}>
+                  {searchMessage}
         </div>
-      </div>
+        )}
+            </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-          <p className="text-red-800 font-medium">שגיאה בניתוח GovMap</p>
-          <p className="text-red-600 text-sm mt-1">{error}</p>
-        </div>
-      )}
-
-      {gisData ? (
-        <div className="space-y-6">
-          {/* Property Coordinates */}
-          <div className="bg-gray-50 rounded-lg p-4">
-            <h4 className="font-medium text-gray-900 mb-2">קואורדינטות הנכס</h4>
-            <p className="text-sm text-gray-600 font-mono">{formatCoordinates()}</p>
-            {gisData.address && (
-              <p className="text-sm text-gray-600 mt-1">כתובת: {gisData.address}</p>
-            )}
-            {gisData.confidence && (
-              <p className="text-xs text-gray-500 mt-1">
-                רמת ביטחון: {(gisData.confidence * 100).toFixed(1)}%
-              </p>
-            )}
-            <p className="text-xs text-gray-500 mt-1">
-              נשלף ב: {gisData?.extractedAt ? new Date(gisData.extractedAt).toLocaleString('he-IL') : 'לא זמין'}
-            </p>
+            <div className="mb-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-300">קואורדינטות</h2>
+              <div className="bg-gray-50 p-3 rounded-lg text-sm font-mono">
+                <div className="mb-3">
+                  <strong>WGS84 (GPS):</strong><br />
+                  <span>{coords.wgs84 ? `Lat: ${coords.wgs84.lat?.toFixed(6)}\nLon: ${coords.wgs84.lon?.toFixed(6)}` : '--'}</span>
+            </div>
+                <div>
+                  <strong>ITM (ישראל):</strong><br />
+                  <span>{coords.itm ? `E: ${coords.itm.easting}\nN: ${coords.itm.northing}` : '--'}</span>
           </div>
-
-          {/* Map Mode Selection */}
-          <div className="flex items-center gap-4">
-            <label className="text-sm font-medium text-gray-700">מצב מפה:</label>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setCurrentCropMode('1')}
-                className={`px-3 py-1 rounded text-sm font-medium ${
-                  currentCropMode === '1'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                מפה נקייה
-              </button>
-              <button
-                onClick={() => setCurrentCropMode('0')}
-                className={`px-3 py-1 rounded text-sm font-medium ${
-                  currentCropMode === '0'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                מפת תצ"א
-              </button>
             </div>
           </div>
 
+            <div className="mb-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-300">הערות</h2>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="w-full p-3 border-2 border-gray-300 rounded-lg text-right resize-y min-h-[80px] focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                placeholder="הוסיפו הערות על המפה..."
+              />
+          </div>
 
-          {/* Screenshot Buttons - Both automatic and manual options */}
-          <div className="space-y-3">
-            {/* Automatic Screenshot (may not work in cloud) */}
-            <div>
-              <div className="text-sm font-medium text-gray-700 mb-2">צילום אוטומטי:</div>
-              <div className="flex gap-2 flex-wrap">
+            <div className="mb-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-300">סימונים</h2>
+              <div className="max-h-48 overflow-y-auto">
+                {annotations.length === 0 ? (
+                  <div className="text-center text-gray-500 py-8">אין סימונים</div>
+                ) : (
+                  annotations.map((ann, i) => (
+                    <div key={i} className="flex items-center justify-between bg-gray-50 p-2 rounded mb-2">
+                        <div className="flex items-center gap-2">
+                        <div className="w-5 h-5 rounded border-2 border-gray-300" style={{ background: ann.color }} />
+                        <span className="text-sm">{getAnnotationName(ann)}</span>
+                        </div>
                 <button
-                  onClick={() => captureServerScreenshot('0')}
-                  disabled={isCapturingServer}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isCapturingServer ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Camera className="w-4 h-4" />
-                  )}
-                  {isCapturingServer ? 'צולם...' : 'צלם מפה נקייה'}
-                </button>
-                <button
-                  onClick={() => captureServerScreenshot('1')}
-                  disabled={isCapturingServer}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isCapturingServer ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Camera className="w-4 h-4" />
-                  )}
-                  {isCapturingServer ? 'צולם...' : 'צלם מפת תצ"א'}
+                        onClick={() => deleteAnnotation(i)}
+                        className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600"
+                      >
+                        מחק
                 </button>
               </div>
-            </div>
-
-            {/* Manual Upload (works everywhere) */}
-            <div>
-              <div className="text-sm font-medium text-gray-700 mb-2">או העלה צילום מסך ידנית:</div>
-              <div className="flex gap-2 flex-wrap">
-                <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => handleManualScreenshotUpload(e, '0')}
-                  />
-                  <Camera className="w-4 h-4" />
-                  העלה צילום - מפה נקייה
-                </label>
-                <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => handleManualScreenshotUpload(e, '1')}
-                  />
-                  <Camera className="w-4 h-4" />
-                  העלה צילום - מפת תצ"א
-                </label>
-              </div>
-              <div className="text-xs text-gray-500 mt-1">
-                💡 צלם את המפה בעצמך (Print Screen) והעלה כאן
+                  ))
+                )}
               </div>
             </div>
-          </div>
 
-          {/* GovMap Iframe */}
-          <div className="border border-gray-300 rounded-lg overflow-hidden">
-            <div className="bg-gray-100 px-3 py-2 text-sm text-gray-600 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Eye className="w-4 h-4" />
-                מפת GovMap - {currentCropMode === '0' ? 'מפה נקייה' : 'מפת תצ"א'}
-              </div>
-              {getCurrentIframeUrl() && (
-                <a
-                  href={getCurrentIframeUrl()}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:text-blue-800 text-xs underline"
-                  title={getCurrentIframeUrl()}
-                >
-                  פתח במפה חדשה
-                </a>
-              )}
+                <button
+              onClick={saveMapLocal}
+              disabled={!govmapData}
+              className="w-full bg-green-600 text-white p-3 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed mb-2 transition-colors"
+            >
+              💾 שמור מפה
+                </button>
+
+            {/* Screenshot Buttons */}
+            {
+              <div className="mb-2 space-y-2">
+                {/* CropMode0 (without תצ״א) */}
+                <div className="space-y-1">
+                  <label className="block w-full bg-blue-500 text-white p-2 rounded-lg font-medium hover:bg-blue-600 text-sm transition-colors cursor-pointer text-center">
+                    📤 העלה תמונה ללא תצ״א
+                    <input
+                      ref={fileInputRef0}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => handleManualScreenshotUpload(e, '0')}
+                    />
+                  </label>
             </div>
             
-            {gisData?.govmapUrls && getCurrentIframeUrl() && (
-              <div className="space-y-2">
-                <div className="relative">
-                  <iframe
-                    ref={iframeRef}
-                    src={getCurrentIframeUrl()}
-                    width="1200"
-                    height="800"
-                    frameBorder="0"
-                    allowFullScreen
-                    className="border border-gray-300 rounded-lg shadow-sm"
-                    title="GovMap - מפת הנכס"
-                    onLoad={() => console.log('✅ GovMap iframe loaded successfully')}
-                    onError={(e) => console.error('❌ GovMap iframe error:', e)}
-                  />
-                  
-                  {/* Annotation Canvas Overlay */}
-                  
-                  {/* Drawing Mode Indicator */}
-                  {isDrawing && drawingMode && (
-                    <div className="absolute top-2 left-2 bg-blue-600 text-white px-2 py-1 rounded text-sm">
-                      מצב ציור: {drawingMode === 'line' ? 'קו' : 
-                                 drawingMode === 'rectangle' ? 'מלבן' :
-                                 drawingMode === 'circle' ? 'עיגול' :
-                                 drawingMode === 'arrow' ? 'חץ' : 'טקסט'}
-                    </div>
-                  )}
-                </div>
-                
-                <div className="text-xs text-gray-500 text-center">
-                  {currentCropMode === '0' ? 'מפה נקייה ללא תצ"א' : 'מפה עם תצ"א (רישום מקרקעין)'}
-                  {annotations.length > 0 && ` - ${annotations.length} סימונים`}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Annotations List */}
-          {annotations.length > 0 && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <h4 className="text-sm font-medium text-yellow-900 mb-3">הערות על המפה ({annotations.length})</h4>
-              <div className="space-y-2 max-h-32 overflow-y-auto">
-                {annotations.map((annotation, index) => (
-                  <div key={index} className="flex items-center justify-between bg-white p-2 rounded border">
-                    <div className="flex items-center gap-2">
-                      <div 
-                        className="w-4 h-4 rounded border" 
-                        style={{ backgroundColor: annotation.color }}
-                      />
-                      <span className="text-sm text-gray-700">
-                        {annotation.type === 'freehand' ? 'ציור חופשי' :
-                         annotation.type === 'line' ? 'קו ישר' :
-                         annotation.type === 'rectangle' ? 'מלבן' :
-                         annotation.type === 'circle' ? 'עיגול' :
-                         annotation.type === 'arrow' ? 'חץ' :
-                         annotation.type === 'text' ? `טקסט: ${annotation.text}` : annotation.type}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => {
-                        setAnnotations(prev => prev.filter((_, i) => i !== index))
-                        redrawCanvas()
-                      }}
-                      className="text-red-600 hover:text-red-800 text-sm"
-                    >
-                      מחק
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Screenshots Display */}
-          {(screenshots.cropMode0 || screenshots.cropMode1) && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <h4 className="font-medium text-blue-900 mb-3">תמונות מפות GovMap</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {screenshots.cropMode0 && (
-                  <div className="text-center">
-                    <h5 className="text-sm font-medium text-blue-800 mb-2">מפה נקייה</h5>
-                    <img 
-                      src={screenshots.cropMode0} 
-                      alt="GovMap Screenshot - Clean Map"
-                      className="w-full max-w-sm mx-auto border border-gray-300 rounded-lg shadow-sm"
-                      onError={(e) => {
-                        console.error('❌ Failed to load screenshot cropMode0:', e)
-                        e.currentTarget.style.display = 'none'
-                      }}
+                {/* CropMode1 (with תצ״א) */}
+                <div className="space-y-1">
+                  <label className="block w-full bg-purple-500 text-white p-2 rounded-lg font-medium hover:bg-purple-600 text-sm transition-colors cursor-pointer text-center">
+                    📤 העלה תמונה עם תצ״א
+                    <input
+                      ref={fileInputRef1}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => handleManualScreenshotUpload(e, '1')}
                     />
+                  </label>
+                </div>
+
+                {/* Display uploaded screenshots */}
+          {(screenshots.cropMode0 || screenshots.cropMode1) && (
+                  <div className="mt-3 space-y-2">
+                {screenshots.cropMode0 && (
+                      <div className="bg-gray-50 p-2 rounded border border-gray-300">
+                        <div className="text-xs font-medium text-gray-700 mb-1">מפה ללא תצ״א:</div>
+                        <img src={screenshots.cropMode0} alt="Screenshot without תצ״א" className="w-full rounded border border-gray-300 max-h-32 object-contain" />
                   </div>
                 )}
                 {screenshots.cropMode1 && (
-                  <div className="text-center">
-                    <h5 className="text-sm font-medium text-blue-800 mb-2">מפת תצ"א</h5>
-                    <img 
-                      src={screenshots.cropMode1} 
-                      alt="GovMap Screenshot - Land Registry Map"
-                      className="w-full max-w-sm mx-auto border border-gray-300 rounded-lg shadow-sm"
-                      onError={(e) => {
-                        console.error('❌ Failed to load screenshot cropMode1:', e)
-                        e.currentTarget.style.display = 'none'
-                      }}
+                      <div className="bg-gray-50 p-2 rounded border border-gray-300">
+                        <div className="text-xs font-medium text-gray-700 mb-1">מפה עם תצ״א:</div>
+                        <img src={screenshots.cropMode1} alt="Screenshot with תצ״א" className="w-full rounded border border-gray-300 max-h-32 object-contain" />
+                  </div>
+                )}
+              </div>
+                )}
+            </div>
+          }
+
+              <button
+              onClick={clearAll}
+              className="w-full bg-gray-600 text-white p-3 rounded-lg font-medium hover:bg-gray-700 transition-colors"
+            >
+              🗑️ נקה הכל
+              </button>
+            </div>
+            
+          {/* Center: Map Canvas */}
+          <div className="lg:col-span-6 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+            <div className="bg-gray-50 p-3 border-b border-gray-200">
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Map Mode Toggle */}
+                {govmapData && (
+                  <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg p-1">
+                    <button
+                      onClick={() => toggleMapMode('0')}
+                      className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                        currentMapMode === '0'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-white text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      ללא תצ״א
+                    </button>
+                    <button
+                      onClick={() => toggleMapMode('1')}
+                      className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                        currentMapMode === '1'
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-white text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      עם תצ״א
+                    </button>
+        </div>
+      )}
+
+                          <button
+                  onClick={toggleMapLock}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    isMapLocked
+                      ? 'bg-orange-500 hover:bg-orange-600 text-white'
+                      : 'bg-green-600 hover:bg-green-700 text-white'
+                  }`}
+                >
+                  {isMapLocked ? '🔐 בטל נעילה (חזור לניווט במפה)' : '🔓 נעל מפה להוספת סימונים'}
+                          </button>
+
+                {isMapLocked && (
+                  <div className="flex gap-2 flex-wrap">
+                        <button
+                      onClick={() => setCurrentTool('select')}
+                      className={`px-3 py-2 border rounded-lg text-sm transition-colors ${
+                        currentTool === 'select' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-gray-300 hover:border-blue-500'
+                      }`}
+                    >
+                      👆 בחירה
+                        </button>
+                    <button onClick={() => setCurrentTool('freehand')} className={`px-3 py-2 border rounded-lg text-sm transition-colors ${currentTool === 'freehand' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-gray-300 hover:border-blue-500'}`}>
+                      ✏️ ציור חופשי
+                    </button>
+                    <button onClick={() => setCurrentTool('line')} className={`px-3 py-2 border rounded-lg text-sm transition-colors ${currentTool === 'line' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-gray-300 hover:border-blue-500'}`}>
+                      ━ קו ישר
+                    </button>
+                    <button onClick={() => setCurrentTool('rectangle')} className={`px-3 py-2 border rounded-lg text-sm transition-colors ${currentTool === 'rectangle' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-gray-300 hover:border-blue-500'}`}>
+                      ▭ מלבן
+                    </button>
+                    <button onClick={() => setCurrentTool('circle')} className={`px-3 py-2 border rounded-lg text-sm transition-colors ${currentTool === 'circle' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-gray-300 hover:border-blue-500'}`}>
+                      ⚫ עיגול
+                    </button>
+                    <button onClick={() => setCurrentTool('arrow')} className={`px-3 py-2 border rounded-lg text-sm transition-colors ${currentTool === 'arrow' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-gray-300 hover:border-blue-500'}`}>
+                      ➡️ חץ
+                    </button>
+                    <button onClick={() => setCurrentTool('text')} className={`px-3 py-2 border rounded-lg text-sm transition-colors ${currentTool === 'text' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-gray-300 hover:border-blue-500'}`}>
+                      📝 טקסט
+                    </button>
+                    <input
+                      type="color"
+                      value={currentColor}
+                      onChange={(e) => setCurrentColor(e.target.value)}
+                      className="w-10 h-10 border border-gray-300 rounded-lg cursor-pointer"
+                      title="בחר צבע"
+                    />
+                    <button onClick={undoLastAnnotation} className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white hover:border-blue-500 transition-colors">
+                      ↶ בטל
+                    </button>
+            </div>
+                )}
+          </div>
+        </div>
+            
+            <div className="flex-1 relative bg-gray-100 overflow-hidden">
+                  <iframe
+                    ref={iframeRef}
+                src={govmapUrl}
+                className={`absolute inset-0 w-full h-full border-0 ${isMapLocked ? 'pointer-events-none' : ''}`}
+                style={{ display: govmapUrl ? 'block' : 'none' }}
+                    allowFullScreen
+            />
+              <canvas
+                ref={canvasRef}
+                className={`absolute inset-0 w-full h-full ${isMapLocked ? 'pointer-events-auto cursor-crosshair' : 'pointer-events-none'}`}
+                onMouseDown={startDrawing}
+                onMouseMove={draw}
+                onMouseUp={stopDrawing}
+                onMouseLeave={stopDrawing}
                     />
                   </div>
-                )}
-              </div>
-            </div>
-          )}
 
-          {/* Status Message */}
-          <div className="border rounded-lg p-4 bg-blue-50 border-blue-200">
-            <h4 className="font-medium mb-2 text-blue-900">
-              מפה זמינה
-            </h4>
-            <div className="text-sm text-blue-700">
-              <p>✅ ניתוח GovMap הושלם בהצלחה</p>
-              <p>📍 קואורדינטות: {gisData?.coordinates?.x}, {gisData?.coordinates?.y}</p>
-              <p>🗺️ מפות GovMap זמינות בשני מצבים</p>
-              <p>📸 לחצו על כפתורי הצילום כדי לצלם את המפה</p>
+            {govmapUrl && (
+              <div className="p-3 bg-gray-50 border-t border-gray-200" dir="ltr">
+                <strong className="block mb-2 text-right text-sm font-medium text-gray-900">🔗 GovMap URL:</strong>
+                <div className="bg-white p-2 rounded border border-gray-300 break-all font-mono text-xs max-h-24 overflow-y-auto">
+                  <a href={govmapUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                    {govmapUrl}
+                  </a>
             </div>
-          </div>
-        </div>
-      ) : (
-        <div className="text-center py-8">
-          <MapPin className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-600 mb-4">לא בוצע ניתוח GovMap עדיין</p>
-          <p className="text-sm text-gray-500">
-            לחץ על "הפעל ניתוח GovMap" כדי להתחיל את הניתוח
-          </p>
-        </div>
-      )}
-
-      {/* Edit Modal */}
-      {showEditModal && (capturedImage || serverScreenshot) && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-4xl max-h-[90vh] overflow-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">
-                עריכת תמונת המפה
-              </h3>
               <button
-                onClick={() => {
-                  setShowEditModal(false)
-                  setCapturedImage(null)
-                  setServerScreenshot(null)
-                  setEditedImage(null)
-                  setSelectedCropMode(undefined)
-                }}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                ✕
+                  onClick={copyGovMapUrl}
+                  className="mt-2 px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition-colors"
+                >
+                  📋 העתק URL
               </button>
             </div>
-            
-            <div className="space-y-4">
-              {/* Image Display */}
-              <div className="text-center relative">
-                <img 
-                  src={editedImage || serverScreenshot || capturedImage || ''} 
-                  alt="Captured Map"
-                  className="max-w-full max-h-96 mx-auto border border-gray-300 rounded-lg shadow-sm cursor-crosshair"
-                  onClick={handleImageClick}
-                  style={{ 
-                    cursor: showCropTool ? 'crosshair' : 'default',
-                    position: 'relative'
-                  }}
-                />
-                
-              </div>
-              
-              {/* Edit Controls */}
-              <div className="flex flex-wrap gap-2 justify-center">
-                <button
-                  onClick={() => {
-                    setShowEditModal(false)
-                    setShowCropTool(true)
-                  }}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
-                >
-                  ✂️ חיתוך תמונה
-                </button>
-                
-              </div>
-              
-              {/* Action Buttons */}
-              <div className="flex gap-2 justify-center pt-4 border-t">
-                <button
-                  onClick={() => {
-                    setShowEditModal(false)
-                    setServerScreenshot(null)
-                    setCapturedImage(null)
-                    setEditedImage(null)
-                    setSelectedCropMode(undefined)
-                  }}
-                  className="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
-                >
-                  ביטול
-                </button>
-              </div>
+            )}
             </div>
+              
+          {/* Right Sidebar: Saved Maps */}
+          <div className="lg:col-span-3 bg-white rounded-lg p-5 shadow-sm border border-gray-200 overflow-y-auto">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-300">מפות שמורות</h2>
+            {savedMaps.length === 0 ? (
+              <div className="text-center text-gray-500 py-8">אין מפות שמורות</div>
+            ) : (
+              <ul className="space-y-2">
+                {savedMaps.map((map: any) => (
+                  <li
+                    key={map.id}
+                    className={`p-3 rounded-lg border transition-colors ${
+                      map.id === currentMapId
+                        ? 'bg-blue-50 border-blue-500'
+                        : 'bg-gray-50 border-gray-300 hover:border-blue-300 hover:bg-gray-100'
+                    }`}
+                  >
+                    <div 
+                      onClick={() => loadMapLocal(map.id)}
+                      className="cursor-pointer"
+                    >
+                      <div className="font-medium text-gray-900">{map.address_input}</div>
+                      <div className="text-xs text-gray-600 mt-1">
+                        {new Date(map.created_at).toLocaleDateString('he-IL')}
+                        {(map.annotations?.length || 0) > 0 && ` | ${map.annotations.length} סימונים`}
           </div>
         </div>
-      )}
-
-      {/* Cropping Modal with Annotations */}
-      {showCropTool && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-7xl max-h-[95vh] overflow-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">
-                חיתוך תמונת המפה והוספת הערות
-              </h3>
-              <button
-                onClick={() => {
-                  setShowCropTool(false)
-                  setServerScreenshot(null)
-                  setCrop(undefined)
-                  setCompletedCrop(undefined)
-                  setAnnotations([])
-                }}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                ✕
-              </button>
-            </div>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Left: Image with Crop Tool */}
-              <div className="lg:col-span-2">
-                <div className="text-center relative">
-                  {isCapturingServer ? (
-                    <div className="flex flex-col items-center justify-center py-20">
-                      <RefreshCw className="w-8 h-8 animate-spin text-blue-600 mb-4" />
-                      <p className="text-lg text-gray-600">מצלם את המפה...</p>
-                      <p className="text-sm text-gray-500">אנא המתן</p>
-                    </div>
-                  ) : serverScreenshot ? (
-                    <div className="relative">
-                      {crop ? (
-                        // Show ReactCrop when cropping is enabled
-                        <ReactCrop
-                          crop={crop}
-                          onChange={(_, percentCrop) => setCrop(percentCrop)}
-                          onComplete={(c) => setCompletedCrop(c)}
-                          aspect={16 / 9}
-                          className="max-w-full"
-                        >
-                          <img
-                            ref={imgRef}
-                            alt="Screenshot to crop"
-                            src={serverScreenshot}
-                            onLoad={onImageLoad}
-                            className="max-w-full max-h-96 mx-auto border border-gray-300 rounded-lg shadow-sm"
-                          />
-                        </ReactCrop>
-                      ) : (
-                        // Show annotation mode when not cropping
-                        <div className="relative">
-                          <img
-                            ref={imgRef}
-                            alt="Screenshot to annotate"
-                            src={serverScreenshot}
-                            onLoad={onImageLoad}
-                            className="max-w-full max-h-96 mx-auto border border-gray-300 rounded-lg shadow-sm"
-                          />
-                          {/* Annotations overlay */}
-                          <canvas
-                            ref={canvasRef}
-                            className="absolute top-0 left-0 w-full h-full pointer-events-auto"
-                            style={{ maxWidth: '100%', maxHeight: '384px' }}
-                            onClick={(e) => handleImageClick(e as any)}
-                            onMouseDown={handleCanvasMouseDown}
-                            onMouseMove={handleCanvasMouseMove}
-                            onMouseUp={handleCanvasMouseUp}
-                            onDoubleClick={(e) => handleImageClick(e as any)}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-20">
-                      <Camera className="w-8 h-8 text-gray-400 mb-4" />
-                      <p className="text-lg text-gray-600">מכין צילום...</p>
-                    </div>
-                  )}
-                </div>
-                
-                {/* Mode Instructions */}
-                {serverScreenshot && (
-                  <div className="text-center text-sm p-3 rounded mt-2">
-                    {crop ? (
-                      <div className="text-blue-600 bg-blue-50">
-                        🔧 מצב חיתוך: גרור את הפינות כדי לבחור את האזור הרצוי לחיתוך
-                      </div>
-                    ) : (
-                      <div className="text-green-600 bg-green-50">
-                        ✏️ מצב הערות: השתמש בכלי ההערות כדי להוסיף קווים, טקסט וצורות לתמונה
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Right: Annotation Tools */}
-              <div className="lg:col-span-1">
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <h4 className="font-semibold text-gray-900 mb-3">
-                    {!serverScreenshot ? 'ממתין לצילום...' : 
-                     crop ? 'מצב חיתוך' : 'כלי הערות'}
-                  </h4>
-                  
-                  {/* Drawing Tools */}
-                  {serverScreenshot && !crop && (
-                    <div className="space-y-2 mb-4">
-                      <div className="flex flex-wrap gap-2">
-                        {[
-                          { mode: 'line', icon: '📏', label: 'קו' },
-                          { mode: 'rectangle', icon: '⬜', label: 'מלבן' },
-                          { mode: 'circle', icon: '⭕', label: 'עיגול' },
-                          { mode: 'arrow', icon: '➡️', label: 'חץ' },
-                          { mode: 'text', icon: '📝', label: 'טקסט' },
-                          { mode: 'freehand', icon: '✏️', label: 'יד חופשית' }
-                        ].map(tool => (
                           <button
-                            key={tool.mode}
-                            onClick={() => setDrawingMode(tool.mode as any)}
-                            className={`px-3 py-2 text-sm rounded-lg border ${
-                              drawingMode === tool.mode
-                                ? 'bg-blue-600 text-white border-blue-600'
-                                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                            }`}
-                          >
-                            {tool.icon} {tool.label}
+                      onClick={(e) => deleteSavedMap(map.id, e)}
+                      className="mt-2 w-full px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 transition-colors"
+              >
+                      🗑️ מחק
                           </button>
-                        ))}
-                      </div>
-                      
-                      {/* Undo/Redo Buttons */}
-                      <div className="flex gap-2 mt-2">
-                        <button
-                          onClick={undo}
-                          disabled={historyIndex <= 0}
-                          className="px-3 py-2 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          ↶ בטל
-                        </button>
-                        <button
-                          onClick={redo}
-                          disabled={historyIndex >= annotationHistory.length - 1}
-                          className="px-3 py-2 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          ↷ חזור
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Color Picker */}
-                  {serverScreenshot && !crop && (
-                    <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">צבע</label>
-                      <div className="flex gap-2">
-                        {['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#000000'].map(color => (
-                          <button
-                            key={color}
-                            onClick={() => setCurrentColor(color)}
-                            className={`w-8 h-8 rounded-full border-2 ${
-                              currentColor === color ? 'border-gray-800' : 'border-gray-300'
-                            }`}
-                            style={{ backgroundColor: color }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Current Annotations */}
-                  {serverScreenshot && !crop && (
-                    <div className="mb-4">
-                      <h5 className="font-medium text-gray-900 mb-2">הערות נוכחיות ({annotations.length})</h5>
-                      <div className="max-h-32 overflow-y-auto space-y-1">
-                        {annotations.map((annotation, index) => (
-                          <div key={index} className="flex items-center justify-between bg-white p-2 rounded border">
-                            <div className="flex items-center gap-2">
-                              <div 
-                                className="w-3 h-3 rounded-full" 
-                                style={{ backgroundColor: annotation.color }}
-                              />
-                              <span className="text-sm">{annotation.type}</span>
-                            </div>
-                            <button
-                              onClick={() => setAnnotations(prev => prev.filter((_, i) => i !== index))}
-                              className="text-red-500 hover:text-red-700 text-sm"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Action Buttons */}
-                  <div className="space-y-2">
-                    <button
-                      onClick={() => {
-                        // Enable cropping mode by setting initial crop
-                        if (imgRef.current) {
-                          const { width, height } = imgRef.current
-                          const cropWidth = Math.min(width, height * 16 / 9)
-                          const cropHeight = cropWidth * 9 / 16
-                          const cropX = (width - cropWidth) / 2
-                          const cropY = (height - cropHeight) / 2
-                          
-                          setCrop({
-                            unit: 'px',
-                            x: cropX,
-                            y: cropY,
-                            width: cropWidth,
-                            height: cropHeight
-                          })
-                        }
-                      }}
-                      disabled={!serverScreenshot}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {crop ? '✂️ עריכת חיתוך' : '✂️ התחל חיתוך'}
-                    </button>
-
-                    <button
-                      onClick={handleCropComplete}
-                      disabled={!crop || !serverScreenshot}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <Camera className="w-4 h-4" />
-                      שמור תמונה
-                    </button>
-                    
-                    <button
-                      onClick={() => {
-                        setShowCropTool(false)
-                        setServerScreenshot(null)
-                        setCrop(undefined)
-                        setCompletedCrop(undefined)
-                        setAnnotations([])
-                      }}
-                      className="w-full px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
-                    >
-                      ביטול
-                    </button>
-                  </div>
-                </div>
-              </div>
+                  </li>
+                ))}
+              </ul>
+            )}
             </div>
-          </div>
-        </div>
-      )}
-
+            </div>
+            </div>
     </div>
   )
 }

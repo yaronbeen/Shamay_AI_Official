@@ -254,7 +254,7 @@ class ShumaDBEnhanced {
         valuationData.finishDetails || '', JSON.stringify(valuationData.propertyImages || []),
         valuationData.selectedImageIndex || 0, valuationData.selectedImagePreview || null,
         JSON.stringify(valuationData.interiorImages || []), valuationData.signaturePreview || null,
-        JSON.stringify(valuationData.propertyAnalysis || {}), JSON.stringify(valuationData.marketAnalysis || {}),
+        JSON.stringify(valuationData.propertyAnalysis || {}), JSON.stringify(valuationData.comparableDataAnalysis || valuationData.marketAnalysis || {}),
         JSON.stringify(valuationData.riskAssessment || {}), JSON.stringify(valuationData.recommendations || []),
         JSON.stringify(valuationData.extractedData || {}), JSON.stringify(valuationData.comparableData || []),
         valuationData.finalValuation || 0, valuationData.pricePerSqm || 0, valuationData.isComplete || false,
@@ -375,7 +375,7 @@ class ShumaDBEnhanced {
         formatDateForDB(valuationData.extractDate), valuationData.internalLayout, valuationData.finishStandard, valuationData.finishDetails,
         JSON.stringify(valuationData.propertyImages || []), valuationData.selectedImageIndex, valuationData.selectedImagePreview,
         JSON.stringify(valuationData.interiorImages || []), valuationData.signaturePreview, JSON.stringify(valuationData.propertyAnalysis || {}),
-        JSON.stringify(valuationData.marketAnalysis || {}), JSON.stringify(valuationData.riskAssessment || {}),
+        JSON.stringify(valuationData.comparableDataAnalysis || valuationData.marketAnalysis || {}), JSON.stringify(valuationData.riskAssessment || {}),
         JSON.stringify(valuationData.recommendations || []), JSON.stringify(valuationData.extractedData || {}),
         JSON.stringify(valuationData.comparableData || []), valuationData.finalValuation, valuationData.pricePerSqm,
         valuationData.isComplete, JSON.stringify(valuationData.uploads || []), JSON.stringify(valuationData.gisAnalysis || {}), JSON.stringify(valuationData.gisScreenshots || {}),
@@ -704,34 +704,16 @@ class ShumaDBEnhanced {
       await fs.mkdir(uploadsDir, { recursive: true })
       console.log(`📁 Using Vercel temp directory: ${uploadsDir}`)
     } else {
-      // Local dev: try multiple locations
-      const possibleUploadDirs = [
-        path.join(process.cwd(), 'frontend', 'uploads', sessionId), // frontend/uploads (local dev)
-        path.join(process.cwd(), 'uploads', sessionId), // root/uploads
-        path.join(__dirname, '../../uploads', sessionId), // backend/uploads
-      ]
+      // Local dev: Always save to frontend/uploads
+      // Use path.resolve to get absolute path from backend/src/models to project root
+      // __dirname = backend/src/models
+      // Go up 3 levels: models -> src -> backend -> project root
+      const projectRoot = path.resolve(__dirname, '../../..')
+      uploadsDir = path.join(projectRoot, 'frontend', 'uploads', sessionId)
       
-      // Try to find/create the first valid directory
-      for (const dir of possibleUploadDirs) {
-        try {
-          await fs.mkdir(dir, { recursive: true })
-          // Test if we can write here by checking if parent exists
-          const parentDir = path.dirname(dir)
-          await fs.access(parentDir)
-          uploadsDir = dir
-          console.log(`📁 Using upload directory: ${uploadsDir}`)
-          break
-        } catch (error) {
-          // Continue to next path
-          continue
-        }
-      }
-      
-      // Fallback to first option if all failed
-      if (!uploadsDir) {
-        uploadsDir = possibleUploadDirs[0]
-        await fs.mkdir(uploadsDir, { recursive: true })
-      }
+      // Ensure directory exists
+      await fs.mkdir(uploadsDir, { recursive: true })
+      console.log(`📁 Using upload directory: ${uploadsDir}`)
     }
     
     // Save file
@@ -739,7 +721,9 @@ class ShumaDBEnhanced {
     await fs.writeFile(filePath, buffer)
     
     // Return URL for local access
-    const url = `/api/files/${sessionId}/${filename}`
+    // Use /uploads/ path to match the upload route format
+    // This is served by the frontend Next.js app
+    const url = `/uploads/${sessionId}/${filename}`
     
     console.log(`✅ [LOCAL] Saved image file: ${filePath} (${buffer.length} bytes)`)
     console.log(`📁 File URL: ${url}`)
@@ -858,7 +842,11 @@ class ShumaDBEnhanced {
     }
 
     for (const img of imagesToSave) {
+      const savepointName = `sp_image_${img.cropMode || 'unknown'}`
       try {
+        // Create savepoint for this image so errors don't abort entire transaction
+        await client.query(`SAVEPOINT ${savepointName}`)
+        
         const dataSize = img.data ? img.data.length : 0
         console.log(`💾 Processing image: ${img.filename}, base64 size: ${dataSize} characters`)
         
@@ -873,28 +861,29 @@ class ShumaDBEnhanced {
           // Fallback: continue without file URL (save will continue with URL as null)
         }
         
-        // Save metadata to images table (no base64, just URL)
+        // Try to update existing record first
+        const imageType = this._truncateString(img.type || 'gis_screenshot', 50)
+        const metadataJson = JSON.stringify({
+          filename: img.filename,
+          mapType: img.mapType,
+          cropMode: img.cropMode,
+          timestamp: new Date().toISOString(),
+          storedAs: 'file',
+          originalSize: dataSize
+        })
+        
         const updateResult = await client.query(`
           UPDATE images 
           SET 
             image_data = NULL,
-            image_url = $4,
-            metadata = $5,
-            updated_at = NOW()
-          WHERE session_id = $2 AND image_type = $3
+            image_url = $1,
+            metadata = $2
+          WHERE session_id = $3 AND image_type = $4
         `, [
-          shumaId,
+          imageUrl,
+          metadataJson,
           sessionId,
-          this._truncateString(img.type || 'gis_screenshot', 50),
-          imageUrl, // Store URL instead of base64
-          JSON.stringify({
-            filename: img.filename,
-            mapType: img.mapType,
-            cropMode: img.cropMode,
-            timestamp: new Date().toISOString(),
-            storedAs: 'file', // Indicate this is stored as file, not base64
-            originalSize: dataSize
-          })
+          imageType
         ])
         
         // If no rows were updated, insert new record
@@ -909,22 +898,24 @@ class ShumaDBEnhanced {
               metadata
             ) VALUES ($1, $2, $3, NULL, $4, $5)
           `, [
-          shumaId,
-          sessionId,
-          this._truncateString(img.type || 'gis_screenshot', 50),
-          imageUrl, // Store URL, not base64
-          JSON.stringify({
-            filename: img.filename,
-            mapType: img.mapType,
-            cropMode: img.cropMode,
-            timestamp: new Date().toISOString(),
-            storedAs: 'file',
-            originalSize: dataSize
-          })
+            shumaId,
+            sessionId,
+            imageType,
+            imageUrl,
+            metadataJson
           ])
         }
+        
+        // Release savepoint on success
+        await client.query(`RELEASE SAVEPOINT ${savepointName}`)
         console.log(`✅ Successfully saved image metadata: ${img.filename} (URL: ${imageUrl})`)
       } catch (imgError) {
+        // Rollback to savepoint to continue with other images
+        try {
+          await client.query(`ROLLBACK TO SAVEPOINT ${savepointName}`)
+        } catch (rollbackError) {
+          console.error(`❌ Failed to rollback to savepoint:`, rollbackError.message)
+        }
         console.error(`❌ Error saving individual image ${img.filename}:`, imgError.message)
         console.error(`❌ Image error stack:`, imgError.stack)
         // Continue with other images even if one fails
@@ -1012,6 +1003,8 @@ class ShumaDBEnhanced {
         // Analysis data
         propertyAnalysis: typeof shuma.property_analysis === 'string' ? JSON.parse(shuma.property_analysis) : (shuma.property_analysis || {}),
         marketAnalysis: typeof shuma.market_analysis === 'string' ? JSON.parse(shuma.market_analysis) : (shuma.market_analysis || {}),
+        // Also populate comparableDataAnalysis from marketAnalysis for frontend compatibility
+        comparableDataAnalysis: typeof shuma.market_analysis === 'string' ? JSON.parse(shuma.market_analysis) : (shuma.market_analysis || {}),
         riskAssessment: typeof shuma.risk_assessment === 'string' ? JSON.parse(shuma.risk_assessment) : (shuma.risk_assessment || {}),
         recommendations: typeof shuma.recommendations === 'string' ? JSON.parse(shuma.recommendations) : (shuma.recommendations || []),
         

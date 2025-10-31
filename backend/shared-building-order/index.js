@@ -73,7 +73,7 @@ async function processSharedBuildingDocument(pdfPath, outputDir = 'output', opti
         
         raw_text: conversionResult.markdownContent,
         extraction_method: options.useAI !== false ? 'anthropic_ai_with_markitdown' : 'regex_with_markitdown',
-        model_used: extractionResults.model || 'claude-3-5-sonnet-20241022'
+        model_used: extractionResults.model || 'claude-sonnet-4-20250514'
       };
       
       const filename = path.basename(pdfPath);
