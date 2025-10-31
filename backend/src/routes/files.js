@@ -194,8 +194,97 @@ router.get('/:sessionId/:filename', async (req, res) => {
   try {
     const { sessionId, filename } = req.params;
     
-    // Try multiple possible upload locations
-    // Priority: frontend/uploads (where files should be saved)
+    // Check if we're in Vercel production
+    const isProduction = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production';
+    
+    // In Vercel production, try to load file URL from database (might be Blob URL)
+    if (isProduction && process.env.BLOB_READ_WRITE_TOKEN) {
+      try {
+        // Load session data to get file URL
+        const result = await ShumaDB.loadShumaForWizard(sessionId);
+        if (result.success && result.valuationData) {
+          // Check uploads array for matching filename
+          const uploads = result.valuationData.uploads || [];
+          const fileEntry = uploads.find(u => u.fileName === filename || u.url && u.url.includes(filename));
+          
+          // Check gisScreenshots for matching filename
+          let blobUrl = null;
+          if (fileEntry && fileEntry.url && (fileEntry.url.startsWith('http://') || fileEntry.url.startsWith('https://'))) {
+            blobUrl = fileEntry.url;
+          } else {
+            const gisScreenshots = result.valuationData.gisScreenshots || {};
+            if (gisScreenshots.cropMode0 && gisScreenshots.cropMode0.includes(filename) && 
+                (gisScreenshots.cropMode0.startsWith('http://') || gisScreenshots.cropMode0.startsWith('https://'))) {
+              blobUrl = gisScreenshots.cropMode0;
+            } else if (gisScreenshots.cropMode1 && gisScreenshots.cropMode1.includes(filename) &&
+                       (gisScreenshots.cropMode1.startsWith('http://') || gisScreenshots.cropMode1.startsWith('https://'))) {
+              blobUrl = gisScreenshots.cropMode1;
+            }
+          }
+          
+          // If we found a Blob URL, download and serve it
+          if (blobUrl) {
+            try {
+              // Download the blob (Blob URLs are public, so we can fetch them directly)
+              const response = await fetch(blobUrl);
+              if (!response.ok) {
+                throw new Error(`Failed to fetch blob: ${response.statusText}`);
+              }
+              
+              const buffer = await response.arrayBuffer();
+              const fileBuffer = Buffer.from(buffer);
+              
+              // Determine content type
+              const ext = path.extname(filename).toLowerCase();
+              let contentType = 'application/octet-stream';
+              
+              switch (ext) {
+                case '.pdf':
+                  contentType = 'application/pdf';
+                  break;
+                case '.jpg':
+                case '.jpeg':
+                  contentType = 'image/jpeg';
+                  break;
+                case '.png':
+                  contentType = 'image/png';
+                  break;
+                case '.gif':
+                  contentType = 'image/gif';
+                  break;
+                case '.webp':
+                  contentType = 'image/webp';
+                  break;
+                case '.txt':
+                  contentType = 'text/plain';
+                  break;
+                case '.json':
+                  contentType = 'application/json';
+                  break;
+              }
+              
+              logger.info(`✅ [BLOB] Serving file from Blob: ${blobUrl} (${fileBuffer.length} bytes, ${contentType})`);
+              
+              res.setHeader('Content-Type', contentType);
+              res.setHeader('Content-Length', fileBuffer.length);
+              res.setHeader('Cache-Control', 'public, max-age=3600');
+              res.setHeader('Access-Control-Allow-Origin', '*');
+              res.setHeader('Access-Control-Allow-Methods', 'GET');
+              
+              return res.send(fileBuffer);
+            } catch (blobError) {
+              logger.warn(`⚠️ [BLOB] Failed to download from Blob, falling back to local: ${blobError.message}`);
+              // Fall through to local filesystem
+            }
+          }
+        }
+      } catch (dbError) {
+        logger.warn(`⚠️ [BLOB] Failed to load from DB, falling back to local: ${dbError.message}`);
+        // Fall through to local filesystem
+      }
+    }
+    
+    // Local development OR fallback: Read from /frontend/uploads
     const projectRoot = path.resolve(__dirname, '../../..');
     const possiblePaths = [
       path.join(projectRoot, 'frontend', 'uploads', sessionId, filename), // frontend/uploads (correct location)
@@ -217,16 +306,17 @@ router.get('/:sessionId/:filename', async (req, res) => {
     }
     
     if (!filePath) {
-      logger.error(`❌ File not found in any location:`, possiblePaths);
+      logger.error(`❌ [LOCAL] File not found in any location:`, possiblePaths);
       return res.status(404).json({ 
         error: 'File not found', 
         filename,
         sessionId,
-        searchedPaths: possiblePaths 
+        searchedPaths: possiblePaths,
+        note: isProduction ? 'In production, ensure the file URL is stored correctly in the database' : 'Local file not found'
       });
     }
     
-    logger.info(`📁 Serving file: ${filePath}`);
+    logger.info(`📁 [LOCAL] Serving file: ${filePath}`);
     
     // Get file stats
     const stats = await fs.stat(filePath);
@@ -271,9 +361,9 @@ router.get('/:sessionId/:filename', async (req, res) => {
     const readStream = require('fs').createReadStream(filePath);
     readStream.pipe(res);
     
-    logger.info(`✅ Served file: ${filename} (${stats.size} bytes, ${contentType})`);
+    logger.info(`✅ [LOCAL] Served file: ${filename} (${stats.size} bytes, ${contentType})`);
   } catch (error) {
-    logger.error('File serving error:', error);
+    logger.error('❌ File serving error:', error);
     res.status(500).json({ error: error.message });
   }
 });

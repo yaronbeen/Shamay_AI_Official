@@ -51,13 +51,44 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots }: GI
     // Load initial screenshots from props if available
     if (initialScreenshots) {
       setScreenshots(initialScreenshots)
-      // Convert to URLs if they're file paths
+      // Store URLs (both Blob URLs and local paths)
+      // Blob URLs: https://...blob.vercel-storage.com/... (load directly)
+      // Local paths: /uploads/... (served via /api/files/ route)
       const urls: { cropMode0?: string, cropMode1?: string } = {}
-      if (initialScreenshots.cropMode0 && initialScreenshots.cropMode0.startsWith('/uploads/')) {
-        urls.cropMode0 = initialScreenshots.cropMode0
+      if (initialScreenshots.cropMode0) {
+        // If it's a Blob URL (https://), use directly
+        // If it's a local path (/uploads/), use directly (will be served by API route)
+        // If it's a relative path, prepend /api/files/ if needed
+        let url = initialScreenshots.cropMode0
+        if (url.startsWith('http://') || url.startsWith('https://')) {
+          // Blob URL - use directly
+          urls.cropMode0 = url
+        } else if (url.startsWith('/uploads/')) {
+          // Local path - use directly (served by Next.js)
+          urls.cropMode0 = url
+        } else if (url && !url.startsWith('data:')) {
+          // Relative path - might need /api/files/ prefix
+          urls.cropMode0 = url.startsWith('/') ? url : `/api/files/${sessionId}/${url}`
+        } else {
+          // Data URL or other format
+          urls.cropMode0 = url
+        }
       }
-      if (initialScreenshots.cropMode1 && initialScreenshots.cropMode1.startsWith('/uploads/')) {
-        urls.cropMode1 = initialScreenshots.cropMode1
+      if (initialScreenshots.cropMode1) {
+        let url = initialScreenshots.cropMode1
+        if (url.startsWith('http://') || url.startsWith('https://')) {
+          // Blob URL - use directly
+          urls.cropMode1 = url
+        } else if (url.startsWith('/uploads/')) {
+          // Local path - use directly
+          urls.cropMode1 = url
+        } else if (url && !url.startsWith('data:')) {
+          // Relative path
+          urls.cropMode1 = url.startsWith('/') ? url : `/api/files/${sessionId}/${url}`
+        } else {
+          // Data URL or other format
+          urls.cropMode1 = url
+        }
       }
       if (Object.keys(urls).length > 0) {
         setScreenshotUrls(urls)
@@ -1111,8 +1142,8 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots }: GI
                         <img src={screenshots.cropMode1} alt="Screenshot with תצ״א" className="w-full rounded border border-gray-300 max-h-32 object-contain" />
                   </div>
                 )}
-              </div>
-                )}
+            </div>
+          )}
             </div>
           }
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { readFile, stat } from 'fs/promises'
-import { join } from 'path'
+import { join, resolve } from 'path'
 import { existsSync } from 'fs'
 
 export async function GET(
@@ -9,51 +9,59 @@ export async function GET(
 ) {
   try {
     const { sessionId, path } = params
-    console.log(`📁 File serving request received:`, { sessionId, path })
-    console.log(`📁 Process CWD: ${process.cwd()}`)
+    const filename = path[path.length - 1]
     
-    // Try both relative and absolute paths
-    const relativePath = join(process.cwd(), 'uploads', sessionId, ...path)
-    const absolutePath = join('/Users/shalom.m/Documents/Code/Shamay-slow/frontend/uploads', sessionId, ...path)
+    console.log(`📁 [FILES] Serving request:`, { sessionId, path: path.join('/') })
     
-    console.log(`📁 Relative path: ${relativePath}`)
-    console.log(`📁 Absolute path: ${absolutePath}`)
-    console.log(`📁 Relative exists: ${existsSync(relativePath)}`)
-    console.log(`📁 Absolute exists: ${existsSync(absolutePath)}`)
+    // Check if we're in Vercel production
+    const isProduction = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production'
     
-    const filePath = existsSync(absolutePath) ? absolutePath : relativePath
+    // NOTE: In Vercel production, files stored as Blob URLs are served directly by Vercel Blob storage
+    // (no proxy needed - Blob URLs are public and can be used directly in the frontend)
+    // This route is only used for local development files stored in /frontend/uploads
     
-    // Security check - ensure the file is within the uploads directory
-    const uploadsDir = join(process.cwd(), 'uploads', sessionId)
-    const resolvedPath = filePath
+    // Local development: Read from /frontend/uploads
+    const projectRoot = resolve(process.cwd())
+    const possiblePaths = [
+      join(projectRoot, 'frontend', 'uploads', sessionId, ...path), // frontend/uploads (correct location)
+      join(projectRoot, 'uploads', sessionId, ...path), // root/uploads (fallback)
+      join(process.cwd(), 'uploads', sessionId, ...path), // relative to CWD
+    ]
     
-    console.log(`📁 Serving file request:`)
-    console.log(`  - Session ID: ${sessionId}`)
-    console.log(`  - Path array: ${JSON.stringify(path)}`)
-    console.log(`  - Constructed path: ${filePath}`)
-    console.log(`  - Process CWD: ${process.cwd()}`)
-    console.log(`  - File exists: ${existsSync(resolvedPath)}`)
-    console.log(`  - Resolved path: ${resolvedPath}`)
+    let filePath: string | null = null
     
-    if (!resolvedPath.startsWith(uploadsDir)) {
-      console.error(`❌ Security violation: ${resolvedPath} is outside uploads directory`)
+    for (const testPath of possiblePaths) {
+      if (existsSync(testPath)) {
+        filePath = testPath
+        console.log(`✅ [FILES] [LOCAL] Found file at: ${filePath}`)
+        break
+      }
+    }
+    
+    if (!filePath) {
+      console.error(`❌ [FILES] File not found in any location:`, possiblePaths)
+      return NextResponse.json({ 
+        error: 'File not found',
+        message: `Could not find file: ${filename}`,
+        note: isProduction ? 'In production, ensure the file URL is stored correctly in the database' : 'Local file not found'
+      }, { status: 404 })
+    }
+    
+    // Security check - ensure the file is within an uploads directory
+    const isInUploads = possiblePaths.some(uploadsPath => filePath!.startsWith(uploadsPath.split(sessionId)[0]))
+    if (!isInUploads) {
+      console.error(`❌ [FILES] Security violation: ${filePath} is outside uploads directory`)
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
     
-    // Check if file exists
-    if (!existsSync(resolvedPath)) {
-      console.error(`❌ File not found: ${resolvedPath}`)
-      return NextResponse.json({ error: 'File not found' }, { status: 404 })
-    }
-    
     // Get file stats
-    const stats = await stat(resolvedPath)
+    const stats = await stat(filePath)
     
     // Read file
-    const fileBuffer = await readFile(resolvedPath)
+    const fileBuffer = await readFile(filePath)
     
     // Determine content type based on file extension
-    const extension = path[path.length - 1].split('.').pop()?.toLowerCase()
+    const extension = filename.split('.').pop()?.toLowerCase()
     let contentType = 'application/octet-stream'
     
     switch (extension) {
@@ -81,7 +89,7 @@ export async function GET(
         break
     }
     
-    console.log(`✅ Serving file: ${resolvedPath} (${stats.size} bytes, ${contentType})`)
+    console.log(`✅ [FILES] Serving file: ${filePath} (${stats.size} bytes, ${contentType})`)
     
     return new NextResponse(fileBuffer as any, {
       status: 200,
