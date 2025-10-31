@@ -129,7 +129,7 @@ class GISMeasurementExtractor {
       }
 
       // Generate GOVMAP URLs for both crop modes
-      const address = propertyData.address || `${propertyData.street || ''},${propertyData.city || ''}`.trim();
+      const address = propertyData.address || `${propertyData.street || ''} ${propertyData.city || ''}`.trim();
       const cropMode0Url = this.generateGOVMAPUrl(coordinates, 13, '21,15', 1, address);
       const cropMode1Url = this.generateGOVMAPUrl(coordinates, 13, '21,15', 0, address);
 

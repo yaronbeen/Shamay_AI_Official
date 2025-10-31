@@ -5,9 +5,9 @@
  * Handles Hebrew CSV data processing, validation, and analysis
  */
 
-import { ComparableDataDatabaseClient } from './database-client.js';
-import fs from 'fs';
-import csv from 'csv-parser';
+const { ComparableDataDatabaseClient } = require('./database-client.js');
+const fs = require('fs');
+const csv = require('csv-parser');
 
 /**
  * Import CSV data into comparable_data table
@@ -463,7 +463,7 @@ async function createSampleCSV(outputPath = './sample_comparable_data.csv') {
   return outputPath;
 }
 
-export {
+module.exports = {
   // Main operations
   importComparableDataCSV,
   parseCSVFile,

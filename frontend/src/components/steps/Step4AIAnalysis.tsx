@@ -52,6 +52,20 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
   useEffect(() => {
     onValidationChange(true)
   }, [onValidationChange])
+
+  // Restore comparableDataAnalysis from marketAnalysis or existing comparableDataAnalysis
+  useEffect(() => {
+    if (data.marketAnalysis && !data.comparableDataAnalysis && Object.keys(data.marketAnalysis).length > 0) {
+      // Restore comparableDataAnalysis from marketAnalysis
+      updateData({
+        comparableDataAnalysis: data.marketAnalysis
+      })
+      console.log('✅ Restored comparableDataAnalysis from marketAnalysis')
+    } else if (data.comparableDataAnalysis && Object.keys(data.comparableDataAnalysis).length > 0) {
+      // Already exists, ensure it's synced
+      console.log('✅ comparableDataAnalysis already exists in valuationData')
+    }
+  }, [data.marketAnalysis, data.comparableDataAnalysis, updateData])
   
   // Debug: Log uploads data when Step4 mounts or data changes
   useEffect(() => {

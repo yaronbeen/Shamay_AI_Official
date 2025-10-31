@@ -132,14 +132,12 @@ export async function POST(
       }
 
       console.log(`🖼️ Processing ${files.length} images`)
-
-      // Create uploads directory
-      const uploadsDir = join(process.cwd(), 'uploads', params.sessionId, 'images')
-      await mkdir(uploadsDir, { recursive: true })
+      console.log(`📍 Environment: ${FileStorageService.isProduction() ? 'PRODUCTION (Vercel Blob)' : 'DEVELOPMENT (Local FS)'}`)
 
       const uploadedImages = []
+      const uploadEntries = []
 
-      // Process each image
+      // Process each image using FileStorageService
       for (let i = 0; i < files.length; i++) {
         const file = files[i]
         
@@ -157,50 +155,53 @@ export async function POST(
 
         try {
           const buffer = Buffer.from(await file.arrayBuffer())
-          let fileName = file.name // Keep original filename
-          let filePath = join(uploadsDir, fileName)
           
-          // Handle filename conflicts by adding a counter
-          let counter = 1
-          while (existsSync(filePath)) {
-            const nameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.'))
-            const ext = file.name.substring(file.name.lastIndexOf('.'))
-            fileName = `${nameWithoutExt}_${counter}${ext}`
-            filePath = join(uploadsDir, fileName)
-            counter++
-          }
-          
-          await writeFile(filePath, buffer)
+          // Generate unique filename to avoid conflicts
+          const timestamp = Date.now()
+          const randomId = Math.random().toString(36).substr(2, 9)
+          const ext = file.name.substring(file.name.lastIndexOf('.'))
+          const nameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.'))
+          const fileName = `images/${nameWithoutExt}_${timestamp}_${randomId}${ext}`
+
+          // Upload file using unified storage service
+          const uploadResult = await FileStorageService.uploadFile(
+            buffer,
+            params.sessionId,
+            fileName,
+            file.type
+          )
+
+          console.log(`✅ Image ${i + 1} uploaded:`, uploadResult)
 
           uploadedImages.push({
             name: file.name,
             fileName: fileName,
-            path: filePath,
-            size: file.size,
+            path: uploadResult.path,
+            size: uploadResult.size,
             type: file.type,
+            url: uploadResult.url,
             uploadedAt: new Date().toISOString()
           })
 
-          console.log(`✅ Image ${i + 1} saved: ${fileName}`)
+          // Create upload entry
+          uploadEntries.push({
+            id: `image_${timestamp}_${i}_${randomId}`,
+            type: 'interior_image',
+            name: file.name,
+            fileName: fileName,
+            path: uploadResult.path,
+            size: uploadResult.size,
+            mimeType: file.type,
+            status: 'completed',
+            preview: uploadResult.url,
+            url: uploadResult.url,
+            uploadedAt: new Date().toISOString(),
+            extractedData: {}
+          })
         } catch (error) {
-          console.error(`❌ Error saving image ${i + 1}:`, error)
+          console.error(`❌ Error uploading image ${i + 1}:`, error)
         }
       }
-
-      // Create upload entries for the uploads array
-      const uploadEntries = uploadedImages.map((image, index) => ({
-        id: `image_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`,
-        type: 'interior_image',
-        name: image.name,
-        fileName: image.fileName,
-        path: image.path,
-        size: image.size,
-        mimeType: image.type,
-        status: 'completed',
-        url: `/api/files/${params.sessionId}/images/${image.fileName}`,
-        uploadedAt: image.uploadedAt,
-        extractedData: {}
-      }))
 
       // Update uploads array in session
       const existingUploads = session.uploads || []
@@ -209,7 +210,7 @@ export async function POST(
       // Also update interiorImages for compatibility
       const existingInteriorImages = session.interiorImages || []
       const newInteriorImages = uploadedImages.map(img => ({
-        url: `/api/files/${params.sessionId}/images/${img.fileName}`,
+        url: img.url,
         name: img.name,
         size: img.size,
         type: img.type
@@ -234,6 +235,7 @@ export async function POST(
       return NextResponse.json({
         success: true,
         message: `${uploadedImages.length} images uploaded successfully`,
+        uploadEntries: uploadEntries,
         images: uploadedImages,
         count: uploadedImages.length
       })

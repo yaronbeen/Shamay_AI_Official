@@ -203,7 +203,7 @@ export function Step5Export({ data }: Step5ExportProps) {
           </div>
           <div>
             <p className="text-sm text-blue-800">
-              <strong>שווי נכס:</strong> ₪{data.finalValuation ? data.finalValuation.toLocaleString() : '0'}
+              <strong>שווי נכס:</strong> ₪{data.comparableDataAnalysis?.estimatedValue ? data.comparableDataAnalysis?.estimatedValue.toLocaleString() : '0'}
             </p>
             <p className="text-sm text-blue-800">
               <strong>מחיר למ"ר:</strong> ₪{data.pricePerSqm ? data.pricePerSqm.toLocaleString() : '0'}

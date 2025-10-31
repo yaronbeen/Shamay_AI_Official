@@ -24,8 +24,15 @@ export async function POST(
 
     const valuationData = loadResult.valuationData
 
+    // Debug: Log comparableDataAnalysis to verify it's loaded
+    const data = valuationData as any
+    console.log(`📝 ComparableDataAnalysis in valuationData:`, data.comparableDataAnalysis)
+    console.log(`📝 EstimatedValue:`, data.comparableDataAnalysis?.estimatedValue)
+    console.log(`📝 MarketAnalysis:`, data.marketAnalysis)
+    console.log(`📝 MarketAnalysis EstimatedValue:`, data.marketAnalysis?.estimatedValue)
+
     // Generate HTML from template
-    console.log(`📝 Generating HTML from document template...`)
+    console.log(`📝 Generating HTML from document template...`, valuationData)
     // Cast to ValuationData type (signature field may be missing from DB but template handles it)
     const htmlContent = generateDocumentHTML(valuationData as any, false)
 

@@ -6,7 +6,7 @@ const router = express.Router();
  * Captures a screenshot of a GIS map URL using Puppeteer
  */
 router.post('/', async (req, res) => {
-  const { govmapUrl, cropMode } = req.body;
+  const { govmapUrl, cropMode, sessionId } = req.body;
 
   if (!govmapUrl || !cropMode) {
     return res.status(400).json({
@@ -17,17 +17,6 @@ router.post('/', async (req, res) => {
   }
 
   console.log(`📸 GIS Screenshot request - cropMode: ${cropMode}, URL: ${govmapUrl}`);
-
-  // Remove 'in' parameter from URL to hide sidebar
-  let cleanedUrl = govmapUrl;
-  try {
-    const urlObj = new URL(govmapUrl);
-    urlObj.searchParams.delete('in'); // Remove info panel parameter
-    cleanedUrl = urlObj.toString();
-    console.log(`🧹 Cleaned URL (removed 'in' param): ${cleanedUrl}`);
-  } catch (e) {
-    console.warn('⚠️ Could not parse URL, using original');
-  }
 
   let browser;
   try {
@@ -104,94 +93,6 @@ router.post('/', async (req, res) => {
     console.log(`⏳ Waiting for map to load...`);
     await new Promise(resolve => setTimeout(resolve, 3000));
 
-    // Debug: Check what's on the page before hiding anything
-    console.log(`🔍 Debugging page content...`);
-    const pageInfo = await page.evaluate(() => {
-      const mapElements = document.querySelectorAll('*');
-      const mapClasses = Array.from(mapElements).map(el => el.className).filter(c => c);
-      const mapIds = Array.from(mapElements).map(el => el.id).filter(id => id);
-      
-      return {
-        totalElements: mapElements.length,
-        mapClasses: mapClasses.slice(0, 20), // First 20 classes
-        mapIds: mapIds.slice(0, 20), // First 20 IDs
-        url: window.location.href,
-        title: document.title
-      };
-    });
-    console.log('📊 Page info:', pageInfo);
-
-    // Hide sidebar panels using GovMap's actual HTML structure
-    console.log(`🎨 Hiding GovMap sidebar panels...`);
-    const debugInfo = await page.evaluate(() => {
-      let hiddenCount = 0;
-      
-      // Method 1: Hide elements with data-scnshotdisplay="hide" attribute (GovMap's own hiding attribute)
-      const dataHideElements = document.querySelectorAll('[data-scnshotdisplay="hide"]');
-      dataHideElements.forEach(element => {
-        element.style.display = 'none';
-        element.style.visibility = 'hidden';
-        hiddenCount++;
-      });
-      
-      // Method 2: Hide panels container
-      const panelsContainers = document.querySelectorAll('[class*="_panelsContainer"]');
-      panelsContainers.forEach(element => {
-        element.style.display = 'none';
-        element.style.visibility = 'hidden';
-        hiddenCount++;
-      });
-      
-      // Method 3: Hide side panels (elements with _isSidePanel class)
-      const sidePanels = document.querySelectorAll('[class*="_isSidePanel"]');
-      sidePanels.forEach(element => {
-        element.style.display = 'none';
-        element.style.visibility = 'hidden';
-        hiddenCount++;
-      });
-      
-      // Method 4: Hide panel IDs (e.g., panel-EntitiesDetails)
-      const panelIds = document.querySelectorAll('[id^="panel-"]');
-      panelIds.forEach(element => {
-        element.style.display = 'none';
-        element.style.visibility = 'hidden';
-        hiddenCount++;
-      });
-      
-      // Method 5: Hide search results containers
-      const searchResultsContainers = document.querySelectorAll('[class*="_searchResultsContainer"]');
-      searchResultsContainers.forEach(element => {
-        element.style.display = 'none';
-        element.style.visibility = 'hidden';
-        hiddenCount++;
-      });
-      
-      // Method 6: Hide entities details containers
-      const entitiesDetailsContainers = document.querySelectorAll('#entities-details-container, [id*="entitiesDetails"], [class*="_entitiesDetailsContainer"]');
-      entitiesDetailsContainers.forEach(element => {
-        element.style.display = 'none';
-        element.style.visibility = 'hidden';
-        hiddenCount++;
-      });
-      
-      console.log(`✅ Hidden ${hiddenCount} GovMap sidebar/panel elements`);
-      
-      // Return debug info
-      return {
-        dataHideCount: dataHideElements.length,
-        panelsContainerCount: panelsContainers.length,
-        sidePanelCount: sidePanels.length,
-        panelIdCount: panelIds.length,
-        searchResultsCount: searchResultsContainers.length,
-        entitiesDetailsCount: entitiesDetailsContainers.length,
-        totalHidden: hiddenCount
-      };
-    });
-    console.log('🔍 Hiding debug info:', debugInfo);
-
-    // Wait a bit more for the UI changes to take effect
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
     // Take screenshot
     console.log(`📸 Capturing screenshot...`);
     const screenshotBuffer = await page.screenshot({
@@ -204,12 +105,39 @@ router.post('/', async (req, res) => {
 
     console.log(`✅ Screenshot captured successfully - ${screenshotBuffer.length} bytes`);
 
-    // Return screenshot as base64
+    // Default response fields
+    let screenshotUrl = null;
+    let savedFilename = null;
+
+    // If sessionId provided, save PNG using the same logic as other file saves
+    if (sessionId) {
+      try {
+        const { ShumaDB } = require('../models/ShumaDB');
+        
+        savedFilename = `gis-screenshot-mode${cropMode}-${Date.now()}.png`;
+        
+        // Use ShumaDB's save method which handles local/Vercel automatically
+        // Convert buffer to base64 for the save function
+        const base64Screenshot = screenshotBuffer.toString('base64');
+        const dataUrl = `data:image/png;base64,${base64Screenshot}`;
+        
+        const fileResult = await ShumaDB._saveBase64ImageToFile(dataUrl, sessionId, savedFilename);
+        screenshotUrl = fileResult.url;
+        
+        console.log(`💾 Screenshot saved: ${screenshotUrl}`);
+      } catch (saveErr) {
+        console.warn('⚠️ Failed to save screenshot:', saveErr.message);
+      }
+    }
+
+    // Return both base64 (for immediate UI) and URL if available (for persistence)
     const base64Screenshot = screenshotBuffer.toString('base64');
 
     return res.json({
       success: true,
       screenshot: base64Screenshot,
+      screenshotUrl,
+      filename: savedFilename,
       cropMode,
       message: 'Screenshot captured successfully'
     });

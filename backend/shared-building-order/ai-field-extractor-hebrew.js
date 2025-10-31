@@ -15,7 +15,7 @@ class SharedBuildingAIExtractor {
       apiKey: apiKey || process.env.ANTHROPIC_API_KEY
     });
     
-    this.model = 'claude-3-5-sonnet-20240620'; // Updated model
+    this.model = 'claude-sonnet-4-20250514'; // Latest Sonnet model 
   }
 
   /**
@@ -171,7 +171,7 @@ ${JSON.stringify(structureData, null, 2)}
 
 החזר רק JSON מובנה.`;
 
-    return await this.callAnthropicAPI(systemPrompt, userPrompt, input, options, 6000);
+    return await this.callAnthropicAPI(systemPrompt, userPrompt, input, options, 4000); // Max 4096 for Opus
   }
 
   /**
@@ -265,7 +265,7 @@ ${JSON.stringify(detailedData, null, 2)}
 
 החזר JSON סופי מושלם.`;
 
-    return await this.callAnthropicAPI(systemPrompt, userPrompt, input, options, 8000);
+    return await this.callAnthropicAPI(systemPrompt, userPrompt, input, options, 4000); // Max 4096 for Opus
   }
 
   /**
@@ -339,6 +339,8 @@ ${JSON.stringify(detailedData, null, 2)}
 
         extractedData = JSON.parse(jsonText);
       } else {
+        // Log the response for debugging
+        console.error('⚠️ No JSON found in response. Response content:', content.substring(0, 500));
         throw new Error('No valid JSON found in response');
       }
     }

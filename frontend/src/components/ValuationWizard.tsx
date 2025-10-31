@@ -101,13 +101,29 @@ export interface ValuationData {
   
   // Extracted data from documents
   extractedData?: {
-    // Legal Status
+    // Legal Status - Land Registry
     registrationOffice?: string
-    gush?: string
-    parcel?: string
+    registration_office?: string // Backend snake_case format
+    gush?: string | number
+    chelka?: string | number
+    subChelka?: string | number
+    sub_chelka?: string | number // Backend snake_case format
     ownershipType?: string
-    attachments?: string
+    ownership_type?: string // Backend snake_case format
+    attachments?: string | Array<{
+      type?: string
+      area?: number
+      color?: string
+      symbol?: string
+      description?: string
+    }>
+    attachmentsArea?: number
+    attachments_area?: number // Backend snake_case format
+    attachmentsDescription?: string
+    attachments_description?: string // Backend snake_case format
     sharedAreas?: string
+    sharedProperty?: string
+    shared_property?: string // Backend snake_case format
     buildingRights?: string
     permittedUse?: string
     
@@ -115,11 +131,148 @@ export interface ValuationData {
     buildingYear?: string
     floor?: string
     builtArea?: string
+    registeredArea?: number
+    apartmentRegisteredArea?: number
+    apartment_registered_area?: number // Backend snake_case format
+    balconyArea?: number
+    balcony_area?: number // Backend snake_case format
     buildingDescription?: string
+    buildingNumber?: string
+    building_number?: string // Backend snake_case format
+    buildingsCount?: number
+    buildings_count?: number // Backend snake_case format
+    unitDescription?: string
+    unit_description?: string // Backend snake_case format
     
     // Property Characteristics
     propertyCondition?: string
     finishLevel?: string
+    
+    // Owners
+    owners?: Array<{
+      name?: string
+      id_number?: string
+      ownership_share?: string
+    }>
+    ownersCount?: number
+    owners_count?: number // Backend snake_case format
+    rights?: string
+    
+    // Mortgages
+    mortgages?: Array<{
+      rank?: string
+      share?: string
+      amount?: number
+      essence?: string
+      lenders?: string
+      borrowers?: string
+      registration_date?: string
+    }>
+    mortgageRank?: string
+    mortgage_rank?: string // Backend snake_case format
+    mortgageAmount?: number
+    mortgage_amount?: number // Backend snake_case format
+    mortgageEssence?: string
+    mortgage_essence?: string // Backend snake_case format
+    mortgageLenders?: string
+    mortgage_lenders?: string // Backend snake_case format
+    mortgageBorrowers?: string
+    mortgage_borrowers?: string // Backend snake_case format
+    mortgagePropertyShare?: string
+    mortgage_property_share?: string // Backend snake_case format
+    
+    // Easements
+    easementsEssence?: string
+    easements_essence?: string // Backend snake_case format
+    easementsDescription?: string
+    easements_description?: string // Backend snake_case format
+    
+    // Notes
+    plotNotes?: string
+    plot_notes?: string // Backend snake_case format
+    notesActionType?: string
+    notes_action_type?: string // Backend snake_case format
+    notesBeneficiary?: string
+    notes_beneficiary?: string // Backend snake_case format
+    
+    // Additional Areas
+    additionalAreas?: Array<{
+      type?: string
+      area?: number
+    }>
+    additional_areas?: Array<{
+      type?: string
+      area?: number
+    }> // Backend snake_case format
+    
+    // Document Info
+    issueDate?: string
+    issue_date?: string // Backend snake_case format
+    tabuExtractDate?: string
+    tabu_extract_date?: string // Backend snake_case format
+    documentType?: string
+    document_type?: string // Backend snake_case format
+    addressFromTabu?: string
+    address_from_tabu?: string // Backend snake_case format
+    
+    // Sub Plots
+    subPlotsCount?: number
+    sub_plots_count?: number // Backend snake_case format
+    
+    // Building Permit
+    permitNumber?: string
+    permit_number?: string // Backend snake_case format
+    permitDate?: string
+    permit_date?: string // Backend snake_case format
+    permittedUsage?: string
+    permitted_usage?: string // Backend snake_case format
+    permitted_description?: string // Backend snake_case format
+    permitIssueDate?: string
+    permit_issue_date?: string // Backend snake_case format
+    localCommitteeName?: string
+    local_committee_name?: string // Backend snake_case format
+    propertyAddress?: string
+    property_address?: string // Backend snake_case format
+    
+    // Shared Building Order
+    orderIssueDate?: string
+    order_issue_date?: string // Backend snake_case format
+    buildingFloors?: string
+    building_floors?: string // Backend snake_case format
+    buildingSubPlotsCount?: string
+    building_sub_plots_count?: string // Backend snake_case format
+    totalSubPlots?: string
+    total_sub_plots?: string // Backend snake_case format
+    buildingAddress?: string
+    building_address?: string // Backend snake_case format
+    allAddresses?: string[]
+    all_addresses?: string[] // Backend snake_case format
+    buildingsInfo?: Array<{
+      building_number?: string
+      address?: string
+      floors?: string
+      sub_plots_count?: string
+    }>
+    city?: string
+    specificSubPlot?: {
+      number?: string
+      floor?: string
+      area?: string
+      description?: string
+      attachments?: string[]
+      shared_property_parts?: string
+    }
+    specific_sub_plot?: {
+      number?: string
+      floor?: string
+      area?: string
+      description?: string
+      attachments?: string[]
+      shared_property_parts?: string
+    } // Backend snake_case format
+    
+    // Confidence
+    confidence?: number
     
     // Image Analysis - Interior
     propertyLayoutDescription?: string
