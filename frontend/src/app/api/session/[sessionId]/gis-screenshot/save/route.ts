@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ShumaDB } from '../../../../../../lib/shumadb'
+import { FileStorageService } from '../../../../../../lib/file-storage'
 
 export async function POST(
   request: NextRequest,
@@ -18,12 +19,25 @@ export async function POST(
     }
 
     console.log('💾 Saving final annotated screenshot to database...')
+    console.log(`📍 Environment: ${FileStorageService.isProduction() ? 'PRODUCTION (Vercel Blob)' : 'DEVELOPMENT (Local FS)'}`)
 
-    // Convert file to base64
+    // Upload file to storage (Blob in Vercel, local filesystem in dev)
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
-    const base64 = buffer.toString('base64')
-    const base64DataUrl = `data:image/png;base64,${base64}`
+    
+    // Generate filename
+    const timestamp = Date.now()
+    const filename = `gis-screenshot-mode${cropMode}-${timestamp}.png`
+    
+    // Upload using FileStorageService (handles Blob in Vercel automatically)
+    const uploadResult = await FileStorageService.uploadFile(
+      buffer,
+      params.sessionId,
+      filename,
+      file.type
+    )
+
+    console.log(`✅ Screenshot uploaded to storage:`, uploadResult)
 
     // Parse annotations and coordinates
     const annotations = annotationsJson ? JSON.parse(annotationsJson) : []
@@ -38,10 +52,11 @@ export async function POST(
     const sessionData = loadResult.valuationData || {}
     const existingScreenshots = sessionData.gisScreenshots || {}
 
-    // Update screenshots with final annotated version (as base64)
+    // Update screenshots with file URL (not base64!)
+    // Blob URL in production, local path in development
     const updatedScreenshots = {
       ...existingScreenshots,
-      [`cropMode${cropMode}`]: base64DataUrl
+      [`cropMode${cropMode}`]: uploadResult.url
     }
 
     // Save to session
