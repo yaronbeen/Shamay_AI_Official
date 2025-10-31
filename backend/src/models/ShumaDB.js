@@ -626,30 +626,34 @@ class ShumaDBEnhanced {
       // Convert base64 to Buffer
       const buffer = Buffer.from(base64String, 'base64')
       
-      // Check if we're in production (Vercel)
-      // Same logic as FileStorageService in frontend
-      const isProduction = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production'
+      // Check if we're in Vercel production
+      // In Vercel, process.env.VERCEL is truthy (typically '1')
+      // ALWAYS try Blob first if we're in Vercel, regardless of token (token might be auto-detected)
+      const isVercel = !!process.env.VERCEL || process.env.VERCEL_ENV === 'production'
       
       console.log('🔍 [SAVE] Environment check:', {
-        isProduction,
-        hasBlobToken: !!process.env.BLOB_READ_WRITE_TOKEN,
+        isVercel,
         VERCEL: process.env.VERCEL,
+        VERCEL_ENV: process.env.VERCEL_ENV,
+        hasBlobToken: !!process.env.BLOB_READ_WRITE_TOKEN,
         NODE_ENV: process.env.NODE_ENV
       })
       
-      // Try Vercel Blob first if in production and token is available
-      if (isProduction && process.env.BLOB_READ_WRITE_TOKEN) {
+      // ALWAYS try Vercel Blob first if in Vercel (primary storage method)
+      if (isVercel) {
         try {
-          console.log('🚀 [SAVE] Attempting Vercel Blob upload...')
+          console.log('🚀 [SAVE] In Vercel - Attempting Blob upload...')
           return await this._saveToVercelBlob(buffer, sessionId, filename)
         } catch (blobError) {
-          console.error('❌ [SAVE] Vercel Blob failed, falling back to local:', blobError.message)
-          // Fall through to local filesystem as fallback
+          console.error('❌ [SAVE] Vercel Blob failed:', blobError.message)
+          // In Vercel, we should NOT fall back to local filesystem
+          // Vercel filesystem is read-only except /tmp, and files won't persist
+          throw new Error(`Failed to save to Vercel Blob: ${blobError.message}. This is required in Vercel production.`)
         }
       }
       
-      // Use local filesystem in development OR as fallback
-      console.log('📁 [SAVE] Using local filesystem...')
+      // Use local filesystem in development ONLY
+      console.log('📁 [SAVE] Using local filesystem (development)...')
       return await this._saveToLocalFilesystem(buffer, sessionId, filename)
     } catch (error) {
       console.error(`❌ Error saving image file:`, error)

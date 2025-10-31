@@ -926,8 +926,8 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots }: GI
       // Use sessionId from props first, then currentMapId, otherwise generate new one
       const mapSessionId = sessionId || currentMapId || `map-${Date.now()}`
 
-      // Upload file to backend
-      const uploadResponse = await fetch(`/api/files/${mapSessionId}/upload`, {
+      // Upload file using frontend route (uses FileStorageService - handles Blob in Vercel)
+      const uploadResponse = await fetch(`/api/session/${mapSessionId}/upload`, {
         method: 'POST',
         body: formData
       })
