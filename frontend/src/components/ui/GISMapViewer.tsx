@@ -6,9 +6,10 @@ interface GISMapViewerProps {
   sessionId?: string
   data?: any
   initialScreenshots?: { cropMode0?: string, cropMode1?: string }
+  onScreenshotsUpdated?: (screenshots: { cropMode0?: string, cropMode1?: string }) => void
 }
 
-export default function GISMapViewer({ sessionId, data, initialScreenshots }: GISMapViewerProps = {}) {
+export default function GISMapViewer({ sessionId, data, initialScreenshots, onScreenshotsUpdated }: GISMapViewerProps = {}) {
   // State - exactly matching HTML logic
   const [addressStreet, setAddressStreet] = useState('')
   const [addressNumber, setAddressNumber] = useState('')
@@ -869,6 +870,59 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots }: GI
     }
   }
 
+  // Delete GIS screenshot from DB and storage
+  const handleDeleteScreenshot = async (cropMode: '0' | '1') => {
+    if (!confirm(`האם אתה בטוח שברצונך למחוק את התמונה ${cropMode === '0' ? 'ללא תצ״א' : 'עם תצ״א'}?`)) {
+      return
+    }
+
+    try {
+      showMessage('מוחק תמונה...', 'info')
+      
+      const actualSessionId = sessionId || currentMapId
+      if (!actualSessionId) {
+        showMessage('שגיאה: לא נמצא session ID', 'error')
+        return
+      }
+
+      // Call delete API
+      const response = await fetch(`/api/session/${actualSessionId}/gis-screenshot/delete?cropMode=${cropMode}`, {
+        method: 'DELETE'
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        // Remove from local state
+        setScreenshots(prev => {
+          const updated = { ...prev }
+          delete updated[`cropMode${cropMode}`]
+          return updated
+        })
+        
+        setScreenshotUrls(prev => {
+          const updated = { ...prev }
+          delete updated[`cropMode${cropMode}`]
+          return updated
+        })
+
+        // Notify parent component
+        if (onScreenshotsUpdated) {
+          const updatedScreenshots = { ...screenshots }
+          delete updatedScreenshots[`cropMode${cropMode}`]
+          onScreenshotsUpdated(updatedScreenshots)
+        }
+
+        showMessage(`תמונה ${cropMode === '0' ? 'ללא תצ״א' : 'עם תצ״א'} נמחקה בהצלחה!`, 'success')
+      } else {
+        showMessage(`שגיאה במחיקת התמונה: ${result.error}`, 'error')
+      }
+    } catch (error: any) {
+      console.error('Delete error:', error)
+      showMessage(`שגיאה במחיקת התמונה: ${error.message}`, 'error')
+    }
+  }
+
   const captureScreenshot = async (cropMode: '0' | '1') => {
     if (!govmapData || !govmapUrl) {
       showMessage('נא לחפש כתובת תחילה', 'error')
@@ -917,6 +971,15 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots }: GI
 
           // Save screenshot path to database immediately
           await saveScreenshotToDB(result.screenshotUrl, cropMode, mapSessionId)
+          
+          // Notify parent component that screenshots were updated
+          if (onScreenshotsUpdated) {
+            const updatedScreenshots = {
+              ...screenshots,
+              [`cropMode${cropMode}`]: result.screenshotUrl
+            }
+            onScreenshotsUpdated(updatedScreenshots)
+          }
         }
         
         showMessage(`צילום מפה ${cropMode === '0' ? 'ללא תצ״א' : 'עם תצ״א'} נשמר בהצלחה!`, 'success')
@@ -982,6 +1045,15 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots }: GI
 
         // Save screenshot path to database immediately
         await saveScreenshotToDB(uploadResult.uploadEntry.url, cropMode, mapSessionId)
+
+        // Notify parent component that screenshots were updated
+        if (onScreenshotsUpdated) {
+          const updatedScreenshots = {
+            ...screenshots,
+            [`cropMode${cropMode}`]: uploadResult.uploadEntry.url
+          }
+          onScreenshotsUpdated(updatedScreenshots)
+        }
 
         showMessage(`תמונה ${cropMode === '0' ? 'ללא תצ״א' : 'עם תצ״א'} הועלתה ונשמרה בהצלחה!`, 'success')
         } else {
@@ -1159,15 +1231,29 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots }: GI
           {(screenshots.cropMode0 || screenshots.cropMode1) && (
                   <div className="mt-3 space-y-2">
                 {screenshots.cropMode0 && (
-                      <div className="bg-gray-50 p-2 rounded border border-gray-300">
+                      <div className="bg-gray-50 p-2 rounded border border-gray-300 relative group">
                         <div className="text-xs font-medium text-gray-700 mb-1">מפה ללא תצ״א:</div>
                         <img src={screenshots.cropMode0} alt="Screenshot without תצ״א" className="w-full rounded border border-gray-300 max-h-32 object-contain" />
+                        <button
+                          onClick={() => handleDeleteScreenshot('0')}
+                          className="absolute top-1 left-1 bg-red-500 text-white p-1 rounded hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity text-xs"
+                          title="מחק תמונה"
+                        >
+                          🗑️
+                        </button>
                   </div>
                 )}
                 {screenshots.cropMode1 && (
-                      <div className="bg-gray-50 p-2 rounded border border-gray-300">
+                      <div className="bg-gray-50 p-2 rounded border border-gray-300 relative group">
                         <div className="text-xs font-medium text-gray-700 mb-1">מפה עם תצ״א:</div>
                         <img src={screenshots.cropMode1} alt="Screenshot with תצ״א" className="w-full rounded border border-gray-300 max-h-32 object-contain" />
+                        <button
+                          onClick={() => handleDeleteScreenshot('1')}
+                          className="absolute top-1 left-1 bg-red-500 text-white p-1 rounded hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity text-xs"
+                          title="מחק תמונה"
+                        >
+                          🗑️
+                        </button>
                   </div>
                 )}
             </div>

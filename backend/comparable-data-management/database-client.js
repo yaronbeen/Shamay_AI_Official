@@ -380,13 +380,31 @@ class ComparableDataDatabaseClient {
     
     try {
       // CRITICAL: Filter by organization_id and user_id for data isolation
-      const query = `
-        SELECT * FROM comparable_data 
-        WHERE id = $1 
-          AND (organization_id = $2 OR (organization_id IS NULL AND $2 IS NULL))
-          AND (user_id = $3 OR (user_id IS NULL AND $3 IS NULL))
-      `;
-      const result = await this.client.query(query, [id, this.organizationId, this.userId]);
+      // Show records that match the user's organization OR default-org (shared data)
+      let query = `SELECT * FROM comparable_data WHERE id = $1`;
+      const params = [id];
+      let paramIndex = 2;
+      
+      if (this.organizationId) {
+        // Show user's organization records OR default-org records (shared across all organizations)
+        query += ` AND (organization_id = $${paramIndex} OR organization_id = 'default-org')`;
+        params.push(this.organizationId);
+        paramIndex++;
+      } else {
+        // If no organization ID provided, show default-org records and NULL organization_id (legacy/unassigned data)
+        query += ` AND (organization_id = 'default-org' OR organization_id IS NULL)`;
+      }
+      
+      if (this.userId) {
+        // Show user's records OR shared records (user_id IS NULL or 'system') within the organization
+        query += ` AND (user_id = $${paramIndex} OR user_id IS NULL OR user_id = 'system')`;
+        params.push(this.userId);
+      } else {
+        // If no userId, show shared records (user_id IS NULL or 'system') for the organization
+        query += ` AND (user_id IS NULL OR user_id = 'system')`;
+      }
+      
+      const result = await this.client.query(query, params);
       
       return result.rows[0];
     } finally {
@@ -456,16 +474,26 @@ class ComparableDataDatabaseClient {
       }
 
       // CRITICAL: Add organization_id and user_id filters for data isolation
+      // Show records that match the user's organization OR default-org (shared data)
       if (this.organizationId) {
-        whereClauses.push(`(organization_id = $${paramIndex} OR (organization_id IS NULL AND $${paramIndex} IS NULL))`);
+        // Show user's organization records OR default-org records (shared across all organizations)
+        whereClauses.push(`(organization_id = $${paramIndex} OR organization_id = 'default-org')`);
         values.push(this.organizationId);
         paramIndex++;
+      } else {
+        // If no organization ID provided, show default-org records and NULL organization_id (legacy/unassigned data)
+        whereClauses.push(`(organization_id = 'default-org' OR organization_id IS NULL)`);
       }
       
+      // For user_id: Show user's records OR shared records (user_id IS NULL or 'system') within the organization
       if (this.userId) {
-        whereClauses.push(`(user_id = $${paramIndex} OR (user_id IS NULL AND $${paramIndex} IS NULL))`);
+        // Show user's records OR shared records (user_id IS NULL or 'system') within the organization
+        whereClauses.push(`(user_id = $${paramIndex} OR user_id IS NULL OR user_id = 'system')`);
         values.push(this.userId);
         paramIndex++;
+      } else {
+        // If no userId, show shared records (user_id IS NULL or 'system') for the organization
+        whereClauses.push(`(user_id IS NULL OR user_id = 'system')`);
       }
       
       // Build WHERE clause (table doesn't have status/is_valid columns)

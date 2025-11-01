@@ -962,8 +962,24 @@ class ShumaDBEnhanced {
           // Fallback: continue without file URL (save will continue with URL as null)
         }
         
-        // Try to update existing record first
+        // CRITICAL FIX: Check if image URL already exists for this session/image_type
+        // This prevents overwriting existing images when saving the same screenshot multiple times
         const imageType = this._truncateString(img.type || 'gis_screenshot', 50)
+        const existingCheck = await client.query(`
+          SELECT id, image_url FROM images 
+          WHERE session_id = $1 AND image_type = $2
+          LIMIT 1
+        `, [sessionId, imageType])
+        
+        // If image exists and URL is the same, skip update to prevent deletion/overwrite
+        if (existingCheck.rows.length > 0 && existingCheck.rows[0].image_url === imageUrl) {
+          console.log(`⏭️ Image already exists with same URL, skipping update: ${img.filename}`)
+          await client.query(`RELEASE SAVEPOINT ${savepointName}`)
+          continue
+        }
+        
+        // If existing record has a different URL, we'll update it (old file will remain in storage)
+        // In production, you might want to delete the old file, but that's handled separately
         const metadataJson = JSON.stringify({
           filename: img.filename,
           mapType: img.mapType,
@@ -978,7 +994,8 @@ class ShumaDBEnhanced {
           SET 
             image_data = NULL,
             image_url = $1,
-            metadata = $2
+            metadata = $2,
+            updated_at = CURRENT_TIMESTAMP
           WHERE session_id = $3 AND image_type = $4
         `, [
           imageUrl,
