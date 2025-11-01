@@ -184,6 +184,10 @@ export default function ComparableDataViewer({
   const [cellEditValues, setCellEditValues] = useState<Record<number, Record<string, any>>>({})
   // Track hidden columns (Hebrew headers that are hidden)
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set())
+  // Filter state for table data
+  const [filterCity, setFilterCity] = useState<string>('')
+  const [filterRooms, setFilterRooms] = useState<string>('')
+  const [filterConstructionYear, setFilterConstructionYear] = useState<string>('')
 
   // CRITICAL: Load persisted data on mount - shows data immediately
   useEffect(() => {
@@ -382,20 +386,32 @@ export default function ComparableDataViewer({
 
   // Toggle row selection
   const toggleSelection = (id: number) => {
+    // CRITICAL: Ensure ID is always a number for Set comparison
+    const numericId = typeof id === 'string' ? parseInt(String(id), 10) : id
+    
     setSelectedIds(prev => {
       const newSet = new Set(prev)
-      if (newSet.has(id)) {
-        newSet.delete(id)
+      if (newSet.has(numericId)) {
+        newSet.delete(numericId)
       } else {
-        newSet.add(id)
+        newSet.add(numericId)
       }
+      console.log('🔍 Toggled selection:', { id, numericId, newSet: Array.from(newSet) })
       return newSet
     })
   }
 
   // Select/Deselect all
   const selectAll = () => {
-    setSelectedIds(new Set(allData.filter(d => d.id).map(d => d.id!)))
+    // CRITICAL: Ensure all IDs are numbers for Set comparison
+    const allIds = allData
+      .filter(d => d.id)
+      .map(d => {
+        const id = d.id!
+        return typeof id === 'string' ? parseInt(id, 10) : id
+      })
+    setSelectedIds(new Set(allIds))
+    console.log('🔍 Selected all:', allIds)
   }
 
   const deselectAll = () => {
@@ -417,27 +433,74 @@ export default function ComparableDataViewer({
   const analyzeSelectedData = () => {
     setAnalysisResult(null)
     
-    const selectedData = allData.filter(d => d.id && selectedIds.has(d.id))
+    // CRITICAL: Debug selection state
+    console.log('🔍 Analyzing selected data:')
+    console.log('  selectedIds:', Array.from(selectedIds))
+    console.log('  selectedIds type:', Array.from(selectedIds).map(id => typeof id))
+    console.log('  allData length:', allData.length)
+    console.log('  allData IDs:', allData.map(d => ({ id: d.id, idType: typeof d.id })))
+    
+    // CRITICAL: Filter selected data, ensuring ID comparison works correctly
+    // Handle both number and string IDs (convert to number for Set comparison)
+    const selectedData = allData.filter(d => {
+      if (!d.id) return false
+      // Ensure ID is a number for Set.has() comparison
+      const recordId = typeof d.id === 'string' ? parseInt(d.id, 10) : d.id
+      const isSelected = selectedIds.has(recordId) || selectedIds.has(d.id as any)
+      return isSelected
+    })
+    
+    console.log('  selectedData length:', selectedData.length)
+    console.log('  selectedData:', selectedData)
     
     if (selectedData.length === 0) {
       setUploadError('נא לבחור לפחות רשומה אחת לניתוח')
+      console.error('❌ No data selected! selectedIds:', selectedIds, 'allData IDs:', allData.map(d => d.id))
       return
     }
 
     console.log('📊 Selected data for analysis:', selectedData)
     console.log('📊 Sample row:', selectedData[0])
 
-    // Extract prices
+    // CRITICAL: Extract prices and convert strings to numbers
+    // Backend returns: declared_price as price, price_per_sqm_rounded as price_per_sqm
     const prices = selectedData
-      .map(d => d.price)
-      .filter((p): p is number => p !== null && p !== undefined && p > 0)
+      .map(d => {
+        // Try multiple field names for price (total price)
+        const priceValue = (d as any).price || (d as any).declared_price
+        if (priceValue === null || priceValue === undefined || priceValue === '') {
+          return null
+        }
+        // Convert string to number if needed
+        if (typeof priceValue === 'string') {
+          const parsed = parseFloat(priceValue)
+          return isNaN(parsed) ? null : parsed
+        }
+        return typeof priceValue === 'number' ? priceValue : null
+      })
+      .filter((p): p is number => p !== null && p > 0)
 
     console.log('📊 Extracted prices:', prices)
 
-    // Extract prices per sqm
+    // CRITICAL: Extract prices per sqm - try multiple field names
+    // Backend returns: price_per_sqm_rounded as price_per_sqm
     const pricesPerSqm = selectedData
-      .map(d => d.verified_price_per_sqm)
-      .filter((p): p is number => p !== null && p !== undefined && p > 0)
+      .map(d => {
+        // Try multiple field names for price per sqm
+        const sqmPrice = (d as any).price_per_sqm || 
+                        (d as any).price_per_sqm_rounded || 
+                        (d as any).verified_price_per_sqm
+        if (sqmPrice === null || sqmPrice === undefined || sqmPrice === '') {
+          return null
+        }
+        // Convert string to number if needed
+        if (typeof sqmPrice === 'string') {
+          const parsed = parseFloat(sqmPrice)
+          return isNaN(parsed) ? null : parsed
+        }
+        return typeof sqmPrice === 'number' ? sqmPrice : null
+      })
+      .filter((p): p is number => p !== null && p > 0)
 
     console.log('📊 Extracted pricesPerSqm:', pricesPerSqm)
 
@@ -476,14 +539,34 @@ export default function ComparableDataViewer({
       console.log('✅ Saved comparable analysis to sessionStorage (including headers)')
       
       // Also save to database
+      // CRITICAL: Backend expects propertyData (the property being evaluated), not comparableData
+      // The backend will search for comparables based on propertyData criteria
       fetch('/api/comparable-data/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          propertyData: { area: data.area },
-          sessionId
+        body: JSON.stringify({
+          propertyData: {
+            city: (data as any).city || '',
+            rooms: (data as any).rooms ? parseFloat(String((data as any).rooms)) : null,
+            area: (data as any).area ? parseFloat(String((data as any).area)) : null,
+            // Include other property fields if available
+            address: (data as any).address || '',
+            neighborhood: (data as any).neighborhood || ''
+          },
+          sessionId: sessionId || null
+          // Note: Backend will search for comparables, we don't send selectedData
+          // The selected data is used for local analysis only
         })
-      }).catch(err => console.error('Failed to save analysis:', err))
+      }).then(response => response.json())
+        .then(result => {
+          console.log('✅ Comparable data analysis saved to database:', result)
+          // Note: Backend analysis might differ from local analysis
+          // We use local analysis (analysis variable) for display
+        })
+        .catch(error => {
+          console.error('❌ Failed to save analysis to database:', error)
+          // Don't fail the whole process if backend save fails
+        })
     }
 
     if (onAnalysisComplete) {
@@ -754,9 +837,125 @@ export default function ComparableDataViewer({
       {/* Data Table with Selection */}
       {allData.length > 0 && (
         <div className="mb-6">
+          {/* Filter Controls */}
+          <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                  עיר:
+                </label>
+                <select
+                  value={filterCity}
+                  onChange={(e) => setFilterCity(e.target.value)}
+                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[150px]"
+                >
+                  <option value="">הכל</option>
+                  {Array.from(new Set(allData.map(d => (d as any).city).filter(Boolean))).sort().map((city) => (
+                    <option key={city} value={city}>{city}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                  חדרים:
+                </label>
+                <select
+                  value={filterRooms}
+                  onChange={(e) => setFilterRooms(e.target.value)}
+                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[120px]"
+                >
+                  <option value="">הכל</option>
+                  {Array.from(new Set(
+                    allData
+                      .map(d => {
+                        const rooms = (d as any).rooms
+                        if (!rooms) return null
+                        // Convert to number and round for display
+                        const numRooms = typeof rooms === 'string' ? parseFloat(rooms) : rooms
+                        return isNaN(numRooms) ? null : Math.round(numRooms).toString()
+                      })
+                      .filter(Boolean)
+                  )).sort((a, b) => parseFloat(a || '0') - parseFloat(b || '0')).map((rooms) => (
+                    <option key={rooms || ''} value={rooms || ''}>{rooms}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                  שנת בניה:
+                </label>
+                <select
+                  value={filterConstructionYear}
+                  onChange={(e) => setFilterConstructionYear(e.target.value)}
+                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[120px]"
+                >
+                  <option value="">הכל</option>
+                  {Array.from(new Set(
+                    allData
+                      .map(d => {
+                        const year = (d as any).construction_year || (d as any).building_year
+                        if (!year) return null
+                        // Convert to number for display
+                        const numYear = typeof year === 'string' ? parseInt(year, 10) : year
+                        return isNaN(numYear) ? null : numYear.toString()
+                      })
+                      .filter(Boolean)
+                  )).sort((a, b) => parseInt(b || '0', 10) - parseInt(a || '0', 10)).map((year) => (
+                    <option key={year || ''} value={year || ''}>{year}</option>
+                  ))}
+                </select>
+              </div>
+              {(filterCity || filterRooms || filterConstructionYear) && (
+                <button
+                  onClick={() => {
+                    setFilterCity('')
+                    setFilterRooms('')
+                    setFilterConstructionYear('')
+                  }}
+                  className="text-xs px-3 py-1.5 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 flex items-center gap-1"
+                  title="נקה מסננים"
+                >
+                  <X className="w-3 h-3" />
+                  נקה מסננים
+                </button>
+              )}
+            </div>
+          </div>
+
           <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
             <h4 className="font-semibold text-gray-900">
-              כל הנתונים ({allData.length} רשומות)
+              {(() => {
+                const filteredData = allData.filter((record) => {
+                  // City filter
+                  if (filterCity) {
+                    const recordCity = (record as any).city
+                    if (!recordCity || String(recordCity).toLowerCase() !== filterCity.toLowerCase()) {
+                      return false
+                    }
+                  }
+                  // Rooms filter
+                  if (filterRooms) {
+                    const recordRooms = (record as any).rooms
+                    if (!recordRooms) return false
+                    const numRooms = typeof recordRooms === 'string' ? parseFloat(recordRooms) : recordRooms
+                    const roundedRooms = Math.round(numRooms).toString()
+                    if (roundedRooms !== filterRooms) {
+                      return false
+                    }
+                  }
+                  // Construction year filter
+                  if (filterConstructionYear) {
+                    const recordYear = (record as any).construction_year || (record as any).building_year
+                    if (!recordYear) return false
+                    const numYear = typeof recordYear === 'string' ? parseInt(recordYear, 10) : recordYear
+                    if (numYear.toString() !== filterConstructionYear) {
+                      return false
+                    }
+                  }
+                  return true
+                })
+                return `כל הנתונים (${filteredData.length} מתוך ${allData.length} רשומות)`
+              })()}
             </h4>
             <div className="flex gap-2 flex-wrap">
               <button
@@ -795,9 +994,9 @@ export default function ComparableDataViewer({
           <div className="border rounded-lg overflow-hidden">
             <div className="max-h-96 overflow-y-auto">
               <table className="w-full text-sm">
-                <thead className="bg-gray-100 sticky top-0">
-                  <tr className="text-right">
-                    <th className="p-2 w-20">
+                <thead className="bg-gray-100 sticky top-0 z-10 shadow-sm">
+                  <tr className="text-right border-b border-gray-300">
+                    <th className="p-2 w-20 bg-gray-100">
                       <div className="flex items-center justify-center gap-2">
                         <span className="text-xs">בחירה</span>
                       </div>
@@ -807,7 +1006,7 @@ export default function ComparableDataViewer({
                       csvHeaders
                         .filter(header => !hiddenColumns.has(header)) // Filter out hidden columns
                         .map((header) => (
-                          <th key={header} className="p-2 relative group" title={header}>
+                          <th key={header} className="p-2 relative group bg-gray-100" title={header}>
                             <div className="flex items-center justify-between gap-2">
                               <span className="flex-1">{header}</span>
                               <button
@@ -823,18 +1022,47 @@ export default function ComparableDataViewer({
                     ) : (
                       // Fallback to default headers if no CSV headers loaded yet
                       <>
-                        <th className="p-2">כתובת</th>
-                        <th className="p-2">חדרים</th>
-                        <th className="p-2">שטח (מ"ר)</th>
-                        <th className="p-2">קומה</th>
-                        <th className="p-2">מחיר</th>
-                        <th className="p-2">מחיר למ"ר</th>
+                        <th className="p-2 bg-gray-100">כתובת</th>
+                        <th className="p-2 bg-gray-100">חדרים</th>
+                        <th className="p-2 bg-gray-100">שטח (מ"ר)</th>
+                        <th className="p-2 bg-gray-100">קומה</th>
+                        <th className="p-2 bg-gray-100">מחיר</th>
+                        <th className="p-2 bg-gray-100">מחיר למ"ר</th>
                       </>
                     )}
                   </tr>
                 </thead>
                 <tbody>
-                  {allData.map((record) => {
+                  {allData.filter((record) => {
+                    // Apply filters
+                    // City filter
+                    if (filterCity) {
+                      const recordCity = (record as any).city
+                      if (!recordCity || String(recordCity).toLowerCase() !== filterCity.toLowerCase()) {
+                        return false
+                      }
+                    }
+                    // Rooms filter
+                    if (filterRooms) {
+                      const recordRooms = (record as any).rooms
+                      if (!recordRooms) return false
+                      const numRooms = typeof recordRooms === 'string' ? parseFloat(recordRooms) : recordRooms
+                      const roundedRooms = Math.round(numRooms).toString()
+                      if (roundedRooms !== filterRooms) {
+                        return false
+                      }
+                    }
+                    // Construction year filter
+                    if (filterConstructionYear) {
+                      const recordYear = (record as any).construction_year || (record as any).building_year
+                      if (!recordYear) return false
+                      const numYear = typeof recordYear === 'string' ? parseInt(recordYear, 10) : recordYear
+                      if (numYear.toString() !== filterConstructionYear) {
+                        return false
+                      }
+                    }
+                    return true
+                  }).map((record) => {
                     if (!record.id) return null
                     const isSelected = selectedIds.has(record.id)
                     return (
@@ -881,10 +1109,50 @@ export default function ComparableDataViewer({
                             const fieldName = headerToFieldMap.get(hebrewHeader) || hebrewHeader
                             const isEditing = editingCell?.recordId === record.id && editingCell?.fieldName === fieldName
                             const editValue = cellEditValues[record.id!]?.[fieldName]
-                            const displayValue = editValue !== undefined ? editValue : (record as any)[fieldName]
+                            
+                            // CRITICAL: Try multiple field name variations to access the data
+                            // Backend returns: declared_price as price, price_per_sqm_rounded as price_per_sqm
+                            // But also check for original field names in case mapping is different
+                            let displayValue = editValue
+                            if (displayValue === undefined) {
+                              // Try the mapped field name first
+                              displayValue = (record as any)[fieldName]
+                              
+                              // If not found, try alternative field names based on Hebrew header
+                              if (displayValue === undefined || displayValue === null) {
+                                // For price fields, try common variations
+                                if (hebrewHeader.includes('מחיר')) {
+                                  if (hebrewHeader.includes('למ') || hebrewHeader.includes('למ"ר')) {
+                                    // Price per sqm - try multiple variations
+                                    displayValue = (record as any).price_per_sqm || 
+                                                  (record as any).price_per_sqm_rounded ||
+                                                  (record as any).verified_price_per_sqm ||
+                                                  (record as any)['price_per_sqm'] ||
+                                                  (record as any)['price_per_sqm_rounded']
+                                  } else {
+                                    // Total price - try multiple variations
+                                    displayValue = (record as any).price || 
+                                                  (record as any).declared_price ||
+                                                  (record as any)['price'] ||
+                                                  (record as any)['declared_price']
+                                  }
+                                }
+                              }
+                            }
                             
                             // Format price fields if detected (check both Hebrew and English)
                             if (hebrewHeader.toLowerCase().includes('מחיר') || fieldName.toLowerCase().includes('price')) {
+                              // CRITICAL: Convert string prices to numbers for formatPrice
+                              let priceValue: number | null = null
+                              if (displayValue !== null && displayValue !== undefined && displayValue !== '') {
+                                if (typeof displayValue === 'string') {
+                                  const parsed = parseFloat(displayValue)
+                                  priceValue = isNaN(parsed) ? null : parsed
+                                } else if (typeof displayValue === 'number') {
+                                  priceValue = displayValue
+                                }
+                              }
+                              
                               if (isEditing) {
                                 return (
                                   <td key={hebrewHeader} className="p-1" onClick={(e) => e.stopPropagation()}>
@@ -939,7 +1207,7 @@ export default function ComparableDataViewer({
                                   title="לחץ כפול לעריכה"
                                 >
                                   <div className="flex items-center gap-1">
-                                    <span>{formatPrice(typeof displayValue === 'number' ? displayValue : null)}</span>
+                                    <span>{formatPrice(priceValue)}</span>
                                     <Edit2 className="w-3 h-3 opacity-0 group-hover:opacity-50 text-gray-400" />
                                   </div>
                                 </td>
