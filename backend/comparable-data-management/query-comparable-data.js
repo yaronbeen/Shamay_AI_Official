@@ -18,55 +18,82 @@ let ClientClass = null;
 async function getClientClass() {
   if (ClientClass) return ClientClass;
   
-  try {
-    // Try Neon serverless first (for Vercel)
-    if (process.env.VERCEL || process.env.DATABASE_URL) {
+  // CRITICAL: In Vercel, only use Neon - never try to import pg
+  // pg is not available in Vercel serverless environment
+  const isVercel = process.env.VERCEL || process.env.VERCEL_ENV === 'production';
+  
+  if (isVercel) {
+    // Vercel: Only use Neon, don't try pg at all
+    try {
       const neon = await import('@neondatabase/serverless');
       ClientClass = neon.Client;
-      console.log('✅ Using @neondatabase/serverless for comparable data');
-    } else {
-      // Use standard pg for local development
-      const pg = await import('pg');
-      ClientClass = pg.Client;
-      console.log('✅ Using pg for comparable data (local development)');
+      console.log('✅ Using @neondatabase/serverless for comparable data (Vercel)');
+      return ClientClass;
+    } catch (e) {
+      console.error('❌ Failed to import @neondatabase/serverless in Vercel:', e.message);
+      throw new Error('Cannot use pg in Vercel. @neondatabase/serverless must be available.');
     }
-  } catch (e) {
-    // Fallback to pg if Neon not available
-    const pg = await import('pg');
-    ClientClass = pg.Client;
-    console.log('✅ Using pg for comparable data (fallback)');
+  } else {
+    // Local development: Try Neon first, fallback to pg
+    try {
+      const neon = await import('@neondatabase/serverless');
+      ClientClass = neon.Client;
+      console.log('✅ Using @neondatabase/serverless for comparable data (local)');
+      return ClientClass;
+    } catch (neonError) {
+      // Fallback to pg only in local development
+      try {
+        const pg = await import('pg');
+        ClientClass = pg.Client;
+        console.log('✅ Using pg for comparable data (local fallback)');
+        return ClientClass;
+      } catch (pgError) {
+        console.error('❌ Failed to import both Neon and pg:', pgError.message);
+        throw new Error('Cannot import database client. Need either @neondatabase/serverless or pg.');
+      }
+    }
   }
-  
-  return ClientClass;
 }
 
 async function createDatabaseClient(organizationId, userId) {
   const Client = await getClientClass();
   
-  const isLocal = process.env.DB_HOST === 'localhost' || !process.env.DB_HOST || process.env.DB_HOST?.includes('127.0.0.1');
-  const useNeon = process.env.VERCEL || process.env.DATABASE_URL;
+  // CRITICAL: In Vercel, MUST use DATABASE_URL - never fallback to individual env vars
+  const isVercel = process.env.VERCEL || process.env.VERCEL_ENV === 'production';
   
   let client;
   
-  // Use DATABASE_URL if available (Vercel/Neon), otherwise use individual env vars
-  if (useNeon && process.env.DATABASE_URL) {
+  if (isVercel) {
+    // Vercel: Must use DATABASE_URL - no fallback
+    if (!process.env.DATABASE_URL) {
+      throw new Error('DATABASE_URL is required in Vercel environment');
+    }
     client = new Client({
       connectionString: process.env.DATABASE_URL,
       ssl: { rejectUnauthorized: false }
     });
   } else {
-    client = new Client({
-      host: process.env.DB_HOST || 'localhost',
-      port: process.env.DB_PORT || 5432,
-      database: process.env.DB_NAME || 'shamay_land_registry',
-      user: process.env.DB_USER || 'postgres',
-      password: process.env.DB_PASSWORD || 'postgres123',
-      // Add SSL configuration for remote databases
-      ssl: isLocal ? false : {
-        rejectUnauthorized: false,
-        require: true
-      }
-    });
+    // Local development: Use DATABASE_URL if available, otherwise use individual env vars
+    if (process.env.DATABASE_URL) {
+      client = new Client({
+        connectionString: process.env.DATABASE_URL,
+        ssl: { rejectUnauthorized: false }
+      });
+    } else {
+      const isLocal = process.env.DB_HOST === 'localhost' || !process.env.DB_HOST || process.env.DB_HOST?.includes('127.0.0.1');
+      client = new Client({
+        host: process.env.DB_HOST || 'localhost',
+        port: process.env.DB_PORT || 5432,
+        database: process.env.DB_NAME || 'shamay_land_registry',
+        user: process.env.DB_USER || 'postgres',
+        password: process.env.DB_PASSWORD || 'postgres123',
+        // Add SSL configuration for remote databases
+        ssl: isLocal ? false : {
+          rejectUnauthorized: false,
+          require: true
+        }
+      });
+    }
   }
   
   await client.connect();
@@ -195,8 +222,15 @@ async function queryComparableData() {
     console.log('✅ Query successful:', result.rows.length, 'records found');
     
     // Close database connection
-    await client.end();
-    console.log('🔌 Disconnected from database');
+    // CRITICAL: Neon serverless Client doesn't have .end() - connections are managed automatically
+    // Only call .end() if it exists (for pg Client in local dev)
+    if (typeof client.end === 'function') {
+      await client.end();
+      console.log('🔌 Disconnected from database');
+    } else {
+      // Neon serverless manages connections automatically - no need to close
+      console.log('✅ Neon connection managed automatically');
+    }
     
     // Return results in JSON format
     console.log(JSON.stringify({
@@ -215,7 +249,8 @@ async function queryComparableData() {
     console.error('❌ Backend query error:', error);
     
     // Close database connection if it exists
-    if (client) {
+    // CRITICAL: Neon serverless Client doesn't have .end() - connections are managed automatically
+    if (client && typeof client.end === 'function') {
       try {
         await client.end();
       } catch (e) {
