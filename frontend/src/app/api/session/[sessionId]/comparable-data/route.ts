@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { spawn } from 'child_process'
 import { join } from 'path'
 import { existsSync } from 'fs'
+import { readFileSync } from 'fs'
 
 export async function GET(
   request: NextRequest,
@@ -79,11 +80,43 @@ export async function GET(
       // This ensures relative requires (like './database-client.js') work correctly
       const scriptDir = join(backendScript, '..')
       
+      // CRITICAL: Set NODE_PATH to include both frontend and backend node_modules
+      // This ensures @neondatabase/serverless can be found in Vercel
+      const isVercel = process.env.VERCEL || process.env.VERCEL_ENV === 'production'
+      const nodePaths = []
+      
+      if (isVercel) {
+        // In Vercel, node_modules might be at different locations
+        // Try frontend/node_modules, backend/node_modules, and /var/task/node_modules
+        const possibleNodeModules = [
+          '/var/task/frontend/node_modules',
+          '/var/task/backend/node_modules',
+          '/var/task/node_modules',
+          join(process.cwd(), 'node_modules'),
+          join(process.cwd(), 'backend', 'node_modules')
+        ].filter(Boolean)
+        
+        nodePaths.push(...possibleNodeModules)
+      } else {
+        // Local development: use relative paths
+        nodePaths.push(
+          join(process.cwd(), 'node_modules'),
+          join(process.cwd(), 'backend', 'node_modules'),
+          join(process.cwd(), 'frontend', 'node_modules')
+        )
+      }
+      
+      const existingNodePath = process.env.NODE_PATH || ''
+      const finalNodePath = existingNodePath 
+        ? `${existingNodePath}:${nodePaths.join(':')}`
+        : nodePaths.join(':')
+      
       const child = spawn('node', [backendScript], {
         stdio: ['pipe', 'pipe', 'pipe'],
         cwd: scriptDir, // Set cwd to script directory for relative requires
         env: {
           ...process.env,
+          NODE_PATH: finalNodePath, // CRITICAL: Set NODE_PATH for module resolution
           QUERY_CITY: city || '',
           QUERY_NEIGHBORHOOD: '', // Not used in current backend
           QUERY_ROOMS: rooms || '',
@@ -220,10 +253,44 @@ addComparableData();
     const tempScript = join(process.cwd(), 'temp-add-data.js');
     fs.writeFileSync(tempScript, addDataScript);
     
+    // CRITICAL: Set NODE_PATH to include both frontend and backend node_modules
+    // This ensures @neondatabase/serverless can be found in Vercel
+    const isVercel = process.env.VERCEL || process.env.VERCEL_ENV === 'production'
+    const nodePaths = []
+    
+    if (isVercel) {
+      // In Vercel, node_modules might be at different locations
+      const possibleNodeModules = [
+        '/var/task/frontend/node_modules',
+        '/var/task/backend/node_modules',
+        '/var/task/node_modules',
+        join(process.cwd(), 'node_modules'),
+        join(process.cwd(), 'backend', 'node_modules')
+      ].filter(Boolean)
+      
+      nodePaths.push(...possibleNodeModules)
+    } else {
+      // Local development: use relative paths
+      nodePaths.push(
+        join(process.cwd(), 'node_modules'),
+        join(process.cwd(), 'backend', 'node_modules'),
+        join(process.cwd(), 'frontend', 'node_modules')
+      )
+    }
+    
+    const existingNodePath = process.env.NODE_PATH || ''
+    const finalNodePath = existingNodePath 
+      ? `${existingNodePath}:${nodePaths.join(':')}`
+      : nodePaths.join(':')
+    
     const result = await new Promise((resolve, reject) => {
       const child = spawn('node', [tempScript], {
         stdio: ['pipe', 'pipe', 'pipe'],
-        cwd: join(process.cwd(), 'backend', 'comparable-data-management')
+        cwd: join(process.cwd(), 'backend', 'comparable-data-management'),
+        env: {
+          ...process.env,
+          NODE_PATH: finalNodePath // CRITICAL: Set NODE_PATH for module resolution
+        }
       })
 
       let output = ''
