@@ -54,12 +54,48 @@ router.post('/import', upload.single('csvFile'), async (req, res) => {
     }
 
     const module = await loadModule();
-    const userId = req.body.userId || 'system';
+    // CRITICAL: Ensure userId and organizationId are strings, not arrays
+    // Multer can return arrays if the field is sent multiple times
+    let userId = req.body.userId || 'system';
+    let organizationId = req.body.organizationId || 'default-org';
+    
+    // Handle case where multer returns array (if field sent multiple times)
+    if (Array.isArray(userId)) {
+      userId = userId[0] || 'system';
+    }
+    if (Array.isArray(organizationId)) {
+      organizationId = organizationId[0] || 'default-org';
+    }
+    
+    // Ensure strings
+    userId = String(userId).trim();
+    organizationId = String(organizationId).trim();
     const csvFilePath = req.file.path;
     
     console.log(`📊 Importing CSV: ${req.file.originalname}`);
+    console.log(`📊 Organization/User:`, { organizationId, userId });
     
-    const result = await module.importComparableDataCSV(csvFilePath, userId);
+    // Parse CSV first
+    const csvData = await module.parseCSVFile(csvFilePath);
+    console.log(`✅ Parsed ${csvData.length} rows from CSV`);
+    
+    // Create database client with organization and user IDs
+    const { ComparableDataDatabaseClient } = await import('../../comparable-data-management/database-client.js');
+    const db = new ComparableDataDatabaseClient(organizationId, userId);
+    await db.connect();
+    
+    // Import with organization and user IDs
+    const results = await db.bulkInsertComparableData(csvData, req.file.originalname, userId, organizationId);
+    await db.disconnect();
+    
+    const result = {
+      success: true,
+      filename: req.file.originalname,
+      totalRows: csvData.length,
+      successful: results.successful.length,
+      failed: results.failed.length,
+      results: results
+    };
     
     // Clean up uploaded file after import
     try {

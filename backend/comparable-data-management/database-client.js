@@ -1,6 +1,9 @@
 const dotenv = require('dotenv');
 dotenv.config();
 
+// Import header mapping utility for supporting both Hebrew and English CSV headers
+const headerMapping = require('./header-mapping.js');
+
 // Lazy-load database client based on environment
 let ClientClass = null;
 
@@ -212,8 +215,21 @@ class ComparableDataDatabaseClient {
    */
   async bulkInsertComparableData(csvRows, csvFilename, userId = 'system', organizationId = null) {
     // Store organizationId and userId for use in inserts
-    this.organizationId = organizationId || this.organizationId
-    this.userId = userId || this.userId
+    // CRITICAL: Ensure these are strings, not arrays or objects
+    this.organizationId = (organizationId || this.organizationId || 'default-org')
+    this.userId = (userId || this.userId || 'system')
+    
+    // Ensure single string value (not array)
+    if (Array.isArray(this.userId)) {
+      this.userId = this.userId[0] || 'system'
+    }
+    if (Array.isArray(this.organizationId)) {
+      this.organizationId = this.organizationId[0] || 'default-org'
+    }
+    
+    // Convert to string if not already
+    this.organizationId = String(this.organizationId)
+    this.userId = String(this.userId)
     // Connect once for the entire bulk operation
     await this.connect();
     
@@ -222,15 +238,33 @@ class ComparableDataDatabaseClient {
       failed: []
     };
 
-    // Parse Hebrew date format (DD/MM/YYYY)
+    // Parse date format - supports both Hebrew (DD/MM/YYYY) and ISO (YYYY-MM-DD)
     const parseHebrewDate = (dateStr) => {
       if (!dateStr) return null;
       try {
-        if (dateStr.includes('/')) {
-          const [day, month, year] = dateStr.split('/');
-          return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+        const trimmed = dateStr.trim();
+        
+        // If already in ISO format (YYYY-MM-DD), return as-is
+        if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+          return trimmed;
         }
-        return dateStr;
+        
+        // Hebrew format (DD/MM/YYYY)
+        if (trimmed.includes('/')) {
+          const parts = trimmed.split('/');
+          if (parts.length === 3) {
+            const [day, month, year] = parts.map(p => p.trim());
+            // Check if it's DD/MM/YYYY or MM/DD/YYYY based on year position
+            if (year.length === 4 && parseInt(year) > 1900) {
+              return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+            } else if (day.length === 4 && parseInt(day) > 1900) {
+              // MM/DD/YYYY format
+              return `${day}-${month.padStart(2, '0')}-${year.padStart(2, '0')}`;
+            }
+          }
+        }
+        
+        return trimmed; // Return as-is if format not recognized
       } catch {
         return null;
       }
@@ -253,16 +287,55 @@ class ComparableDataDatabaseClient {
       return { city: city || null, street_name: street_name || null, house_number: house_number || null };
     };
 
-    // Parse גו"ח helper
+    // Parse גו"ח helper - supports both formats:
+    // Hebrew: "9905/88/8" or "9905/88" 
+    // English: "001656-0010-003-00" or "1656-10-3"
     const parseGushChelka = (gushStr) => {
       if (!gushStr) return { gush: null, chelka: null, sub_chelka: null };
       try {
-        const parts = gushStr.split('/').map(p => parseInt(p.trim()));
-        return {
-          gush: parts[0] || null,
-          chelka: parts[1] || null,
-          sub_chelka: parts[2] || null
-        };
+        const trimmed = gushStr.trim();
+        
+        // Check if it's the English format with dashes (block_of_land format)
+        if (trimmed.includes('-')) {
+          // Format: "001656-0010-003-00" or "1656-10-3"
+          const parts = trimmed.split('-').map(p => {
+            // Remove leading zeros
+            const num = parseInt(p.trim());
+            return isNaN(num) ? null : num;
+          }).filter(p => p !== null);
+          
+          return {
+            gush: parts[0] || null,
+            chelka: parts[1] || null,
+            sub_chelka: parts[2] || null
+          };
+        }
+        
+        // Hebrew format with slashes: "9905/88/8" or "9905/88"
+        if (trimmed.includes('/')) {
+          const parts = trimmed.split('/').map(p => {
+            const num = parseInt(p.trim());
+            return isNaN(num) ? null : num;
+          }).filter(p => p !== null);
+          
+          return {
+            gush: parts[0] || null,
+            chelka: parts[1] || null,
+            sub_chelka: parts[2] || null
+          };
+        }
+        
+        // Try to parse as single number (gush only)
+        const singleNum = parseInt(trimmed);
+        if (!isNaN(singleNum)) {
+          return {
+            gush: singleNum,
+            chelka: null,
+            sub_chelka: null
+          };
+        }
+        
+        return { gush: null, chelka: null, sub_chelka: null };
       } catch {
         return { gush: null, chelka: null, sub_chelka: null };
       }
@@ -272,13 +345,60 @@ class ComparableDataDatabaseClient {
       for (let i = 0; i < csvRows.length; i++) {
         try {
           const csvData = csvRows[i];
-          const address = csvData['כתובת'] || null;
-          const parsedAddress = parseAddress(address);
-          const parsedGush = parseGushChelka(csvData['גוח'] || csvData['גו"ח']);
+          
+          // CRITICAL: Support both Hebrew and English headers
+          // Use header mapping to get values regardless of header language
+          const getValue = (headerOptions) => {
+            for (const header of headerOptions) {
+              const value = headerMapping.getValueFromRow(csvData, header);
+              if (value !== null && value !== undefined && value !== '') {
+                return value;
+              }
+            }
+            return null;
+          };
+          
+          // Try both Hebrew and English headers for address
+          // For English format, construct address from street + house_number + city
+          const streetValue = getValue(['רחוב', 'שם רחוב', 'street_name', 'street']);
+          const houseNumberValue = getValue(['מספר בית', 'house_number']);
+          const cityValue = getValue(['עיר', 'city', 'locality_name', 'settlement']);
+          
+          // If we have separate fields, construct full address
+          let address = getValue(['כתובת', 'address']);
+          if (!address && streetValue) {
+            const parts = [];
+            if (streetValue) parts.push(streetValue);
+            if (houseNumberValue) parts.push(houseNumberValue);
+            if (cityValue) parts.push(cityValue);
+            address = parts.join(', ') || null;
+          }
+          
+          const parsedAddress = parseAddress(address || '');
+          
+          // Override parsed values with direct CSV values if available
+          if (cityValue) parsedAddress.city = cityValue;
+          if (streetValue) parsedAddress.street_name = streetValue;
+          if (houseNumberValue) parsedAddress.house_number = houseNumberValue;
+          
+          // Try both Hebrew and English headers for gush_chelka
+          const gushChelkaValue = getValue(['גו"ח', 'גוח', 'block_of_land', 'gush_chelka']);
+          const parsedGush = parseGushChelka(gushChelkaValue);
 
-          // Check for duplicate based on address, sale_date, and price
-          const saleDate = parseHebrewDate(csvData['יום מכירה']);
-          const declaredPrice = csvData['מחיר מוצהר'] ? parseFloat(csvData['מחיר מוצהר']) : null;
+          // Try both Hebrew and English headers for sale_date
+          const saleDateStr = getValue(['יום מכירה', 'sale_date', 'sale_day']);
+          const saleDate = parseHebrewDate(saleDateStr);
+          
+          // Try both Hebrew and English headers for declared_price (total price)
+          // This should be the full sale price/total price, not price per sqm
+          const declaredPriceStr = getValue([
+            'מחיר מוצהר',           // Hebrew: Declared price
+            'sale_value_nis',       // English: Sale value in NIS
+            'declared_value_nis',   // English: Declared value in NIS
+            'price',                 // English: Price (common variation)
+            'declared_price'         // English: Declared price (direct mapping)
+          ]);
+          const declaredPrice = declaredPriceStr ? parseFloat(declaredPriceStr) : null;
           
           // CRITICAL: Check duplicate within same organization/user context
           const duplicateCheckQuery = `
@@ -322,28 +442,76 @@ class ComparableDataDatabaseClient {
             RETURNING id, created_at;
           `;
 
+          // Extract all values using header mapping (supports both Hebrew and English)
+          const roomsValue = getValue(['חדרים', 'rooms']);
+          const rooms = roomsValue ? parseFloat(roomsValue) : null;
+          
+          const floorNumberValue = getValue(['קומה', 'floor_number', 'floor']);
+          const floorNumber = floorNumberValue || null;
+          
+          const areaValue = getValue(['שטח דירה במ"ר', 'שטח דירה במר', 'apartment_area_sqm', 'surface', 'area']);
+          const apartmentAreaSqm = areaValue ? parseFloat(areaValue) : null;
+          
+          const parkingValue = getValue(['חניות', 'parking_spaces', 'parking']);
+          const parkingSpaces = parkingValue ? parseInt(parkingValue) : null;
+          
+          const constructionYearValue = getValue(['שנת בניה', 'שנת בנייה', 'construction_year', 'year_of_construction']);
+          const constructionYear = constructionYearValue ? parseInt(constructionYearValue) : null;
+          
+          // Try both Hebrew and English headers for price_per_sqm_rounded (price per square meter)
+          // This should be the price per sqm, either provided directly or calculated from total price / area
+          const pricePerSqmValue = getValue([
+            'מחיר למ"ר, במעוגל',    // Hebrew: Price per sqm, rounded
+            'מחיר למר במעוגל',       // Hebrew: Price per sqm, rounded (alternative)
+            'price_per_sqm_rounded', // English: Price per sqm rounded
+            'price_per_sqm',         // English: Price per sqm (common variation)
+            'price_per_m2',          // English: Price per m2 (alternative)
+            'sqm_price'              // English: Sqm price (alternative)
+          ]);
+          const pricePerSqmRounded = pricePerSqmValue ? parseFloat(pricePerSqmValue) : null;
+          
+          // Calculate price_per_sqm if not provided but we have total price and area
+          // CRITICAL: declared_price = total price, price_per_sqm_rounded = price per sqm
+          let finalPricePerSqm = pricePerSqmRounded;
+          if (!finalPricePerSqm && declaredPrice && apartmentAreaSqm && apartmentAreaSqm > 0) {
+            // Calculate: total price / area = price per sqm
+            finalPricePerSqm = Math.round(declaredPrice / apartmentAreaSqm);
+            console.log(`  💰 Calculated price_per_sqm: ${declaredPrice} / ${apartmentAreaSqm} = ${finalPricePerSqm}`);
+          } else if (pricePerSqmRounded) {
+            console.log(`  💰 Using provided price_per_sqm: ${pricePerSqmRounded}`);
+          }
+          
+          // City can come from parsed address or directly from CSV (use already extracted cityValue)
+          const finalCity = cityValue || parsedAddress.city;
+          
+          // Street name can come from parsed address or directly from CSV (use already extracted streetValue)
+          const finalStreetName = streetValue || parsedAddress.street_name;
+          
+          // House number can come from parsed address or directly from CSV (use already extracted houseNumberValue)
+          const finalHouseNumber = houseNumberValue || parsedAddress.house_number;
+
           const values = [
             csvFilename,                                          // 1
             i + 1,                                              // 2
-            parseHebrewDate(csvData['יום מכירה']),                // 3
+            saleDate,                                           // 3 - already parsed
             address,                                             // 4
-            csvData['גוח'] || csvData['גו"ח'] || null,            // 5
-            csvData['חדרים'] ? parseFloat(csvData['חדרים']) : null, // 6
-            csvData['קומה'] || null,                             // 7
-            csvData['שטח דירה במר'] || csvData['שטח דירה במ"ר'] ? parseFloat(csvData['שטח דירה במר'] || csvData['שטח דירה במ"ר']) : null, // 8
-            csvData['חניות'] ? parseInt(csvData['חניות']) : null, // 9
-            csvData['שנת בניה'] ? parseInt(csvData['שנת בניה']) : null, // 10
-            csvData['מחיר מוצהר'] ? parseFloat(csvData['מחיר מוצהר']) : null, // 11
-            csvData['מחיר למר במעוגל'] || csvData['מחיר למ"ר, במעוגל'] ? parseFloat(csvData['מחיר למר במעוגל'] || csvData['מחיר למ"ר, במעוגל']) : null, // 12
-            parsedAddress.city,                                  // 13
-            parsedAddress.street_name,                           // 14
-            parsedAddress.house_number,                          // 15
-            parsedGush.gush,                                     // 16
-            parsedGush.chelka,                                   // 17
-            parsedGush.sub_chelka,                                // 18
-            this.organizationId || null,                         // 19 - organization_id
-            this.userId || userId || null,                        // 20 - user_id
-            userId || 'system'                                    // 21 - imported_by
+            gushChelkaValue,                                    // 5
+            rooms,                                              // 6
+            floorNumber,                                        // 7
+            apartmentAreaSqm,                                  // 8
+            parkingSpaces,                                      // 9
+            constructionYear,                                   // 10
+            declaredPrice,                                     // 11 - already parsed
+            finalPricePerSqm,                                  // 12 - calculated if needed
+            finalCity,                                          // 13
+            finalStreetName,                                    // 14
+            finalHouseNumber,                                   // 15
+            parsedGush.gush,                                    // 16
+            parsedGush.chelka,                                  // 17
+            parsedGush.sub_chelka,                              // 18
+            this.organizationId || 'default-org',              // 19 - organization_id (ensure string)
+            this.userId || 'system',                            // 20 - user_id (ensure string)
+            this.userId || 'system'                             // 21 - imported_by (use same userId)
           ];
 
           const result = await this.client.query(query, values);
@@ -352,12 +520,17 @@ class ComparableDataDatabaseClient {
           results.successful.push({
             rowNumber: i + 1,
             id: insertedRow.id,
-            address: csvData['כתובת'] || 'Unknown'
+            address: address || 'Unknown'
           });
         } catch (error) {
+          // Try to get address for error reporting
+          const errorAddress = csvRows[i]['כתובת'] || 
+                              csvRows[i]['address'] || 
+                              csvRows[i]['street'] || 
+                              'Unknown';
           results.failed.push({
             rowNumber: i + 1,
-            address: csvRows[i]['כתובת'] || 'Unknown',
+            address: errorAddress,
             error: error.message
           });
         }
@@ -386,8 +559,8 @@ class ComparableDataDatabaseClient {
       let paramIndex = 2;
       
       if (this.organizationId) {
-        // Show user's organization records OR default-org records (shared across all organizations)
-        query += ` AND (organization_id = $${paramIndex} OR organization_id = 'default-org')`;
+        // Show user's organization records OR default-org records OR NULL (legacy/unassigned data)
+        query += ` AND (organization_id = $${paramIndex} OR organization_id = 'default-org' OR organization_id IS NULL)`;
         params.push(this.organizationId);
         paramIndex++;
       } else {
@@ -397,11 +570,24 @@ class ComparableDataDatabaseClient {
       
       if (this.userId) {
         // Show user's records OR shared records (user_id IS NULL or 'system') within the organization
-        query += ` AND (user_id = $${paramIndex} OR user_id IS NULL OR user_id = 'system')`;
+        // CRITICAL: Handle user_id stored as JSON array (legacy bug) - check if it contains the userId
+        // Also handle case where user_id is stored as JSON array (like {"1762001339354","dev-user-id"})
+        query += ` AND (
+          user_id = $${paramIndex} 
+          OR user_id IS NULL 
+          OR user_id = 'system'
+          OR user_id::text LIKE '%"' || $${paramIndex} || '"%'
+          OR user_id::text LIKE '%' || $${paramIndex} || '%'
+        )`;
         params.push(this.userId);
       } else {
         // If no userId, show shared records (user_id IS NULL or 'system') for the organization
-        query += ` AND (user_id IS NULL OR user_id = 'system')`;
+        // But also include JSON array format records
+        query += ` AND (
+          user_id IS NULL 
+          OR user_id = 'system'
+          OR user_id::text LIKE '%"system"%'
+        )`;
       }
       
       const result = await this.client.query(query, params);
@@ -474,10 +660,10 @@ class ComparableDataDatabaseClient {
       }
 
       // CRITICAL: Add organization_id and user_id filters for data isolation
-      // Show records that match the user's organization OR default-org (shared data)
+      // Show records that match the user's organization OR default-org (shared data) OR NULL (legacy data)
       if (this.organizationId) {
-        // Show user's organization records OR default-org records (shared across all organizations)
-        whereClauses.push(`(organization_id = $${paramIndex} OR organization_id = 'default-org')`);
+        // Show user's organization records OR default-org records OR NULL (legacy/unassigned data)
+        whereClauses.push(`(organization_id = $${paramIndex} OR organization_id = 'default-org' OR organization_id IS NULL)`);
         values.push(this.organizationId);
         paramIndex++;
       } else {
@@ -486,14 +672,28 @@ class ComparableDataDatabaseClient {
       }
       
       // For user_id: Show user's records OR shared records (user_id IS NULL or 'system') within the organization
+      // CRITICAL: Handle user_id stored as JSON array (legacy bug) - check if it contains the userId
       if (this.userId) {
         // Show user's records OR shared records (user_id IS NULL or 'system') within the organization
-        whereClauses.push(`(user_id = $${paramIndex} OR user_id IS NULL OR user_id = 'system')`);
+        // Also handle case where user_id is stored as JSON array (like {"1762001339354","dev-user-id"})
+        // We check if the user_id contains the userId as a substring (with quotes for JSON format)
+        whereClauses.push(`(
+          user_id = $${paramIndex} 
+          OR user_id IS NULL 
+          OR user_id = 'system'
+          OR user_id::text LIKE '%"' || $${paramIndex} || '"%'
+          OR user_id::text LIKE '%' || $${paramIndex} || '%'
+        )`);
         values.push(this.userId);
         paramIndex++;
       } else {
         // If no userId, show shared records (user_id IS NULL or 'system') for the organization
-        whereClauses.push(`(user_id IS NULL OR user_id = 'system')`);
+        // But also include JSON array format records
+        whereClauses.push(`(
+          user_id IS NULL 
+          OR user_id = 'system'
+          OR user_id::text LIKE '%"system"%'
+        )`);
       }
       
       // Build WHERE clause (table doesn't have status/is_valid columns)

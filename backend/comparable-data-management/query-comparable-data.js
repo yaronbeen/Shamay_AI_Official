@@ -90,10 +90,10 @@ async function queryComparableData() {
     let paramCount = 1;
     
     // CRITICAL: Add organization and user filters for data isolation
-    // Show records that match the user's organization OR default-org (shared data)
+    // Show records that match the user's organization OR default-org (shared data) OR NULL (legacy data)
     if (organizationId) {
-      // Show user's organization records OR default-org records (shared across all organizations)
-      query += ` AND (organization_id = $${paramCount} OR organization_id = 'default-org')`;
+      // Show user's organization records OR default-org records OR NULL (legacy/unassigned data)
+      query += ` AND (organization_id = $${paramCount} OR organization_id = 'default-org' OR organization_id IS NULL)`;
       queryParams.push(organizationId);
       paramCount++;
     } else {
@@ -102,14 +102,29 @@ async function queryComparableData() {
     }
     
     // For user_id: Show user's records OR shared records (user_id IS NULL or 'system') within the organization
+    // ALSO include records with NULL user_id (legacy data that hasn't been assigned)
+    // CRITICAL: Handle user_id stored as JSON array (legacy bug) - check if it contains the userId
     if (userId) {
       // Show user's records OR shared records (user_id IS NULL or 'system') within the organization
-      query += ` AND (user_id = $${paramCount} OR user_id IS NULL OR user_id = 'system')`;
+      // Also handle case where user_id is stored as JSON array (like {"1762001339354","dev-user-id"})
+      // We check if the user_id contains the userId as a substring
+      query += ` AND (
+        user_id = $${paramCount} 
+        OR user_id IS NULL 
+        OR user_id = 'system'
+        OR user_id::text LIKE '%"' || $${paramCount} || '"%'
+        OR user_id::text LIKE '%' || $${paramCount} || '%'
+      )`;
       queryParams.push(userId);
       paramCount++;
     } else {
       // If no userId, show shared records (user_id IS NULL or 'system') for the organization
-      query += ` AND (user_id IS NULL OR user_id = 'system')`;
+      // But also include JSON array format records
+      query += ` AND (
+        user_id IS NULL 
+        OR user_id = 'system'
+        OR user_id::text LIKE '%"system"%'
+      )`;
     }
     
     // Add search filters
