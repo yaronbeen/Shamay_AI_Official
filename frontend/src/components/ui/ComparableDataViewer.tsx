@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { Upload, BarChart3, Loader2, FileText, AlertCircle, CheckCircle, X, Check, Edit2, Trash2, EyeOff } from 'lucide-react'
 import { ValuationData } from '../ValuationWizard'
 
@@ -189,73 +189,9 @@ export default function ComparableDataViewer({
   const [filterRooms, setFilterRooms] = useState<string>('')
   const [filterConstructionYear, setFilterConstructionYear] = useState<string>('')
 
-  // CRITICAL: Load persisted data on mount - shows data immediately
-  useEffect(() => {
-    if (sessionId) {
-      const storageKey = `comparable_analysis:${sessionId}`
-      const stored = sessionStorage.getItem(storageKey)
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored)
-          setAnalysisResult(parsed.analysis)
-          setAllData(parsed.allData || [])
-          setSelectedIds(new Set(parsed.selectedIds || []))
-          // CRITICAL: Restore CSV headers if stored
-          if (parsed.csvHeaders && parsed.csvHeaders.length > 0) {
-            setCsvHeaders(parsed.csvHeaders)
-            // Restore header mapping if available
-            if (parsed.headerToFieldMap) {
-              setHeaderToFieldMap(new Map(Object.entries(parsed.headerToFieldMap)))
-            } else if (parsed.allData && parsed.allData.length > 0) {
-              // Recreate mapping from data
-              const firstRecord = parsed.allData[0]
-              const fieldNames = Object.keys(firstRecord).filter(key => key !== 'id')
-              const hebrewHeaders = fieldNames.map(fn => getHebrewHeader(fn))
-              const mapping = new Map<string, string>()
-              fieldNames.forEach((fieldName, index) => {
-                mapping.set(hebrewHeaders[index], fieldName)
-              })
-              setHeaderToFieldMap(mapping)
-            }
-            console.log('✅ Restored CSV headers from sessionStorage:', parsed.csvHeaders)
-          } else if (parsed.allData && parsed.allData.length > 0) {
-            // Extract headers from first record if not stored
-            const firstRecord = parsed.allData[0]
-            const fieldNames = Object.keys(firstRecord).filter(key => key !== 'id')
-            const hebrewHeaders = fieldNames.map(fn => getHebrewHeader(fn))
-            const mapping = new Map<string, string>()
-            fieldNames.forEach((fieldName, index) => {
-              mapping.set(hebrewHeaders[index], fieldName)
-            })
-            setCsvHeaders(hebrewHeaders)
-            setHeaderToFieldMap(mapping)
-            console.log('✅ Extracted CSV headers from restored data:', hebrewHeaders)
-          }
-          console.log(`✅ Restored ${parsed.allData?.length || 0} records from sessionStorage - data visible immediately`)
-          
-          // CRITICAL: Also load from database in background to sync with latest data
-          // But show existing data first (optimistic display)
-          loadAllData().catch(err => {
-            console.warn('Failed to load fresh data from database:', err)
-            // Keep the restored data even if database load fails
-          })
-        } catch (err) {
-          console.warn('Failed to restore analysis:', err)
-          // Try to load from database if sessionStorage restore fails
-          loadAllData().catch(err => console.error('Failed to load data:', err))
-        }
-      } else {
-        // No sessionStorage data - load from database
-        loadAllData().catch(err => console.error('Failed to load data:', err))
-      }
-    } else {
-      // No sessionId - try to load anyway (might have default session)
-      loadAllData().catch(err => console.error('Failed to load data:', err))
-    }
-  }, [sessionId])
-
-  // Load all data from database
-  const loadAllData = async () => {
+  // CRITICAL: Load all data from database
+  // CRITICAL: Wrap in useCallback to prevent infinite loops
+  const loadAllData = useCallback(async () => {
     setIsLoadingData(true)
     setUploadError(null)
 
@@ -297,7 +233,106 @@ export default function ComparableDataViewer({
     } finally {
       setIsLoadingData(false)
     }
-  }
+  }, [sessionId]) // CRITICAL: Include sessionId in dependency array
+
+  // CRITICAL: Load persisted data on mount - shows data immediately
+  // Split into two effects to prevent infinite loops:
+  // 1. Restore from sessionStorage (runs once on mount)
+  // 2. Load from database (runs only if no data restored)
+  
+  // Effect 1: Restore from sessionStorage (runs once per sessionId change)
+  useEffect(() => {
+    if (!sessionId) return
+    
+    const storageKey = `comparable_analysis:${sessionId}`
+    const stored = sessionStorage.getItem(storageKey)
+    if (!stored) return
+    
+    try {
+      const parsed = JSON.parse(stored)
+      setAnalysisResult(parsed.analysis)
+      setAllData(parsed.allData || [])
+      setSelectedIds(new Set(parsed.selectedIds || []))
+      // CRITICAL: Restore CSV headers if stored
+      if (parsed.csvHeaders && parsed.csvHeaders.length > 0) {
+        setCsvHeaders(parsed.csvHeaders)
+        // Restore header mapping if available
+        if (parsed.headerToFieldMap) {
+          setHeaderToFieldMap(new Map(Object.entries(parsed.headerToFieldMap)))
+        } else if (parsed.allData && parsed.allData.length > 0) {
+          // Recreate mapping from data
+          const firstRecord = parsed.allData[0]
+          const fieldNames = Object.keys(firstRecord).filter(key => key !== 'id')
+          const hebrewHeaders = fieldNames.map(fn => getHebrewHeader(fn))
+          const mapping = new Map<string, string>()
+          fieldNames.forEach((fieldName, index) => {
+            mapping.set(hebrewHeaders[index], fieldName)
+          })
+          setHeaderToFieldMap(mapping)
+        }
+        console.log('✅ Restored CSV headers from sessionStorage:', parsed.csvHeaders)
+      } else if (parsed.allData && parsed.allData.length > 0) {
+        // Extract headers from first record if not stored
+        const firstRecord = parsed.allData[0]
+        const fieldNames = Object.keys(firstRecord).filter(key => key !== 'id')
+        const hebrewHeaders = fieldNames.map(fn => getHebrewHeader(fn))
+        const mapping = new Map<string, string>()
+        fieldNames.forEach((fieldName, index) => {
+          mapping.set(hebrewHeaders[index], fieldName)
+        })
+        setCsvHeaders(hebrewHeaders)
+        setHeaderToFieldMap(mapping)
+        console.log('✅ Extracted CSV headers from restored data:', hebrewHeaders)
+      }
+      console.log(`✅ Restored ${parsed.allData?.length || 0} records from sessionStorage`)
+    } catch (err) {
+      console.warn('Failed to restore analysis:', err)
+    }
+  }, [sessionId]) // CRITICAL: Only depends on sessionId, no function dependencies
+  
+  // Effect 2: Load from database if no data restored (runs once per sessionId, only if allData is empty)
+  useEffect(() => {
+    if (!sessionId) return
+    if (allData.length > 0) return // Skip if data already loaded (from sessionStorage)
+    
+    // Load from database
+    loadAllData().catch(err => console.error('Failed to load data:', err))
+  }, [sessionId, allData.length, loadAllData]) // CRITICAL: Depends on loadAllData (now stable via useCallback)
+
+  // CRITICAL: Calculate filtered data count using useMemo at component top level (not in JSX)
+  // This prevents "Rendered more hooks than during the previous render" error
+  const filteredDataCount = useMemo(() => {
+    const filteredData = allData.filter((record) => {
+      // City filter
+      if (filterCity) {
+        const recordCity = (record as any).city
+        if (!recordCity || String(recordCity).toLowerCase() !== filterCity.toLowerCase()) {
+          return false
+        }
+      }
+      // Rooms filter
+      if (filterRooms) {
+        const recordRooms = (record as any).rooms
+        if (!recordRooms) return false
+        const numRooms = typeof recordRooms === 'string' ? parseFloat(recordRooms) : recordRooms
+        const roundedRooms = Math.round(numRooms).toString()
+        if (roundedRooms !== filterRooms) {
+          return false
+        }
+      }
+      // Construction year filter
+      if (filterConstructionYear) {
+        const recordYear = (record as any).construction_year || (record as any).building_year
+        if (!recordYear) return false
+        const numYear = typeof recordYear === 'string' ? parseInt(recordYear, 10) : recordYear
+        if (numYear.toString() !== filterConstructionYear) {
+          return false
+        }
+      }
+      return true
+    })
+    return filteredData.length
+  }, [allData, filterCity, filterRooms, filterConstructionYear])
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -924,39 +959,7 @@ export default function ComparableDataViewer({
 
           <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
             <h4 className="font-semibold text-gray-900">
-              {useMemo(() => {
-                // CRITICAL: Move filter logic to useMemo to prevent React hydration errors
-                const filteredData = allData.filter((record) => {
-                  // City filter
-                  if (filterCity) {
-                    const recordCity = (record as any).city
-                    if (!recordCity || String(recordCity).toLowerCase() !== filterCity.toLowerCase()) {
-                      return false
-                    }
-                  }
-                  // Rooms filter
-                  if (filterRooms) {
-                    const recordRooms = (record as any).rooms
-                    if (!recordRooms) return false
-                    const numRooms = typeof recordRooms === 'string' ? parseFloat(recordRooms) : recordRooms
-                    const roundedRooms = Math.round(numRooms).toString()
-                    if (roundedRooms !== filterRooms) {
-                      return false
-                    }
-                  }
-                  // Construction year filter
-                  if (filterConstructionYear) {
-                    const recordYear = (record as any).construction_year || (record as any).building_year
-                    if (!recordYear) return false
-                    const numYear = typeof recordYear === 'string' ? parseInt(recordYear, 10) : recordYear
-                    if (numYear.toString() !== filterConstructionYear) {
-                      return false
-                    }
-                  }
-                  return true
-                })
-                return `כל הנתונים (${filteredData.length} מתוך ${allData.length} רשומות)`
-              }, [allData, filterCity, filterRooms, filterConstructionYear])}
+              {`כל הנתונים (${filteredDataCount} מתוך ${allData.length} רשומות)`}
             </h4>
             <div className="flex gap-2 flex-wrap">
               <button

@@ -4,74 +4,79 @@
  * Backend Script: Query Comparable Data
  * 
  * This script is called by the frontend API to query the database
- * using the backend database client for consistent data access
+ * CRITICAL: Database client logic is inlined here to avoid require issues in Vercel
  */
 
-// CRITICAL: Use CommonJS require for Vercel compatibility
-// database-client.js uses CommonJS (require/module.exports)
-import { createRequire } from 'module';
-import { fileURLToPath } from 'url';
-import { dirname, resolve, join } from 'path';
-import { existsSync } from 'fs';
+// Load environment variables
+import dotenv from 'dotenv';
+dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const require = createRequire(import.meta.url);
+// Lazy-load database client based on environment
+let ClientClass = null;
 
-// CRITICAL: Resolve database-client.js path - try multiple locations for Vercel compatibility
-let databaseClientPath = resolve(__dirname, 'database-client.js');
-
-// If not found, try alternative paths (for Vercel)
-if (!existsSync(databaseClientPath)) {
-  const alternatives = [
-    join(__dirname, 'database-client.js'),
-    join(process.cwd(), 'backend', 'comparable-data-management', 'database-client.js'),
-    join(process.cwd(), 'comparable-data-management', 'database-client.js'),
-    join('/var/task', 'backend', 'comparable-data-management', 'database-client.js'),
-    join('/var/task', 'comparable-data-management', 'database-client.js'),
-    // Try relative paths from current working directory
-    resolve(process.cwd(), 'backend', 'comparable-data-management', 'database-client.js'),
-    resolve(process.cwd(), 'comparable-data-management', 'database-client.js'),
-  ];
+async function getClientClass() {
+  if (ClientClass) return ClientClass;
   
-  for (const altPath of alternatives) {
-    if (existsSync(altPath)) {
-      databaseClientPath = altPath;
-      console.log('✅ Found database-client.js at:', databaseClientPath);
-      break;
+  try {
+    // Try Neon serverless first (for Vercel)
+    if (process.env.VERCEL || process.env.DATABASE_URL) {
+      const neon = await import('@neondatabase/serverless');
+      ClientClass = neon.Client;
+      console.log('✅ Using @neondatabase/serverless for comparable data');
+    } else {
+      // Use standard pg for local development
+      const pg = await import('pg');
+      ClientClass = pg.Client;
+      console.log('✅ Using pg for comparable data (local development)');
     }
+  } catch (e) {
+    // Fallback to pg if Neon not available
+    const pg = await import('pg');
+    ClientClass = pg.Client;
+    console.log('✅ Using pg for comparable data (fallback)');
   }
+  
+  return ClientClass;
 }
 
-console.log('🔍 Loading database-client.js from:', databaseClientPath);
-console.log('🔍 Current working directory:', process.cwd());
-console.log('🔍 __dirname:', __dirname);
-console.log('🔍 File exists?', existsSync(databaseClientPath));
-
-// Use require for CommonJS module - with error handling
-let ComparableDataDatabaseClient;
-try {
-  if (!existsSync(databaseClientPath)) {
-    // Last resort: try to require with relative path
-    try {
-      const relativePath = './database-client.js';
-      ComparableDataDatabaseClient = require(relativePath).ComparableDataDatabaseClient;
-      console.log('✅ Loaded database-client.js using relative path');
-    } catch (relError) {
-      console.error('❌ Failed to load with relative path:', relError.message);
-      throw new Error(`Cannot find database-client.js. Tried: ${databaseClientPath} and relative path`);
-    }
+async function createDatabaseClient(organizationId, userId) {
+  const Client = await getClientClass();
+  
+  const isLocal = process.env.DB_HOST === 'localhost' || !process.env.DB_HOST || process.env.DB_HOST?.includes('127.0.0.1');
+  const useNeon = process.env.VERCEL || process.env.DATABASE_URL;
+  
+  let client;
+  
+  // Use DATABASE_URL if available (Vercel/Neon), otherwise use individual env vars
+  if (useNeon && process.env.DATABASE_URL) {
+    client = new Client({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false }
+    });
   } else {
-    ComparableDataDatabaseClient = require(databaseClientPath).ComparableDataDatabaseClient;
-    console.log('✅ Loaded database-client.js successfully');
+    client = new Client({
+      host: process.env.DB_HOST || 'localhost',
+      port: process.env.DB_PORT || 5432,
+      database: process.env.DB_NAME || 'shamay_land_registry',
+      user: process.env.DB_USER || 'postgres',
+      password: process.env.DB_PASSWORD || 'postgres123',
+      // Add SSL configuration for remote databases
+      ssl: isLocal ? false : {
+        rejectUnauthorized: false,
+        require: true
+      }
+    });
   }
-} catch (requireError) {
-  console.error('❌ Failed to require database-client.js:', requireError.message);
-  console.error('❌ Require stack:', requireError.stack);
-  throw requireError;
+  
+  await client.connect();
+  console.log('✅ Connected to PostgreSQL database (Comparable Data)');
+  
+  return client;
 }
 
 async function queryComparableData() {
+  let client = null;
+  
   try {
     console.log('🔍 Backend: Starting comparable data query...');
     
@@ -79,8 +84,8 @@ async function queryComparableData() {
     const organizationId = process.env.ORGANIZATION_ID || null;
     const userId = process.env.USER_ID || null;
     
-    const db = new ComparableDataDatabaseClient(organizationId, userId);
-    await db.connect();
+    // Create database client
+    client = await createDatabaseClient(organizationId, userId);
     
     // Get query parameters from environment variables
     const city = process.env.QUERY_CITY || '';
@@ -184,11 +189,13 @@ async function queryComparableData() {
     console.log('📊 Executing query:', query);
     console.log('📊 Query params:', queryParams);
     
-    const result = await db.client.query(query, queryParams);
+    const result = await client.query(query, queryParams);
     
     console.log('✅ Query successful:', result.rows.length, 'records found');
     
-    await db.disconnect();
+    // Close database connection
+    await client.end();
+    console.log('🔌 Disconnected from database');
     
     // Return results in JSON format
     console.log(JSON.stringify({
@@ -205,6 +212,16 @@ async function queryComparableData() {
     
   } catch (error) {
     console.error('❌ Backend query error:', error);
+    
+    // Close database connection if it exists
+    if (client) {
+      try {
+        await client.end();
+      } catch (e) {
+        // Ignore disconnect errors
+      }
+    }
+    
     console.log(JSON.stringify({
       success: false,
       error: error.message,
