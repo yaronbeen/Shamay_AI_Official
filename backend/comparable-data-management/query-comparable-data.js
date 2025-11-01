@@ -7,7 +7,43 @@
  * using the backend database client for consistent data access
  */
 
-import { ComparableDataDatabaseClient } from './database-client.js';
+// CRITICAL: Use CommonJS require for Vercel compatibility
+// database-client.js uses CommonJS (require/module.exports)
+import { createRequire } from 'module';
+import { fileURLToPath } from 'url';
+import { dirname, resolve, join } from 'path';
+import { existsSync } from 'fs';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const require = createRequire(import.meta.url);
+
+// CRITICAL: Resolve database-client.js path - try multiple locations for Vercel compatibility
+let databaseClientPath = resolve(__dirname, 'database-client.js');
+
+// If not found, try alternative paths (for Vercel)
+if (!existsSync(databaseClientPath)) {
+  const alternatives = [
+    join(__dirname, 'database-client.js'),
+    join(process.cwd(), 'backend', 'comparable-data-management', 'database-client.js'),
+    join(process.cwd(), 'comparable-data-management', 'database-client.js'),
+    join('/var/task', 'backend', 'comparable-data-management', 'database-client.js'),
+    join('/var/task', 'comparable-data-management', 'database-client.js'),
+  ];
+  
+  for (const altPath of alternatives) {
+    if (existsSync(altPath)) {
+      databaseClientPath = altPath;
+      console.log('✅ Found database-client.js at:', databaseClientPath);
+      break;
+    }
+  }
+}
+
+console.log('🔍 Loading database-client.js from:', databaseClientPath);
+
+// Use require for CommonJS module
+const { ComparableDataDatabaseClient } = require(databaseClientPath);
 
 async function queryComparableData() {
   try {
@@ -26,7 +62,8 @@ async function queryComparableData() {
     const rooms = process.env.QUERY_ROOMS || '';
     const area = process.env.QUERY_AREA || '';
     
-    console.log('📊 Query parameters:', { city, neighborhood, rooms, area, organizationId, userId });
+    console.log('📊 Query parameters:', { city, neighborhood, rooms, area });
+    console.log('🔐 Data isolation:', { organizationId: organizationId || 'NULL', userId: userId || 'NULL' });
     
     // Build query based on parameters
     // CRITICAL: Add organization_id and user_id filters for data isolation
@@ -52,17 +89,27 @@ async function queryComparableData() {
     const queryParams = [];
     let paramCount = 1;
     
-    // CRITICAL: Add organization and user filters
+    // CRITICAL: Add organization and user filters for data isolation
+    // Show records that match the user's organization OR default-org (shared data)
     if (organizationId) {
-      query += ` AND (organization_id = $${paramCount} OR (organization_id IS NULL AND $${paramCount} IS NULL))`;
+      // Show user's organization records OR default-org records (shared across all organizations)
+      query += ` AND (organization_id = $${paramCount} OR organization_id = 'default-org')`;
       queryParams.push(organizationId);
       paramCount++;
+    } else {
+      // If no organization ID provided, show default-org records and NULL organization_id (legacy/unassigned data)
+      query += ` AND (organization_id = 'default-org' OR organization_id IS NULL)`;
     }
     
+    // For user_id: Show user's records OR shared records (user_id IS NULL or 'system') within the organization
     if (userId) {
-      query += ` AND (user_id = $${paramCount} OR (user_id IS NULL AND $${paramCount} IS NULL))`;
+      // Show user's records OR shared records (user_id IS NULL or 'system') within the organization
+      query += ` AND (user_id = $${paramCount} OR user_id IS NULL OR user_id = 'system')`;
       queryParams.push(userId);
       paramCount++;
+    } else {
+      // If no userId, show shared records (user_id IS NULL or 'system') for the organization
+      query += ` AND (user_id IS NULL OR user_id = 'system')`;
     }
     
     // Add search filters

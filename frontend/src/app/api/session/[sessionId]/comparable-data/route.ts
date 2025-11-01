@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { spawn } from 'child_process'
 import { join } from 'path'
+import { existsSync } from 'fs'
 
 export async function GET(
   request: NextRequest,
@@ -18,11 +19,60 @@ export async function GET(
     console.log('📊 Parameters:', { city, rooms, area })
 
     // ✅ USE EXISTING BACKEND: Call the existing query-comparable-data.js
-    // Frontend runs from frontend/ directory, so we need to go up one level
-    const projectRoot = join(process.cwd(), '..')
-    const backendScript = join(projectRoot, 'backend', 'comparable-data-management', 'query-comparable-data.js')
+    // In Vercel, files are at /var/task, so we need to check both locations
+    const isVercel = process.env.VERCEL || process.env.VERCEL_ENV
+    let projectRoot = process.cwd()
+    let backendScript = join(projectRoot, 'backend', 'comparable-data-management', 'query-comparable-data.js')
+    
+    // CRITICAL: In Vercel, check if backend is at root level or relative to frontend
+    if (isVercel) {
+      // Try Vercel structure: /var/task/backend/...
+      const vercelPath = join('/var/task', 'backend', 'comparable-data-management', 'query-comparable-data.js')
+      if (existsSync(vercelPath)) {
+        backendScript = vercelPath
+        projectRoot = '/var/task'
+        console.log('🔍 Using Vercel path structure:', vercelPath)
+      } else {
+        // Try relative to current directory
+        const relativePath = join(projectRoot, '..', 'backend', 'comparable-data-management', 'query-comparable-data.js')
+        if (existsSync(relativePath)) {
+          backendScript = relativePath
+          projectRoot = join(projectRoot, '..')
+          console.log('🔍 Using relative path structure:', relativePath)
+        } else {
+          // Fallback: assume structure based on Vercel deployment
+          backendScript = join(process.cwd(), 'backend', 'comparable-data-management', 'query-comparable-data.js')
+          projectRoot = process.cwd()
+          console.log('🔍 Using fallback path structure:', backendScript)
+        }
+      }
+    } else {
+      // Local development: go up one level from frontend
+      projectRoot = join(process.cwd(), '..')
+      backendScript = join(projectRoot, 'backend', 'comparable-data-management', 'query-comparable-data.js')
+      console.log('🔍 Using local development path structure')
+    }
+    
     console.log('🔍 Project root:', projectRoot)
     console.log('🔍 Backend script path:', backendScript)
+    
+    // CRITICAL: Verify script exists before spawning
+    if (!existsSync(backendScript)) {
+      console.error('❌ Backend script not found at:', backendScript)
+      console.error('❌ Current working directory:', process.cwd())
+      return NextResponse.json({
+        success: false,
+        error: 'Backend script not found',
+        details: `Script path: ${backendScript}`,
+        cwd: process.cwd(),
+        isVercel: !!isVercel
+      }, { status: 500 })
+    }
+    
+    // Get organization and user IDs from session for data isolation
+    const session = await getServerSession(authOptions)
+    const organizationId = session?.user?.primaryOrganizationId || null
+    const userId = session?.user?.id || null
     
     const result = await new Promise((resolve, reject) => {
       const child = spawn('node', [backendScript], {
@@ -33,7 +83,10 @@ export async function GET(
           QUERY_CITY: city || '',
           QUERY_NEIGHBORHOOD: '', // Not used in current backend
           QUERY_ROOMS: rooms || '',
-          QUERY_AREA: area || ''
+          QUERY_AREA: area || '',
+          // CRITICAL: Pass organization and user IDs for data isolation
+          ORGANIZATION_ID: organizationId || '',
+          USER_ID: userId || ''
         }
       })
 

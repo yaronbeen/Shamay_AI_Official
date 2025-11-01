@@ -276,6 +276,10 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
           sessionId={sessionId}
           data={data}
           initialScreenshots={data.gisScreenshots}
+          onScreenshotsUpdated={(screenshots) => {
+            // Update data immediately when screenshots are uploaded
+            updateData({ gisScreenshots: screenshots }, { skipAutoSave: false })
+          }}
         />
       ) : (
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 sm:p-6 text-center overflow-hidden">
