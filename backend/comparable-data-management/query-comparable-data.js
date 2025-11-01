@@ -12,6 +12,74 @@
 // In Vercel, env vars are already loaded, so we skip dotenv entirely
 // We don't need to import dotenv at all in Vercel production
 
+import { createRequire } from 'module';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Helper to try resolving module from multiple paths
+async function tryImportNeon() {
+  const isVercel = process.env.VERCEL || process.env.VERCEL_ENV === 'production';
+  
+  if (isVercel) {
+    // In Vercel, try multiple possible locations
+    // First try standard import (uses NODE_PATH from spawn env)
+    try {
+      console.log('🔍 Trying standard import: @neondatabase/serverless');
+      const neon = await import('@neondatabase/serverless');
+      if (neon.Client || neon.default?.Client) {
+        console.log('✅ Successfully imported using standard import');
+        return neon;
+      }
+    } catch (e) {
+      console.log('❌ Standard import failed:', e.message);
+    }
+    
+    // Try using createRequire for CommonJS resolution (more reliable for node_modules)
+    try {
+      console.log('🔍 Trying createRequire: @neondatabase/serverless');
+      const require = createRequire(import.meta.url);
+      const neon = require('@neondatabase/serverless');
+      if (neon.Client || neon.default?.Client) {
+        console.log('✅ Successfully imported using createRequire');
+        return neon;
+      }
+    } catch (e) {
+      console.log('❌ createRequire failed:', e.message);
+    }
+    
+    // Try absolute paths (as ES modules with file:// protocol)
+    const possiblePaths = [
+      join('/var/task', 'frontend', 'node_modules', '@neondatabase', 'serverless', 'index.js'),
+      join('/var/task', 'backend', 'node_modules', '@neondatabase', 'serverless', 'index.js'),
+      join('/var/task', 'node_modules', '@neondatabase', 'serverless', 'index.js'),
+      join(__dirname, '..', '..', 'frontend', 'node_modules', '@neondatabase', 'serverless', 'index.js'),
+      join(__dirname, '..', '..', 'node_modules', '@neondatabase', 'serverless', 'index.js')
+    ];
+    
+    for (const modulePath of possiblePaths) {
+      try {
+        console.log(`🔍 Trying absolute path: ${modulePath}`);
+        const neon = await import('file://' + modulePath);
+        if (neon.Client || neon.default?.Client) {
+          console.log(`✅ Successfully imported from: ${modulePath}`);
+          return neon;
+        }
+      } catch (e) {
+        // Continue to next path
+        console.log(`❌ Failed to import from ${modulePath}: ${e.message}`);
+      }
+    }
+    
+    throw new Error('Cannot find @neondatabase/serverless in any location');
+  } else {
+    // Local: just try standard import
+    return await import('@neondatabase/serverless');
+  }
+}
+
 // Lazy-load database client based on environment
 let ClientClass = null;
 
@@ -25,8 +93,11 @@ async function getClientClass() {
   if (isVercel) {
     // Vercel: Only use Neon, don't try pg at all
     try {
-      const neon = await import('@neondatabase/serverless');
-      ClientClass = neon.Client;
+      const neon = await tryImportNeon();
+      ClientClass = neon.Client || neon.default?.Client;
+      if (!ClientClass) {
+        throw new Error('Client class not found in @neondatabase/serverless');
+      }
       console.log('✅ Using @neondatabase/serverless for comparable data (Vercel)');
       return ClientClass;
     } catch (e) {
