@@ -261,9 +261,9 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
           }}
         />
       ) : (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
-          <BarChart3 className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-          <p className="text-gray-600">לא זמין - נדרש session ID</p>
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 sm:p-6 text-center overflow-hidden">
+          <BarChart3 className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-3 sm:mb-4 text-gray-400" />
+          <p className="text-sm sm:text-base text-gray-600 break-words">לא זמין - נדרש session ID</p>
         </div>
       )}
     </div>
@@ -278,9 +278,9 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
           initialScreenshots={data.gisScreenshots}
         />
       ) : (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
-          <Map className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-          <p className="text-gray-600">לא זמין - נדרש session ID</p>
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 sm:p-6 text-center overflow-hidden">
+          <Map className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-3 sm:mb-4 text-gray-400" />
+          <p className="text-sm sm:text-base text-gray-600 break-words">לא זמין - נדרש session ID</p>
         </div>
       )}
     </div>
@@ -315,9 +315,9 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
           }}
         />
       ) : (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
-          <Flag className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-          <p className="text-gray-600">לא זמין - נדרש session ID</p>
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 sm:p-6 text-center overflow-hidden">
+          <Flag className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-3 sm:mb-4 text-gray-400" />
+          <p className="text-sm sm:text-base text-gray-600 break-words">לא זמין - נדרש session ID</p>
         </div>
       )}
     </div>
@@ -385,50 +385,54 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
   )
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2 text-right">
+    <div className="max-w-7xl mx-auto p-4 sm:p-6 overflow-hidden">
+      <div className="mb-6 sm:mb-8">
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2 text-right truncate">
           ניתוח AI
         </h2>
-        <p className="text-gray-600 text-right">
+        <p className="text-sm sm:text-base text-gray-600 text-right break-words">
           העלה חומרים נוספים לניתוח AI מתקדם ושיפור הערכת שווי
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-1 gap-4 sm:gap-6">
         {/* Left Panel - Analysis Results */}
         {/* <div className="bg-white rounded-lg border border-gray-200 p-6">
           {renderAnalysisResults()}
         </div> */}
 
         {/* Right Panel - AI Analysis Controls */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">ניתוח AI</h3>
+        <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-6 overflow-hidden">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right truncate">ניתוח AI</h3>
           
-          {/* Section Toggles */}
-          <div className="space-y-4 mb-6">
+          {/* Section Toggles - Display as columns (horizontal) */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
             {sections.map((section) => {
               const Icon = section.icon
               return (
                 <button
                   key={section.id}
                   onClick={() => handleSectionToggle(section.id)}
-                  className={`w-full p-4 rounded-lg border-2 transition-all ${
+                  className={`p-3 sm:p-4 rounded-lg border-2 transition-all overflow-hidden ${
                     activeSection === section.id
                       ? 'border-blue-500 bg-blue-50'
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <Icon className={`w-5 h-5 ${
+                  <div className="flex flex-col items-center gap-2 sm:gap-3 min-w-0">
+                    <Icon className={`w-6 h-6 sm:w-8 sm:h-8 flex-shrink-0 ${
                       activeSection === section.id ? 'text-blue-600' : 'text-gray-400'
                     }`} />
-                    <div className="text-right">
-                      <h4 className="font-semibold text-gray-900">{section.title}</h4>
-                      <p className="text-sm text-gray-600">{section.description}</p>
+                    <div className="text-center min-w-0 w-full">
+                      <h4 className="font-semibold text-gray-900 truncate text-sm sm:text-base mb-1" title={section.title}>
+                        {section.title}
+                      </h4>
+                      <p className="text-xs sm:text-sm text-gray-600 line-clamp-2" title={section.description}>
+                        {section.description}
+                      </p>
                     </div>
                     {activeSection === section.id && (
-                      <CheckCircle className="w-5 h-5 text-blue-600 mr-auto" />
+                      <CheckCircle className="w-5 h-5 text-blue-600" />
                     )}
                   </div>
                 </button>

@@ -30,9 +30,13 @@ function getClientClass() {
 }
 
 class ComparableDataDatabaseClient {
-  constructor() {
+  constructor(organizationId = null, userId = null) {
     const isLocal = process.env.DB_HOST === 'localhost' || !process.env.DB_HOST || process.env.DB_HOST.includes('127.0.0.1');
     const useNeon = process.env.VERCEL || process.env.DATABASE_URL;
+    
+    // Store organization and user IDs for filtering queries
+    this.organizationId = organizationId || process.env.ORGANIZATION_ID || null
+    this.userId = userId || process.env.USER_ID || null
     
     // Get the appropriate Client class
     const Client = getClientClass();
@@ -203,9 +207,13 @@ class ComparableDataDatabaseClient {
    * @param {Array} csvRows - Array of CSV row objects
    * @param {string} csvFilename - Source CSV filename
    * @param {string} userId - User importing the data
+   * @param {string} organizationId - Organization/Company ID (optional, can be set via constructor)
    * @returns {Object} - Import results
    */
-  async bulkInsertComparableData(csvRows, csvFilename, userId = 'system') {
+  async bulkInsertComparableData(csvRows, csvFilename, userId = 'system', organizationId = null) {
+    // Store organizationId and userId for use in inserts
+    this.organizationId = organizationId || this.organizationId
+    this.userId = userId || this.userId
     // Connect once for the entire bulk operation
     await this.connect();
     
@@ -272,18 +280,23 @@ class ComparableDataDatabaseClient {
           const saleDate = parseHebrewDate(csvData['יום מכירה']);
           const declaredPrice = csvData['מחיר מוצהר'] ? parseFloat(csvData['מחיר מוצהר']) : null;
           
+          // CRITICAL: Check duplicate within same organization/user context
           const duplicateCheckQuery = `
             SELECT id FROM comparable_data 
             WHERE address = $1 
               AND sale_date = $2 
               AND declared_price = $3
+              AND (organization_id = $4 OR (organization_id IS NULL AND $4 IS NULL))
+              AND (user_id = $5 OR (user_id IS NULL AND $5 IS NULL))
             LIMIT 1
           `;
           
           const duplicateCheck = await this.client.query(duplicateCheckQuery, [
             address,
             saleDate,
-            declaredPrice
+            declaredPrice,
+            this.organizationId,
+            this.userId || userId
           ]);
           
           if (duplicateCheck.rows.length > 0) {
@@ -301,9 +314,10 @@ class ComparableDataDatabaseClient {
               csv_filename, row_number, sale_date, address, gush_chelka_sub,
               rooms, floor_number, apartment_area_sqm, parking_spaces,
               construction_year, declared_price, price_per_sqm_rounded,
-              city, street_name, house_number, gush, chelka, sub_chelka
+              city, street_name, house_number, gush, chelka, sub_chelka,
+              organization_id, user_id, imported_by
             ) VALUES (
-              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
             )
             RETURNING id, created_at;
           `;
@@ -326,7 +340,10 @@ class ComparableDataDatabaseClient {
             parsedAddress.house_number,                          // 15
             parsedGush.gush,                                     // 16
             parsedGush.chelka,                                   // 17
-            parsedGush.sub_chelka                                // 18
+            parsedGush.sub_chelka,                                // 18
+            this.organizationId || null,                         // 19 - organization_id
+            this.userId || userId || null,                        // 20 - user_id
+            userId || 'system'                                    // 21 - imported_by
           ];
 
           const result = await this.client.query(query, values);
@@ -362,8 +379,14 @@ class ComparableDataDatabaseClient {
     await this.connect();
     
     try {
-      const query = `SELECT * FROM comparable_data WHERE id = $1`;
-      const result = await this.client.query(query, [id]);
+      // CRITICAL: Filter by organization_id and user_id for data isolation
+      const query = `
+        SELECT * FROM comparable_data 
+        WHERE id = $1 
+          AND (organization_id = $2 OR (organization_id IS NULL AND $2 IS NULL))
+          AND (user_id = $3 OR (user_id IS NULL AND $3 IS NULL))
+      `;
+      const result = await this.client.query(query, [id, this.organizationId, this.userId]);
       
       return result.rows[0];
     } finally {
@@ -432,6 +455,19 @@ class ComparableDataDatabaseClient {
         paramIndex++;
       }
 
+      // CRITICAL: Add organization_id and user_id filters for data isolation
+      if (this.organizationId) {
+        whereClauses.push(`(organization_id = $${paramIndex} OR (organization_id IS NULL AND $${paramIndex} IS NULL))`);
+        values.push(this.organizationId);
+        paramIndex++;
+      }
+      
+      if (this.userId) {
+        whereClauses.push(`(user_id = $${paramIndex} OR (user_id IS NULL AND $${paramIndex} IS NULL))`);
+        values.push(this.userId);
+        paramIndex++;
+      }
+      
       // Build WHERE clause (table doesn't have status/is_valid columns)
       const whereClause = whereClauses.length > 0 
         ? `WHERE ${whereClauses.join(' AND ')}`

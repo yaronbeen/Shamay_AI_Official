@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useTransition, useRef, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { StepIndicator } from '@/components/StepIndicator'
@@ -23,6 +23,41 @@ function debounce<T extends (...args: any[]) => any>(func: T, wait: number): T {
   }) as T
 }
 
+// Deep comparison helper - compares objects/arrays for equality
+// Handles edge cases: undefined, null, date strings, large base64 data
+function deepEqual(obj1: any, obj2: any): boolean {
+  // Same reference
+  if (obj1 === obj2) return true
+  
+  // Handle null/undefined
+  if (obj1 == null && obj2 == null) return true
+  if (obj1 == null || obj2 == null) return false
+  
+  // Different types
+  if (typeof obj1 !== typeof obj2) return false
+  
+  // Primitives
+  if (typeof obj1 !== 'object') return obj1 === obj2
+  
+  // Use JSON.stringify with replacer to handle undefined consistently
+  // This ensures undefined values are handled the same way in both objects
+  const replacer = (key: string, value: any) => {
+    // Convert undefined to null for consistent comparison
+    return value === undefined ? null : value
+  }
+  
+  try {
+    const str1 = JSON.stringify(obj1, replacer)
+    const str2 = JSON.stringify(obj2, replacer)
+    return str1 === str2
+  } catch (e) {
+    // Fallback for circular references or non-serializable data
+    console.warn('⚠️ Deep comparison failed (circular reference?):', e)
+    // If comparison fails, assume different (safer than assuming same)
+    return false
+  }
+}
+
 export default function WizardPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -34,6 +69,22 @@ export default function WizardPage() {
   const [valuationId, setValuationId] = useState<string | null>(null)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [lastSavedData, setLastSavedData] = useState<ValuationData | null>(null)
+  const [isTransitioning, startTransition] = useTransition()
+  const [stepKey, setStepKey] = useState(1) // Key for forcing re-render on step change
+  
+  // Track pending save to prevent race conditions
+  const pendingSaveRef = useRef<Promise<any> | null>(null)
+  
+  // Track if session initialization has already happened
+  // Prevents reload on step transitions when sessionId hasn't changed
+  const initializedSessionRef = useRef<string | null>(null)
+  
+  // Track previous sessionId to detect actual changes (not just object reference)
+  const prevSessionIdRef = useRef<string | null>(null)
+  
+  // CRITICAL FIX: Extract sessionId from searchParams
+  // Compare value, not object reference
+  const urlSessionId = searchParams.get('sessionId')
   
   // Database integration hook
   const { 
@@ -82,8 +133,13 @@ export default function WizardPage() {
   // Get step from URL or default to 1
   useEffect(() => {
     const step = parseInt(searchParams.get('step') || '1')
-    setCurrentStep(step)
-  }, [searchParams])
+    if (step !== currentStep) {
+      startTransition(() => {
+        setCurrentStep(step)
+        setStepKey(step) // Force re-render with new key for animation
+      })
+    }
+  }, [searchParams, currentStep])
 
   // Keyboard shortcut for returning to dashboard (Ctrl/Cmd + D)
   useEffect(() => {
@@ -101,50 +157,85 @@ export default function WizardPage() {
   }, [router])
 
   // Check for existing session or create new one only if needed
+  // OPTIMIZATION: Only runs when sessionId actually changes, not on step transitions
+  // CRITICAL: Compare actual sessionId value, not searchParams object reference
   useEffect(() => {
+    // Get sessionId from URL or localStorage
+    const currentUrlSessionId = searchParams.get('sessionId')
+    const localSessionId = localStorage.getItem('shamay_session_id')
+    const currentSessionId = currentUrlSessionId || localSessionId
+    
+    // CRITICAL FIX: Compare actual value, not object reference
+    // If sessionId value hasn't changed, skip entirely
+    if (currentSessionId === prevSessionIdRef.current) {
+      // SessionId value is the same, no need to do anything
+      return // Exit immediately - don't run any initialization logic
+    }
+    
+    // CRITICAL FIX: Also check if already initialized
+    if (currentSessionId && currentSessionId === initializedSessionRef.current) {
+      // Session already initialized, just update ref for future comparisons
+      prevSessionIdRef.current = currentSessionId
+      return // Exit early - don't run initialization
+    }
+    
+    // Also check if there's no sessionId at all and we're already initialized
+    if (!currentSessionId && initializedSessionRef.current) {
+      console.log('⏭️ [INIT] Already initialized, no sessionId')
+      prevSessionIdRef.current = null
+      return
+    }
+    
+    // Update ref to track current value for next comparison
+    prevSessionIdRef.current = currentSessionId
+    
     const initializeSession = async () => {
       try {
         setSessionLoading(true)
         
         // Check if there's a sessionId in the URL params
-        const urlSessionId = searchParams.get('sessionId')
-        if (urlSessionId) {
-          console.log('🔄 Using existing session from URL:', urlSessionId)
-          setSessionId(urlSessionId)
-          setData(prev => ({ ...prev, sessionId: urlSessionId }))
+        if (currentUrlSessionId) {
+          console.log('🔄 [INIT] Using existing session from URL:', currentUrlSessionId)
+          setSessionId(currentUrlSessionId)
+          setData(prev => ({ ...prev, sessionId: currentUrlSessionId }))
           // Save to localStorage for persistence
-          localStorage.setItem('shamay_session_id', urlSessionId)
+          localStorage.setItem('shamay_session_id', currentUrlSessionId)
           
           // Load existing data from database
           try {
-            const loadResult = await loadShumaForWizard(urlSessionId)
-            console.log('🔍 Database load result:', loadResult)
+            const loadResult = await loadShumaForWizard(currentUrlSessionId)
+            console.log('🔍 [INIT] Database load result:', loadResult)
             if (loadResult.success && loadResult.valuationData) {
-              console.log('✅ Loaded existing data from database:', loadResult.valuationData)
-              console.log('🔍 [LOAD] Uploads from database:', loadResult.valuationData.uploads)
-              console.log('🔍 [LOAD] Uploads status:', loadResult.valuationData.uploads?.map((u: any) => ({ id: u.id, type: u.type, status: u.status, hasStatus: 'status' in u })))
+              console.log('✅ [INIT] Loaded existing data from database:', loadResult.valuationData)
               // Directly set the data without going through session store merge
+              const loadedData = {
+                ...loadResult.valuationData,
+                sessionId: currentUrlSessionId
+              }
               setData(prev => ({
                 ...prev,
-                ...loadResult.valuationData,
-                sessionId: urlSessionId
+                ...loadedData
               }))
+              // MITIGATION: Initialize lastSavedData from loaded data
+              setLastSavedData(loadedData)
+              console.log('✅ [INIT] Initialized lastSavedData from database')
             } else {
-              console.log('⚠️ No existing data found, starting fresh')
+              console.log('⚠️ [INIT] No existing data found, starting fresh')
             }
           } catch (error) {
-            console.error('❌ Error loading existing data:', error)
+            console.error('❌ [INIT] Error loading existing data:', error)
           }
           
+          // Mark as initialized
+          initializedSessionRef.current = currentUrlSessionId
           setSessionLoading(false)
           setIsInitialLoad(false)
           return
         }
         
         // Check if there's a sessionId in localStorage
-        const localSessionId = localStorage.getItem('shamay_session_id')
         if (localSessionId) {
-          console.log('🔄 Using existing session from localStorage:', localSessionId)
+          console.log('🔄 [INIT] Using existing session from localStorage:', localSessionId)
           setSessionId(localSessionId)
           setData(prev => ({ ...prev, sessionId: localSessionId }))
           
@@ -152,57 +243,81 @@ export default function WizardPage() {
           try {
             const loadResult = await loadShumaForWizard(localSessionId)
             if (loadResult.success && loadResult.valuationData) {
-              console.log('✅ Loaded existing data from database')
-              console.log('🔍 [LOAD] Uploads from database:', loadResult.valuationData.uploads)
-              console.log('🔍 [LOAD] Uploads status:', loadResult.valuationData.uploads?.map((u: any) => ({ id: u.id, type: u.type, status: u.status, hasStatus: 'status' in u })))
+              console.log('✅ [INIT] Loaded existing data from database')
               // Directly set the data without going through session store merge
-              setData(prev => ({
-                ...prev,
+              const loadedData = {
                 ...loadResult.valuationData,
                 sessionId: localSessionId
+              }
+              setData(prev => ({
+                ...prev,
+                ...loadedData
               }))
+              // MITIGATION: Initialize lastSavedData from loaded data
+              setLastSavedData(loadedData)
+              console.log('✅ [INIT] Initialized lastSavedData from database')
             } else {
-              console.log('⚠️ No existing data found, starting fresh')
+              console.log('⚠️ [INIT] No existing data found, starting fresh')
             }
           } catch (error) {
-            console.error('❌ Error loading existing data:', error)
+            console.error('❌ [INIT] Error loading existing data:', error)
           }
           
+          // Mark as initialized
+          initializedSessionRef.current = localSessionId
           setSessionLoading(false)
           setIsInitialLoad(false)
           return
         }
         
-        // If no existing session, create a new one
-        console.log('🆕 No existing session found, creating new session')
-        try {
-          // Generate a new session ID locally
-          const newSessionId = Date.now().toString()
-          console.log('✅ Created new session:', newSessionId)
-          setSessionId(newSessionId)
-          setData(prev => ({ ...prev, sessionId: newSessionId }))
-          localStorage.setItem('shamay_session_id', newSessionId)
-          setSessionLoading(false)
-          setIsInitialLoad(false)
-        } catch (error) {
-          console.error('❌ Error creating session:', error)
-          router.push('/')
+        // If no existing session, create a new one (only once)
+        if (!initializedSessionRef.current) {
+          console.log('🆕 [INIT] No existing session found, creating new session')
+          try {
+            // Generate a new session ID locally
+            const newSessionId = Date.now().toString()
+            console.log('✅ [INIT] Created new session:', newSessionId)
+            setSessionId(newSessionId)
+            setData(prev => ({ ...prev, sessionId: newSessionId }))
+            localStorage.setItem('shamay_session_id', newSessionId)
+            initializedSessionRef.current = newSessionId
+            setSessionLoading(false)
+            setIsInitialLoad(false)
+          } catch (error) {
+            console.error('❌ [INIT] Error creating session:', error)
+            router.push('/')
+          }
         }
         
       } catch (error) {
-        console.error('❌ Failed to initialize session:', error)
+        console.error('❌ [INIT] Failed to initialize session:', error)
         setSessionLoading(false)
         router.push('/')
       }
     }
+    
+    // Only initialize if sessionId changed or not initialized yet
     initializeSession()
-  }, [searchParams, router, loadShumaForWizard])
+  }, [searchParams, router, loadShumaForWizard, sessionId]) // searchParams in deps, but we compare actual values inside
 
   // Enhanced debounced save function with database integration
+  // Tracks pending saves to prevent race conditions
   const debouncedSave = useCallback(
     debounce(async (dataToSave: ValuationData) => {
+      console.log("Currect pendingSaveRef" ,pendingSaveRef.current)
       if (sessionId && !isInitialLoad) {
         try {
+          // Wait for any pending save to complete first
+          if (pendingSaveRef.current) {
+            console.log('⏳ [DEBOUNCED SAVE] Waiting for pending save to complete...')
+            try {
+              await pendingSaveRef.current
+            } catch (e) {
+              // Previous save might have failed, continue anyway
+              console.warn('⚠️ Previous save had issues, continuing...')
+            }
+          }
+
           console.log('💾 [DEBOUNCED SAVE] Starting save to database...')
           console.log('💾 [DEBOUNCED SAVE] Uploads status:', dataToSave.uploads?.map((u: any) => ({ id: u.id, type: u.type, status: u.status })))
           
@@ -214,31 +329,43 @@ export default function WizardPage() {
             return
           }
 
-          // Save directly to database using ShumaDB
-          const result = await saveShumaToDatabase(
+          // Create save promise and track it
+          const savePromise = saveShumaToDatabase(
             sessionId,
             organizationId,
             userId,
             dataToSave
           )
           
+          pendingSaveRef.current = savePromise
+
+          // Wait for save to complete
+          const result = await savePromise
+          
+          // MITIGATION: Only update lastSavedData on successful save
           if (result.success) {
-            console.log('✅ Data saved to database successfully')
+            console.log('✅ [DEBOUNCED SAVE] Data saved to database successfully')
             console.log('✅ Uploads with status saved:', dataToSave.uploads?.length || 0, 'uploads')
             setHasUnsavedChanges(false)
-            setLastSavedData(dataToSave)
+            // Create a deep copy to avoid reference issues
+            setLastSavedData(JSON.parse(JSON.stringify(dataToSave)))
+            console.log('✅ [DEBOUNCED SAVE] Updated lastSavedData baseline')
             if (result.shumaId && !valuationId) {
               setValuationId(result.shumaId)
               console.log('✅ New shuma created:', result.shumaId)
             }
           } else {
-            console.error('❌ Database save failed:', result.error)
+            console.error('❌ [DEBOUNCED SAVE] Database save failed:', result.error)
+            // Don't update lastSavedData on failure - keep old baseline
           }
         } catch (err) {
-          console.error('Database save error:', err)
+          console.error('❌ [DEBOUNCED SAVE] Database save error:', err)
+        } finally {
+          // Clear pending save reference
+          pendingSaveRef.current = null
         }
       } else if (isInitialLoad) {
-        console.log('⏭️ Skipping save during initial load')
+        console.log('⏭️ [DEBOUNCED SAVE] Skipping save during initial load')
       }
     }, 1000), // 1 second debounce
     [
@@ -263,9 +390,34 @@ export default function WizardPage() {
         const oldValue = prev[key as keyof ValuationData]
         const newValue = updates[key as keyof ValuationData]
         
+        // CRITICAL FIX: Handle undefined/null/empty values correctly
+        // Both empty means no change
+        if (oldValue == null && newValue == null) {
+          return false // Both null/undefined - no change
+        }
+        
+        // If old is empty and new is empty (empty array, empty object, empty string), no change
+        if (!oldValue && !newValue) {
+          // Check if both are "empty" values (empty string, empty array, empty object)
+          const oldIsEmpty = oldValue === '' || 
+                           (Array.isArray(oldValue) && oldValue.length === 0) ||
+                           (typeof oldValue === 'object' && Object.keys(oldValue).length === 0)
+          const newIsEmpty = newValue === '' || 
+                           (Array.isArray(newValue) && newValue.length === 0) ||
+                           (typeof newValue === 'object' && newValue !== null && Object.keys(newValue).length === 0)
+          
+          if (oldIsEmpty && newIsEmpty) {
+            return false // Both empty - no change
+          }
+        }
+        
         // Simple comparison for primitives
         if (typeof newValue !== 'object' || newValue === null) {
-          if (oldValue !== newValue) {
+          // Handle undefined/null/empty string comparison
+          const oldNormalized = oldValue == null ? '' : String(oldValue).trim()
+          const newNormalized = newValue == null ? '' : String(newValue).trim()
+          
+          if (oldNormalized !== newNormalized) {
             changedFields.push(key)
             return true
           }
@@ -273,8 +425,25 @@ export default function WizardPage() {
         }
         
         // For objects/arrays, compare JSON strings (simple but effective)
-        const oldJSON = JSON.stringify(oldValue) || ''
-        const newJSON = JSON.stringify(newValue) || ''
+        // CRITICAL: Only compare if both have actual content
+        const oldJSON = oldValue ? JSON.stringify(oldValue) : ''
+        const newJSON = newValue ? JSON.stringify(newValue) : ''
+        
+        // If both are empty strings, no change
+        if (!oldJSON && !newJSON) {
+          return false
+        }
+        
+        // If old has content and new is empty, check if it's a real change
+        // (not just setting to empty when old was already empty)
+        if (oldJSON && !newJSON) {
+          // This might be a change (clearing data) - treat as change for safety
+          // But log it for debugging
+          console.log(`⚠️ [CHANGE CHECK] Field ${key}: old has content, new is empty`)
+          changedFields.push(key)
+          return true
+        }
+        
         if (oldJSON !== newJSON) {
           changedFields.push(key)
           console.log(`🔍 Change detected in ${key}:`, {
@@ -329,38 +498,81 @@ export default function WizardPage() {
   }, [debouncedSave])
 
   // Manual save function (for explicit saves, like form submission or step navigation)
-  // Only saves if there are actual changes
+  // Uses best practices: waits for pending saves, does deep comparison, avoids redundant saves
   const saveManually = useCallback(async () => {
     if (sessionId && !isInitialLoad) {
-      // Check if there are unsaved changes
-      if (!hasUnsavedChanges) {
-        console.log('⏭️ [MANUAL SAVE] No changes detected, skipping save')
-        return { success: true, skipped: true }
+      // BEST PRACTICE 1: Wait for any pending debounced save to complete first
+      if (pendingSaveRef.current) {
+        console.log('⏳ [MANUAL SAVE] Waiting for pending debounced save to complete...')
+        try {
+          await pendingSaveRef.current
+        } catch (e) {
+          // Previous save might have failed, continue anyway
+          console.warn('⚠️ [MANUAL SAVE] Previous save had issues, continuing with manual save...')
+        }
+      }
+
+      // MITIGATION: Safety net for first navigation (lastSavedData is null)
+      // On first navigation after load, save once to establish baseline
+      if (!lastSavedData) {
+        console.log('💾 [MANUAL SAVE] First save after load - establishing baseline')
+        // This is safe: first save establishes the baseline
+        // Subsequent navigations will compare against this
+      } else {
+        // BEST PRACTICE 2: Deep comparison instead of flag-based checking
+        // This is more reliable than hasUnsavedChanges flag which can be stale
+        const hasActualChanges = !deepEqual(data, lastSavedData)
+        
+        if (!hasActualChanges) {
+          console.log('⏭️ [MANUAL SAVE] No actual changes detected (deep comparison), skipping save')
+          console.log('🔍 [MANUAL SAVE] Data matches lastSavedData - no save needed')
+          setHasUnsavedChanges(false)
+          return { success: true, skipped: true }
+        }
+
+        // Also check flag as secondary validation
+        if (!hasUnsavedChanges && !hasActualChanges) {
+          console.log('⏭️ [MANUAL SAVE] No unsaved changes flag AND data matches, skipping save')
+          return { success: true, skipped: true }
+        }
       }
 
       const organizationId = session?.user?.primaryOrganizationId
       const userId = session?.user?.id
 
       if (!organizationId || !userId) {
-        console.warn('⚠️ Cannot save: missing authenticated user or organization')
+        console.warn('⚠️ [MANUAL SAVE] Cannot save: missing authenticated user or organization')
         return { success: false, error: 'Missing user or organization' }
       }
 
-      console.log('💾 [MANUAL SAVE] Changes detected, saving to database...')
-      const result = await saveShumaToDatabase(sessionId, organizationId, userId, data)
+      console.log('💾 [MANUAL SAVE] Changes detected or first save, saving to database...')
       
+      // Create save promise and track it
+      const savePromise = saveShumaToDatabase(sessionId, organizationId, userId, data)
+      pendingSaveRef.current = savePromise
+
+      const result = await savePromise
+      
+      // MITIGATION: Only update lastSavedData on successful save
+      // This prevents stale comparison baseline
       if (result.success) {
-        console.log('✅ Manual save successful')
+        console.log('✅ [MANUAL SAVE] Save successful')
         setHasUnsavedChanges(false)
-        setLastSavedData(data)
+        // Create a deep copy to avoid reference issues
+        setLastSavedData(JSON.parse(JSON.stringify(data)))
+        console.log('✅ [MANUAL SAVE] Updated lastSavedData baseline')
       } else {
-        console.error('❌ Manual save failed:', result.error)
+        console.error('❌ [MANUAL SAVE] Save failed:', result.error)
+        // Don't update lastSavedData on failure - keep old baseline
       }
+      
+      // Clear pending save reference
+      pendingSaveRef.current = null
       
       return result
     }
     return { success: false, error: 'No session or still loading' }
-  }, [sessionId, isInitialLoad, session?.user, data, saveShumaToDatabase, hasUnsavedChanges])
+  }, [sessionId, isInitialLoad, session?.user, data, saveShumaToDatabase, hasUnsavedChanges, lastSavedData])
 
   // Save GIS data to database
   const saveGISDataToDB = useCallback(async (gisData: any) => {
@@ -415,8 +627,11 @@ export default function WizardPage() {
       await saveManually()
       
       const newStep = currentStep + 1
-      setCurrentStep(newStep)
-      router.push(`/wizard?step=${newStep}`)
+      startTransition(() => {
+        setCurrentStep(newStep)
+        setStepKey(newStep)
+        router.push(`/wizard?step=${newStep}`)
+      })
     }
   }
 
@@ -426,8 +641,11 @@ export default function WizardPage() {
       await saveManually()
       
       const newStep = currentStep - 1
-      setCurrentStep(newStep)
-      router.push(`/wizard?step=${newStep}`)
+      startTransition(() => {
+        setCurrentStep(newStep)
+        setStepKey(newStep)
+        router.push(`/wizard?step=${newStep}`)
+      })
     }
   }
 
@@ -437,8 +655,11 @@ export default function WizardPage() {
       // Save data before navigating
       await saveManually()
       
-      setCurrentStep(step)
-      router.push(`/wizard?step=${step}`)
+      startTransition(() => {
+        setCurrentStep(step)
+        setStepKey(step)
+        router.push(`/wizard?step=${step}`)
+      })
     }
   }
 
@@ -558,14 +779,23 @@ export default function WizardPage() {
           {/* Main Content - Takes 7/12 of the width (58%) */}
           <div className="xl:col-span-7">
             <StepIndicator currentStep={currentStep} onStepClick={handleStepClick} />
-            <div className="bg-white rounded-lg shadow-md p-6 mt-6">
-              {renderStep()}
+            <div className="bg-white rounded-lg shadow-md p-6 mt-6 transition-wrapper">
+              {isTransitioning ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                </div>
+              ) : (
+                <div key={stepKey} className="step-transition-enter">
+                  {renderStep()}
+                </div>
+              )}
               <NavigationButtons
                 currentStep={currentStep}
                 totalSteps={5}
                 onNext={nextStep}
                 onPrevious={prevStep}
                 canProceed={stepValidation[`step${currentStep}` as keyof typeof stepValidation]}
+                isLoading={isTransitioning}
               />
             </div>
           </div>

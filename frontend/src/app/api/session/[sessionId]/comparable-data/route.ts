@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { spawn } from 'child_process'
 import { join } from 'path'
 
@@ -103,8 +105,14 @@ export async function POST(
   { params }: { params: { sessionId: string } }
 ) {
   try {
+    // CRITICAL: Get user session for organization and user ID isolation
+    const session = await getServerSession(authOptions)
+    const organizationId = session?.user?.primaryOrganizationId || null
+    const userId = session?.user?.id || null
+    
     const body = await request.json()
     console.log('➕ Frontend: Adding comparable data via EXISTING backend')
+    console.log('📊 Organization/User:', { organizationId, userId })
 
     // ✅ USE EXISTING BACKEND: Use the existing database client directly
     const backendScript = join(process.cwd(), 'backend', 'comparable-data-management', 'index.js')
@@ -115,7 +123,7 @@ import { ComparableDataDatabaseClient } from './database-client.js';
 
 async function addComparableData() {
   try {
-    const db = new ComparableDataDatabaseClient();
+    const db = new ComparableDataDatabaseClient('${organizationId || ''}', '${userId || ''}');
     await db.connect();
     
     const result = await db.insertComparableData({
@@ -128,8 +136,8 @@ async function addComparableData() {
       sale_date: '${body.saleDate}',
       city: '${body.city}',
       street_name: '${body.neighborhood || ''}',
-      imported_by: 'frontend-user'
-    }, 'manual-entry', 0, 'frontend-user');
+      imported_by: '${userId || 'frontend-user'}'
+    }, 'manual-entry', 0, '${userId || 'frontend-user'}');
     
     await db.disconnect();
     

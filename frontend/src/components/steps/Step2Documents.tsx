@@ -955,17 +955,17 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
   }
 
     return (
-    <div className="max-w-6xl mx-auto p-6">
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2 text-right">
+    <div className="max-w-6xl mx-auto p-4 sm:p-6 overflow-hidden">
+      <div className="mb-6 sm:mb-8">
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2 text-right truncate">
           העלאת מסמכים
         </h2>
-        <p className="text-gray-600 text-right">
+        <p className="text-sm sm:text-base text-gray-600 text-right break-words">
           העלה את המסמכים הנדרשים לשומה. המערכת תעבד ותחלץ נתונים אוטומטית
         </p>
         </div>
         
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
         {Object.entries(DOCUMENT_TYPES).map(([type, config]) => {
           const Icon = config.icon
           const typeUploads = getUploadsByType(type)
@@ -976,7 +976,7 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
             <div
               key={type}
           className={`
-                border-2 border-dashed rounded-lg p-6 transition-all
+                border-2 border-dashed rounded-lg p-4 sm:p-6 transition-all overflow-hidden
                 ${isDragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300'}
                 ${config.required && !hasUploads ? 'border-red-300 bg-red-50' : ''}
               `}
@@ -1024,12 +1024,15 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
                     {typeUploads.map((upload) => (
                       <div
                         key={upload.id}
-                        className="flex items-center justify-between p-3 bg-white rounded border"
+                        className="flex items-center justify-between p-3 bg-white rounded border gap-2"
                       >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
                           {getStatusIcon(upload.status)}
-                          <div className="text-right">
-                            <div className="text-sm font-medium text-gray-900">
+                          <div className="text-right min-w-0 flex-1">
+                            <div 
+                              className="text-sm font-medium text-gray-900 truncate max-w-full"
+                              title={upload.file.name}
+                            >
                               {upload.file.name}
                             </div>
                             <div className="text-xs text-gray-500">
@@ -1085,7 +1088,7 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
 
                         {/* Error Message */}
                         {upload.status === 'error' && upload.error && (
-                          <div className="w-full mt-2 text-xs text-red-600">
+                          <div className="w-full mt-2 text-xs text-red-600 truncate" title={upload.error}>
                             {upload.error}
                           </div>
                         )}

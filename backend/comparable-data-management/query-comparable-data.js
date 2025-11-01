@@ -13,7 +13,11 @@ async function queryComparableData() {
   try {
     console.log('🔍 Backend: Starting comparable data query...');
     
-    const db = new ComparableDataDatabaseClient();
+    // CRITICAL: Get organization_id and user_id from environment for data isolation
+    const organizationId = process.env.ORGANIZATION_ID || null;
+    const userId = process.env.USER_ID || null;
+    
+    const db = new ComparableDataDatabaseClient(organizationId, userId);
     await db.connect();
     
     // Get query parameters from environment variables
@@ -22,9 +26,11 @@ async function queryComparableData() {
     const rooms = process.env.QUERY_ROOMS || '';
     const area = process.env.QUERY_AREA || '';
     
-    console.log('📊 Query parameters:', { city, neighborhood, rooms, area });
+    console.log('📊 Query parameters:', { city, neighborhood, rooms, area, organizationId, userId });
     
     // Build query based on parameters
+    // CRITICAL: Add organization_id and user_id filters for data isolation
+    // NOTE: Removed is_valid and status filters as they don't exist in all schema versions
     let query = `
       SELECT 
         id, 
@@ -38,15 +44,28 @@ async function queryComparableData() {
         city, 
         construction_year as building_year,
         parking_spaces as parking,
-        data_quality_score,
-        is_valid
+        data_quality_score
       FROM comparable_data 
-      WHERE status = 'active' AND is_valid = true
+      WHERE 1=1
     `;
     
     const queryParams = [];
     let paramCount = 1;
     
+    // CRITICAL: Add organization and user filters
+    if (organizationId) {
+      query += ` AND (organization_id = $${paramCount} OR (organization_id IS NULL AND $${paramCount} IS NULL))`;
+      queryParams.push(organizationId);
+      paramCount++;
+    }
+    
+    if (userId) {
+      query += ` AND (user_id = $${paramCount} OR (user_id IS NULL AND $${paramCount} IS NULL))`;
+      queryParams.push(userId);
+      paramCount++;
+    }
+    
+    // Add search filters
     if (city) {
       query += ` AND city ILIKE $${paramCount}`;
       queryParams.push(`%${city}%`);

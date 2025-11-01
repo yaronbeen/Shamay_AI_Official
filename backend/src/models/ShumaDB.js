@@ -25,30 +25,58 @@ try {
 // Lazy pool initialization - only create when first used
 let pool = null
 
+// In-memory cache for loadShumaForWizard to reduce repeated queries
+// Cache TTL: 5 seconds (balances freshness with performance)
+const shumaCache = new Map()
+const CACHE_TTL_MS = 5000 // 5 seconds
+
+// Helper to safely parse JSON (handles both string and already-parsed objects)
+function safeParseJSON(value, defaultValue) {
+  if (!value) return defaultValue
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value)
+    } catch (e) {
+      return defaultValue
+    }
+  }
+  return value
+}
+
 function getDatabaseConfig() {
   const DATABASE_URL = process.env.DATABASE_URL
   const POSTGRES_URL = process.env.POSTGRES_URL
   const POSTGRES_URL_NON_POOLING = process.env.POSTGRES_URL_NON_POOLING
   
-  console.log('🔍 DB Config: Checking environment variables...')
-  console.log('🔍 DATABASE_URL:', DATABASE_URL ? 'SET ✅' : 'NOT SET ❌')
-  console.log('🔍 POSTGRES_URL:', POSTGRES_URL ? 'SET ✅' : 'NOT SET ❌')
-  console.log('🔍 POSTGRES_URL_NON_POOLING:', POSTGRES_URL_NON_POOLING ? 'SET ✅' : 'NOT SET ❌')
-  console.log('🔍 VERCEL:', process.env.VERCEL ? 'YES' : 'NO')
-  console.log('🔍 NODE_ENV:', process.env.NODE_ENV)
+  const isDev = process.env.NODE_ENV !== 'production'
+  const debugConfig = process.env.DEBUG_DB_CONFIG === 'true'
+  
+  // Only log config details in dev mode with debug flag
+  if (isDev && debugConfig) {
+    console.log('🔍 DB Config: Checking environment variables...')
+    console.log('🔍 DATABASE_URL:', DATABASE_URL ? 'SET ✅' : 'NOT SET ❌')
+    console.log('🔍 POSTGRES_URL:', POSTGRES_URL ? 'SET ✅' : 'NOT SET ❌')
+    console.log('🔍 POSTGRES_URL_NON_POOLING:', POSTGRES_URL_NON_POOLING ? 'SET ✅' : 'NOT SET ❌')
+    console.log('🔍 VERCEL:', process.env.VERCEL ? 'YES' : 'NO')
+    console.log('🔍 NODE_ENV:', process.env.NODE_ENV)
+  }
   
   // Prefer DATABASE_URL, then POSTGRES_URL, then POSTGRES_URL_NON_POOLING, then fallback to local
   const connectionString = DATABASE_URL || POSTGRES_URL || POSTGRES_URL_NON_POOLING
   
   if (connectionString) {
-    console.log('✅ Using connection string from env:', connectionString.substring(0, 20) + '...')
+    if (isDev && debugConfig) {
+      console.log('✅ Using connection string from env:', connectionString.substring(0, 20) + '...')
+    }
     return {
       connectionString,
       ssl: { rejectUnauthorized: false }
     }
   }
   
-  console.log('⚠️ No connection string found, using fallback local config')
+  if (isDev && debugConfig) {
+    console.log('⚠️ No connection string found, using fallback local config')
+  }
   return {
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT || '5432'),
@@ -60,7 +88,10 @@ function getDatabaseConfig() {
 
 function getPool() {
   if (!pool) {
-    console.log('🔍 ShumaDB: Initializing connection pool...')
+    const isDev = process.env.NODE_ENV !== 'production'
+    if (isDev) {
+      console.log('🔍 ShumaDB: Initializing connection pool...')
+    }
     
     if (!Pool) {
       console.error('❌ Pool constructor is not available!')
@@ -68,21 +99,39 @@ function getPool() {
     }
     
     const config = getDatabaseConfig()
-    console.log('🔍 ShumaDB: Creating pool with config:', {
-      hasConnectionString: !!config.connectionString,
-      host: config.host,
-      database: config.database
-    })
+    
+    // Add connection pool optimization settings
+    if (!config.connectionString) {
+      // Local development: configure pool limits
+      config.min = parseInt(process.env.DB_POOL_MIN || '2')
+      config.max = parseInt(process.env.DB_POOL_MAX || '10')
+      config.idleTimeoutMillis = parseInt(process.env.DB_POOL_IDLE_TIMEOUT || '30000')
+      config.connectionTimeoutMillis = parseInt(process.env.DB_POOL_CONNECTION_TIMEOUT || '2000')
+    }
+    
+    if (isDev) {
+      console.log('🔍 ShumaDB: Creating pool with config:', {
+        hasConnectionString: !!config.connectionString,
+        host: config.host,
+        database: config.database,
+        min: config.min,
+        max: config.max
+      })
+    }
     
     // Use Neon serverless in production
     if (process.env.VERCEL && neonConfig) {
-      console.log('🚀 Configuring Neon for WebSocket (Vercel)')
+      if (isDev) {
+        console.log('🚀 Configuring Neon for WebSocket (Vercel)')
+      }
       neonConfig.fetchConnectionCache = true
     }
     
     try {
       pool = new Pool(config)
-      console.log('✅ Pool created successfully')
+      if (isDev) {
+        console.log('✅ Pool created successfully')
+      }
       
       // Test the connection
       pool.on('error', (err) => {
@@ -99,7 +148,11 @@ function getPool() {
 
 const db = {
   query: async (text, params) => {
-    console.log('🔍 db.query called with:', text.substring(0, 50) + '...')
+    // Only log queries in development mode
+    const isDev = process.env.NODE_ENV !== 'production'
+    if (isDev && process.env.DEBUG_DB_QUERIES === 'true') {
+      console.log('🔍 db.query:', text.substring(0, 50) + '...')
+    }
     
     // ALWAYS use Pool for parameterized queries (Neon sql client doesn't support $1, $2 syntax well)
     // The Neon sql client is best for tagged templates, which we're not using
@@ -110,15 +163,22 @@ const db = {
     return poolInstance.query(text, params)
   },
   client: async () => {
-    console.log('🔍 db.client called')
+    const isDev = process.env.NODE_ENV !== 'production'
+    if (isDev && process.env.DEBUG_DB_QUERIES === 'true') {
+      console.log('🔍 db.client called')
+    }
     const poolInstance = getPool()
     if (!poolInstance) {
       throw new Error('Database pool is not initialized')
     }
-    console.log('🔍 Connecting to pool...')
+    if (isDev && process.env.DEBUG_DB_QUERIES === 'true') {
+      console.log('🔍 Connecting to pool...')
+    }
     try {
       const client = await poolInstance.connect()
-      console.log('✅ Pool client connected')
+      if (isDev && process.env.DEBUG_DB_QUERIES === 'true') {
+        console.log('✅ Pool client connected')
+      }
       return client
     } catch (error) {
       console.error('❌ Failed to get pool client:', error)
@@ -184,6 +244,10 @@ class ShumaDBEnhanced {
       }
       
       await client.query('COMMIT')
+      
+      // Clear cache for this session after saving to ensure fresh data
+      this.clearShumaCache(sessionId)
+      
       return { success: true, shumaId }
       
     } catch (error) {
@@ -963,20 +1027,33 @@ class ShumaDBEnhanced {
 
   /**
    * Load shuma data for wizard
+   * Uses in-memory cache to reduce repeated database queries
    */
-  static async loadShumaForWizard(sessionId) {
+  static async loadShumaForWizard(sessionId, skipCache = false) {
     try {
+      // Check cache first (unless explicitly skipped)
+      if (!skipCache) {
+        const cached = shumaCache.get(sessionId)
+        if (cached && (Date.now() - cached.timestamp) < CACHE_TTL_MS) {
+          return cached.data
+        }
+      }
+
       const result = await db.query(`
         SELECT * FROM shuma WHERE session_id = $1
       `, [sessionId])
 
       if (result.rows.length === 0) {
-        return { error: 'Shuma not found' }
+        const notFound = { error: 'Shuma not found' }
+        // Cache not found result briefly to avoid repeated queries
+        shumaCache.set(sessionId, { data: notFound, timestamp: Date.now() })
+        return notFound
       }
 
       const shuma = result.rows[0]
       
       // Convert database data back to ValuationData format
+      // Optimize JSON parsing: only parse strings, use already-parsed objects
       const valuationData = {
         // Basic Property Information
         street: shuma.street || '',
@@ -1028,28 +1105,28 @@ class ShumaDBEnhanced {
         finishStandard: shuma.finish_standard || '',
         finishDetails: shuma.finish_details || '',
         
-        // Document Uploads
-        propertyImages: typeof shuma.property_images === 'string' ? JSON.parse(shuma.property_images) : (shuma.property_images || []),
+        // Document Uploads (optimized JSON parsing)
+        propertyImages: safeParseJSON(shuma.property_images, []),
         selectedImageIndex: shuma.selected_image_index || 0,
         selectedImagePreview: shuma.selected_image_preview || null,
-        interiorImages: typeof shuma.interior_images === 'string' ? JSON.parse(shuma.interior_images) : (shuma.interior_images || []),
+        interiorImages: safeParseJSON(shuma.interior_images, []),
         
         // Signature
         signaturePreview: shuma.signature_preview || null,
         
-        // Analysis data
-        propertyAnalysis: typeof shuma.property_analysis === 'string' ? JSON.parse(shuma.property_analysis) : (shuma.property_analysis || {}),
-        marketAnalysis: typeof shuma.market_analysis === 'string' ? JSON.parse(shuma.market_analysis) : (shuma.market_analysis || {}),
+        // Analysis data (optimized JSON parsing)
+        propertyAnalysis: safeParseJSON(shuma.property_analysis, {}),
+        marketAnalysis: safeParseJSON(shuma.market_analysis, {}),
         // Also populate comparableDataAnalysis from marketAnalysis for frontend compatibility
-        comparableDataAnalysis: typeof shuma.market_analysis === 'string' ? JSON.parse(shuma.market_analysis) : (shuma.market_analysis || {}),
-        riskAssessment: typeof shuma.risk_assessment === 'string' ? JSON.parse(shuma.risk_assessment) : (shuma.risk_assessment || {}),
-        recommendations: typeof shuma.recommendations === 'string' ? JSON.parse(shuma.recommendations) : (shuma.recommendations || []),
+        comparableDataAnalysis: safeParseJSON(shuma.market_analysis, {}),
+        riskAssessment: safeParseJSON(shuma.risk_assessment, {}),
+        recommendations: safeParseJSON(shuma.recommendations, []),
         
         // Extracted data
-        extractedData: typeof shuma.extracted_data === 'string' ? JSON.parse(shuma.extracted_data) : (shuma.extracted_data || {}),
+        extractedData: safeParseJSON(shuma.extracted_data, {}),
         
         // Calculations
-        comparableData: typeof shuma.comparable_data === 'string' ? JSON.parse(shuma.comparable_data) : (shuma.comparable_data || []),
+        comparableData: safeParseJSON(shuma.comparable_data, []),
         finalValuation: parseFloat(shuma.final_valuation) || 0,
         pricePerSqm: parseFloat(shuma.price_per_sqm) || 0,
         
@@ -1058,22 +1135,38 @@ class ShumaDBEnhanced {
         sessionId: shuma.session_id,
         
         // Uploads
-        uploads: typeof shuma.uploads === 'string' ? JSON.parse(shuma.uploads) : (shuma.uploads || []),
+        uploads: safeParseJSON(shuma.uploads, []),
         
         // GIS Analysis
-        gisAnalysis: typeof shuma.gis_analysis === 'string' ? JSON.parse(shuma.gis_analysis) : (shuma.gis_analysis || {}),
+        gisAnalysis: safeParseJSON(shuma.gis_analysis, {}),
         
         // GIS Screenshots
-        gisScreenshots: typeof shuma.gis_screenshots === 'string' ? JSON.parse(shuma.gis_screenshots) : (shuma.gis_screenshots || {}),
+        gisScreenshots: safeParseJSON(shuma.gis_screenshots, {}),
         
         // Garmushka Measurements
-        garmushkaMeasurements: typeof shuma.garmushka_measurements === 'string' ? JSON.parse(shuma.garmushka_measurements) : (shuma.garmushka_measurements || {})
+        garmushkaMeasurements: safeParseJSON(shuma.garmushka_measurements, {})
       }
 
-      return { valuationData, success: true }
+      const resultData = { valuationData, success: true }
+      
+      // Cache the result
+      shumaCache.set(sessionId, { data: resultData, timestamp: Date.now() })
+      
+      return resultData
     } catch (error) {
       console.error('Error loading shuma for wizard:', error)
       return { error: 'Failed to load shuma' }
+    }
+  }
+  
+  /**
+   * Clear cache for a session (call after saving to ensure fresh data)
+   */
+  static clearShumaCache(sessionId) {
+    if (sessionId) {
+      shumaCache.delete(sessionId)
+    } else {
+      shumaCache.clear()
     }
   }
 

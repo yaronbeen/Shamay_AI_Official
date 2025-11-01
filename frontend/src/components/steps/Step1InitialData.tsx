@@ -11,7 +11,7 @@ interface Step1InitialDataProps {
 export function Step1InitialData({ data, updateData, onValidationChange }: Step1InitialDataProps) {
   // Helper to convert DD.MM.YYYY to YYYY-MM-DD for date input
   const formatDateForInput = (dateStr: string) => {
-    if (!dateStr) return new Date().toISOString().split('T')[0]
+    if (!dateStr) return ''
     // If already in YYYY-MM-DD format, return as is
     if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr
     // If in DD.MM.YYYY format, convert to YYYY-MM-DD
@@ -20,21 +20,21 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
       const [, day, month, year] = match
       return `${year}-${month}-${day}`
     }
-    // Fallback to current date
-    return new Date().toISOString().split('T')[0]
+    // No fallback - return empty string
+    return ''
   }
 
   const [formData, setFormData] = useState({
     // סוג שומה ומועד כתיבתה
     valuationType: data.valuationType || '',
-    valuationDate: formatDateForInput(data.valuationDate),
+    valuationDate: formatDateForInput(data.valuationDate) || '',
     
     // זהות מזמין השומה והקשר שלו לנכס
     clientName: data.clientName || '',
     clientRelation: data.clientRelation || '',
     
     // המועד הקובע לשומה
-    valuationEffectiveDate: data.valuationEffectiveDate || new Date().toISOString().split('T')[0],
+    valuationEffectiveDate: formatDateForInput(data.valuationEffectiveDate) || '',
     
     // זיהוי הנכס
     street: data.street || '',
@@ -76,14 +76,14 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
     setFormData({
       // סוג שומה ומועד כתיבתה
       valuationType: data.valuationType || '',
-      valuationDate: formatDateForInput(data.valuationDate),
+      valuationDate: formatDateForInput(data.valuationDate) || '',
       
       // זהות מזמין השומה והקשר שלו לנכס
       clientName: data.clientName || '',
       clientRelation: data.clientRelation || '',
       
       // המועד הקובע לשומה
-      valuationEffectiveDate: formatDateForInput(data.valuationEffectiveDate),
+      valuationEffectiveDate: formatDateForInput(data.valuationEffectiveDate) || '',
       
       // זיהוי הנכס
       street: data.street || '',
