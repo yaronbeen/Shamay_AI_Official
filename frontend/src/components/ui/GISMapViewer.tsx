@@ -45,7 +45,22 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots }: GI
   useEffect(() => {
     try {
       const raw = localStorage.getItem('govmap-saved-maps')
-      if (raw) setSavedMaps(JSON.parse(raw))
+      if (raw) {
+        const allMaps = JSON.parse(raw)
+        // CRITICAL FIX: Filter maps by sessionId - only load maps for current valuation
+        if (sessionId) {
+          const filteredMaps = allMaps.filter((m: any) => {
+            // Check if map.id matches sessionId, or if map has sessionId field that matches
+            return m.id === sessionId || m.sessionId === sessionId
+          })
+          setSavedMaps(filteredMaps)
+          console.log(`🔍 [GIS] Loaded ${filteredMaps.length} maps for sessionId: ${sessionId} (from ${allMaps.length} total)`)
+        } else {
+          // If no sessionId, don't load any maps (safety - prevents loading wrong maps)
+          setSavedMaps([])
+          console.log('⚠️ [GIS] No sessionId provided, not loading any saved maps')
+        }
+      }
     } catch {}
 
     // Load initial screenshots from props if available
@@ -518,6 +533,7 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots }: GI
 
     const map = {
       id: mapId,
+      sessionId: sessionId || mapId, // CRITICAL: Store sessionId for filtering
       address_input: govmapData.displayAddress || `${addressStreet} ${addressNumber}, ${addressCity}`,
       address_normalized: govmapData.address?.normalized || '',
       latitude: govmapData.coordinates?.wgs84?.lat,
@@ -577,8 +593,20 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots }: GI
     try {
       const raw = localStorage.getItem('govmap-saved-maps')
       if (raw) {
-        const maps = JSON.parse(raw)
-        setSavedMaps(maps)
+        const allMaps = JSON.parse(raw)
+        // CRITICAL FIX: Filter maps by sessionId - only load maps for current valuation
+        if (sessionId) {
+          const filteredMaps = allMaps.filter((m: any) => {
+            // Check if map.id matches sessionId, or if map has sessionId field that matches
+            return m.id === sessionId || m.sessionId === sessionId
+          })
+          setSavedMaps(filteredMaps)
+          console.log(`🔍 [GIS] Loaded ${filteredMaps.length} maps for sessionId: ${sessionId} (from ${allMaps.length} total)`)
+        } else {
+          // If no sessionId, don't load any maps (safety - prevents loading wrong maps)
+          setSavedMaps([])
+          console.log('⚠️ [GIS] No sessionId provided, not loading any saved maps')
+        }
       }
     } catch (error) {
       console.error('Error loading saved maps:', error)
@@ -759,21 +787,21 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots }: GI
       console.error('No sessionId available, cannot save to DB')
       return
     }
-    
+
     try {
       // Build current gisScreenshots object - merge with existing screenshots
       const currentScreenshots = { ...screenshotUrls }
       currentScreenshots[`cropMode${cropMode}`] = screenshotUrl
-
+      
       console.log(`💾 Saving screenshot to shuma table for session: ${actualSessionId}`)
       console.log(`💾 Screenshots:`, currentScreenshots)
-
+      
       // Use save_gis_data action which only updates gisScreenshots field
       // First check if shuma exists, if not create it
       const checkResponse = await fetch('/api/sessions', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           action: 'load_from_db',
           sessionId: actualSessionId
         })
@@ -970,7 +998,7 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots }: GI
 
   useEffect(() => {
     loadSavedMaps()
-  }, [])
+  }, [sessionId]) // Reload when sessionId changes
 
   return (
     <div className="min-h-screen bg-gray-50 p-5" dir="rtl">

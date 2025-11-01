@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Upload, BarChart3, Loader2, FileText, AlertCircle, CheckCircle, X, Check } from 'lucide-react'
+import { Upload, BarChart3, Loader2, FileText, AlertCircle, CheckCircle, X, Check, Edit2, Trash2, EyeOff } from 'lucide-react'
 import { ValuationData } from '../ValuationWizard'
 
 interface ComparableDataViewerProps {
@@ -44,6 +44,122 @@ interface AnalysisResult {
   comparables: ComparableRecord[]
 }
 
+// CRITICAL: Hebrew header mapping for database field names
+// Maps English database column names to Hebrew display names
+const HEBREW_HEADER_MAP: Record<string, string> = {
+  // Address fields
+  'address': 'כתובת',
+  'address_input': 'כתובת',
+  'city': 'עיר',
+  'street_name': 'שם רחוב',
+  'house_number': 'מספר בית',
+  
+  // Property details
+  'rooms': 'חדרים',
+  'floor_number': 'קומה',
+  'floor': 'קומה',
+  'area': 'שטח (מ"ר)',
+  'apartment_area_sqm': 'שטח דירה (מ"ר)',
+  'parking_spaces': 'חניות',
+  'construction_year': 'שנת בנייה',
+  'building_year': 'שנת בנייה',
+  
+  // Price fields
+  'price': 'מחיר',
+  'declared_price': 'מחיר מוצהר',
+  'price_per_sqm': 'מחיר למ"ר',
+  'verified_price_per_sqm': 'מחיר למ"ר (מאומת)',
+  'price_per_sqm_rounded': 'מחיר למ"ר',
+  
+  // Date fields
+  'sale_date': 'יום מכירה',
+  
+  // Gush/Chelka fields
+  'gush_chelka_sub': 'גו"ח',
+  'gush': 'גוש',
+  'chelka': 'חלקה',
+  'sub_chelka': 'תת חלקה',
+  
+  // Quality/Status fields
+  'data_quality_score': 'איכות נתונים',
+  'is_valid': 'תקף',
+  'status': 'סטטוס',
+  
+  // Other fields
+  'row_number': 'מספר שורה',
+  'csv_filename': 'קובץ מקור',
+  'created_at': 'נוצר ב'
+}
+
+// CRITICAL: Reverse mapping - Hebrew CSV headers to English database field names
+// This is used when CSV headers are already in Hebrew and we need to access data
+const HEBREW_TO_ENGLISH_MAP: Record<string, string> = {
+  // Address fields
+  'כתובת': 'address',
+  'עיר': 'city',
+  'שם רחוב': 'street_name',
+  'מספר בית': 'house_number',
+  
+  // Property details
+  'חדרים': 'rooms',
+  'קומה': 'floor_number',
+  'שטח (מ"ר)': 'area',
+  'שטח דירה (מ"ר)': 'apartment_area_sqm',
+  'שטח דירה במ"ר': 'apartment_area_sqm',
+  'שטח דירה במר': 'apartment_area_sqm',
+  'חניות': 'parking_spaces',
+  'שנת בנייה': 'construction_year',
+  'שנת בניה': 'construction_year',
+  
+  // Price fields
+  'מחיר': 'price',
+  'מחיר מוצהר': 'declared_price',
+  'מחיר למ"ר': 'price_per_sqm',
+  'מחיר למ"ר (מאומת)': 'verified_price_per_sqm',
+  'מחיר למ"ר, במעוגל': 'price_per_sqm_rounded',
+  'מחיר למר במעוגל': 'price_per_sqm_rounded',
+  
+  // Date fields
+  'יום מכירה': 'sale_date',
+  
+  // Gush/Chelka fields
+  'גו"ח': 'gush_chelka_sub',
+  'גוח': 'gush_chelka_sub',
+  'גוש': 'gush',
+  'חלקה': 'chelka',
+  'תת חלקה': 'sub_chelka',
+  
+  // Quality/Status fields
+  'איכות נתונים': 'data_quality_score',
+  'תקף': 'is_valid',
+  'סטטוס': 'status',
+  
+  // Other fields
+  'מספר שורה': 'row_number',
+  'קובץ מקור': 'csv_filename',
+  'נוצר ב': 'created_at'
+}
+
+// Helper function to convert English field name to Hebrew header
+const getHebrewHeader = (fieldName: string): string => {
+  // If already Hebrew (contains Hebrew characters), return as-is
+  if (/[\u0590-\u05FF]/.test(fieldName)) {
+    return fieldName
+  }
+  // Otherwise, map to Hebrew using the mapping
+  return HEBREW_HEADER_MAP[fieldName] || fieldName
+}
+
+// Helper function to convert Hebrew CSV header to English field name
+const getEnglishFieldName = (hebrewHeader: string): string => {
+  // If already English (no Hebrew characters), return as-is
+  if (!/[\u0590-\u05FF]/.test(hebrewHeader)) {
+    return hebrewHeader
+  }
+  // Otherwise, map to English using the reverse mapping
+  return HEBREW_TO_ENGLISH_MAP[hebrewHeader] || hebrewHeader
+}
+
 export default function ComparableDataViewer({ 
   data, 
   sessionId,
@@ -57,8 +173,19 @@ export default function ComparableDataViewer({
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null)
   const [fileInputRef, setFileInputRef] = useState<HTMLInputElement | null>(null)
+  // CRITICAL: Store CSV headers dynamically (not hardcoded)
+  // Store Hebrew display headers
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([])
+  // Store mapping between Hebrew headers and original field names for data access
+  const [headerToFieldMap, setHeaderToFieldMap] = useState<Map<string, string>>(new Map())
+  // Track which cells are being edited: { recordId: { fieldName: true } }
+  const [editingCell, setEditingCell] = useState<{ recordId: number; fieldName: string } | null>(null)
+  // Track edited cell values during editing: { recordId: { fieldName: value } }
+  const [cellEditValues, setCellEditValues] = useState<Record<number, Record<string, any>>>({})
+  // Track hidden columns (Hebrew headers that are hidden)
+  const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set())
 
-  // Load persisted analysis on mount
+  // CRITICAL: Load persisted data on mount - shows data immediately
   useEffect(() => {
     if (sessionId) {
       const storageKey = `comparable_analysis:${sessionId}`
@@ -69,11 +196,57 @@ export default function ComparableDataViewer({
           setAnalysisResult(parsed.analysis)
           setAllData(parsed.allData || [])
           setSelectedIds(new Set(parsed.selectedIds || []))
-          console.log('✅ Restored comparable analysis from sessionStorage')
+          // CRITICAL: Restore CSV headers if stored
+          if (parsed.csvHeaders && parsed.csvHeaders.length > 0) {
+            setCsvHeaders(parsed.csvHeaders)
+            // Restore header mapping if available
+            if (parsed.headerToFieldMap) {
+              setHeaderToFieldMap(new Map(Object.entries(parsed.headerToFieldMap)))
+            } else if (parsed.allData && parsed.allData.length > 0) {
+              // Recreate mapping from data
+              const firstRecord = parsed.allData[0]
+              const fieldNames = Object.keys(firstRecord).filter(key => key !== 'id')
+              const hebrewHeaders = fieldNames.map(fn => getHebrewHeader(fn))
+              const mapping = new Map<string, string>()
+              fieldNames.forEach((fieldName, index) => {
+                mapping.set(hebrewHeaders[index], fieldName)
+              })
+              setHeaderToFieldMap(mapping)
+            }
+            console.log('✅ Restored CSV headers from sessionStorage:', parsed.csvHeaders)
+          } else if (parsed.allData && parsed.allData.length > 0) {
+            // Extract headers from first record if not stored
+            const firstRecord = parsed.allData[0]
+            const fieldNames = Object.keys(firstRecord).filter(key => key !== 'id')
+            const hebrewHeaders = fieldNames.map(fn => getHebrewHeader(fn))
+            const mapping = new Map<string, string>()
+            fieldNames.forEach((fieldName, index) => {
+              mapping.set(hebrewHeaders[index], fieldName)
+            })
+            setCsvHeaders(hebrewHeaders)
+            setHeaderToFieldMap(mapping)
+            console.log('✅ Extracted CSV headers from restored data:', hebrewHeaders)
+          }
+          console.log(`✅ Restored ${parsed.allData?.length || 0} records from sessionStorage - data visible immediately`)
+          
+          // CRITICAL: Also load from database in background to sync with latest data
+          // But show existing data first (optimistic display)
+          loadAllData().catch(err => {
+            console.warn('Failed to load fresh data from database:', err)
+            // Keep the restored data even if database load fails
+          })
         } catch (err) {
           console.warn('Failed to restore analysis:', err)
+          // Try to load from database if sessionStorage restore fails
+          loadAllData().catch(err => console.error('Failed to load data:', err))
         }
+      } else {
+        // No sessionStorage data - load from database
+        loadAllData().catch(err => console.error('Failed to load data:', err))
       }
+    } else {
+      // No sessionId - try to load anyway (might have default session)
+      loadAllData().catch(err => console.error('Failed to load data:', err))
     }
   }, [sessionId])
 
@@ -83,15 +256,36 @@ export default function ComparableDataViewer({
     setUploadError(null)
 
     try {
-      // Fetch all data without filters
-      const response = await fetch('/api/comparable-data/search')
+      // CRITICAL: Fetch all data for current user/organization (filtered by API)
+      // The API route will automatically filter by organization_id and user_id from session
+      const response = await fetch('/api/session/' + (sessionId || 'default') + '/comparable-data')
       const result = await response.json()
       
-      if (result.success && result.data) {
+      if (result.success && result.data && result.data.length > 0) {
         setAllData(result.data)
+        // CRITICAL: Extract headers from first data record (keys from CSV)
+        const firstRecord = result.data[0]
+        const fieldNames = Object.keys(firstRecord).filter(key => 
+          key !== 'id' // Exclude internal ID field
+        )
+        // CRITICAL: Convert English field names to Hebrew headers for display
+        const hebrewHeaders = fieldNames.map(fieldName => getHebrewHeader(fieldName))
+        
+        // Create mapping: Hebrew header -> original field name (for data access)
+        const mapping = new Map<string, string>()
+        fieldNames.forEach((fieldName, index) => {
+          mapping.set(hebrewHeaders[index], fieldName)
+        })
+        
+        setCsvHeaders(hebrewHeaders) // Store Hebrew headers for display
+        setHeaderToFieldMap(mapping) // Store mapping for data access
+        console.log('📊 Extracted field names from data:', fieldNames)
+        console.log('📊 Hebrew headers for display:', hebrewHeaders)
+        console.log('📊 Header to field mapping:', Object.fromEntries(mapping))
         setUploadSuccess(`נטענו ${result.data.length} רשומות מהמאגר`)
       } else {
         setUploadError('לא נמצאו נתונים במאגר')
+        setCsvHeaders([]) // Clear headers if no data
       }
     } catch (error) {
       console.error('❌ Load data error:', error)
@@ -115,6 +309,40 @@ export default function ComparableDataViewer({
     setUploadSuccess(null)
 
     try {
+      // CRITICAL: Read CSV file to extract headers BEFORE uploading
+      const text = await file.text()
+      const lines = text.split('\n').filter(line => line.trim())
+      
+      if (lines.length > 0) {
+        // Extract headers from first line (CSV header row)
+        const headerLine = lines[0]
+        // Handle both comma and semicolon delimiters, and handle BOM if present
+        const extractedHeaders = headerLine
+          .replace(/^\uFEFF/, '') // Remove BOM
+          .split(/[,;]/)
+          .map(h => h.trim())
+          .filter(h => h.length > 0)
+        
+        // CRITICAL: CSV headers from file are in Hebrew (per backend parsing)
+        // Keep them as Hebrew for display, but create mapping to English field names for data access
+        // The backend maps Hebrew CSV headers to English DB columns during import
+        const hebrewHeaders = extractedHeaders.map(header => getHebrewHeader(header)) // Ensure Hebrew
+        setCsvHeaders(hebrewHeaders)
+        
+        // Create mapping: Hebrew header -> English field name (for data access)
+        const mapping = new Map<string, string>()
+        extractedHeaders.forEach((csvHeader, index) => {
+          // CSV header might be Hebrew - convert to English field name
+          const hebrewHeader = getHebrewHeader(csvHeader) // Ensure it's Hebrew
+          const englishFieldName = getEnglishFieldName(hebrewHeader) // Convert to English
+          mapping.set(hebrewHeader, englishFieldName)
+        })
+        setHeaderToFieldMap(mapping)
+        console.log('📊 Extracted CSV headers from file:', extractedHeaders)
+        console.log('📊 Hebrew headers for display:', hebrewHeaders)
+        console.log('📊 Hebrew -> English mapping:', Object.fromEntries(mapping))
+      }
+
       const formData = new FormData()
       formData.append('csvFile', file)
       if (sessionId) {
@@ -134,7 +362,7 @@ export default function ComparableDataViewer({
           message += `, ${result.failed} רשומות נדחו (כפולות או שגיאות)`
         }
         setUploadSuccess(message)
-        // Load all data after successful upload
+        // Load all data after successful upload (will also update headers from data)
         setTimeout(() => {
           loadAllData()
         }, 500)
@@ -241,9 +469,11 @@ export default function ComparableDataViewer({
         analysis,
         allData,
         selectedIds: Array.from(selectedIds),
+        csvHeaders, // CRITICAL: Save Hebrew headers for persistence
+        headerToFieldMap: Object.fromEntries(headerToFieldMap), // CRITICAL: Save mapping for persistence
         timestamp: new Date().toISOString()
       }))
-      console.log('✅ Saved comparable analysis to sessionStorage')
+      console.log('✅ Saved comparable analysis to sessionStorage (including headers)')
       
       // Also save to database
       fetch('/api/comparable-data/analyze', {
@@ -269,6 +499,151 @@ export default function ComparableDataViewer({
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
     }).format(price)
+  }
+
+  // Handle cell edit start
+  const handleCellEditStart = (recordId: number, fieldName: string, e: React.MouseEvent) => {
+    e.stopPropagation() // Prevent row selection
+    const record = allData.find(r => r.id === recordId)
+    if (!record) return
+    
+    const currentValue = (record as any)[fieldName]
+    setEditingCell({ recordId, fieldName })
+    setCellEditValues(prev => ({
+      ...prev,
+      [recordId]: {
+        ...(prev[recordId] || {}),
+        [fieldName]: currentValue
+      }
+    }))
+  }
+
+  // Handle cell edit save
+  const handleCellEditSave = async (recordId: number, fieldName: string) => {
+    const editedValue = cellEditValues[recordId]?.[fieldName]
+    if (editedValue === undefined) {
+      setEditingCell(null)
+      return
+    }
+
+    // Update local state
+    setAllData(prev => prev.map(record => {
+      if (record.id === recordId) {
+        return {
+          ...record,
+          [fieldName]: editedValue
+        }
+      }
+      return record
+    }))
+
+    // TODO: Save to database if API endpoint exists
+    // For now, just update local state
+    console.log(`💾 Updated cell: recordId=${recordId}, fieldName=${fieldName}, value=${editedValue}`)
+    
+    setEditingCell(null)
+    setCellEditValues(prev => {
+      const newValues = { ...prev }
+      if (newValues[recordId]) {
+        delete newValues[recordId][fieldName]
+        if (Object.keys(newValues[recordId]).length === 0) {
+          delete newValues[recordId]
+        }
+      }
+      return newValues
+    })
+  }
+
+  // Handle cell edit cancel
+  const handleCellEditCancel = () => {
+    setEditingCell(null)
+    setCellEditValues({})
+  }
+
+  // Handle row delete - OPTIMISTIC UPDATE: Remove immediately from UI
+  const handleRowDelete = async (recordId: number, e: React.MouseEvent) => {
+    e.stopPropagation() // Prevent row selection
+    
+    if (!confirm('האם אתה בטוח שברצונך למחוק רשומה זו?')) {
+      return
+    }
+
+    // CRITICAL: Update local state IMMEDIATELY (optimistic update)
+    // User sees the change right away, before API call completes
+    setAllData(prev => prev.filter(record => record.id !== recordId))
+    setSelectedIds(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(recordId)
+      return newSet
+    })
+
+    // TODO: Delete from database if API endpoint exists
+    // For now, update happens immediately in UI
+    console.log(`🗑️ Deleted row: recordId=${recordId}`)
+  }
+
+  // Handle delete all selected rows
+  const handleDeleteAll = () => {
+    if (selectedIds.size === 0) {
+      setUploadError('נא לבחור רשומות למחיקה')
+      return
+    }
+
+    if (!confirm(`האם אתה בטוח שברצונך למחוק ${selectedIds.size} רשומות?`)) {
+      return
+    }
+
+    // CRITICAL: Update local state IMMEDIATELY (optimistic update)
+    const idsToDelete = Array.from(selectedIds)
+    setAllData(prev => prev.filter(record => !record.id || !selectedIds.has(record.id)))
+    setSelectedIds(new Set())
+
+    // TODO: Delete from database if API endpoint exists
+    console.log(`🗑️ Deleted ${idsToDelete.length} rows:`, idsToDelete)
+  }
+
+  // Handle delete all rows (regardless of selection)
+  const handleDeleteAllRows = () => {
+    if (allData.length === 0) {
+      setUploadError('אין רשומות למחיקה')
+      return
+    }
+
+    if (!confirm(`האם אתה בטוח שברצונך למחוק את כל הרשומות (${allData.length})?`)) {
+      return
+    }
+
+    // CRITICAL: Update local state IMMEDIATELY (optimistic update)
+    const totalRows = allData.length
+    setAllData([])
+    setSelectedIds(new Set())
+    setCsvHeaders([])
+    setHeaderToFieldMap(new Map())
+
+    // TODO: Delete from database if API endpoint exists
+    console.log(`🗑️ Deleted all ${totalRows} rows`)
+    setUploadSuccess(`נמחקו ${totalRows} רשומות`)
+  }
+
+  // Handle column hide/remove
+  const handleColumnHide = (hebrewHeader: string, e: React.MouseEvent) => {
+    e.stopPropagation() // Prevent header click
+    
+    if (!confirm(`האם אתה בטוח שברצונך להסתיר את העמודה "${hebrewHeader}"?`)) {
+      return
+    }
+
+    setHiddenColumns(prev => new Set(prev).add(hebrewHeader))
+    console.log(`👁️ Hidden column: ${hebrewHeader}`)
+  }
+
+  // Handle column show (if needed)
+  const handleColumnShow = (hebrewHeader: string) => {
+    setHiddenColumns(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(hebrewHeader)
+      return newSet
+    })
   }
 
   return (
@@ -379,11 +754,11 @@ export default function ComparableDataViewer({
       {/* Data Table with Selection */}
       {allData.length > 0 && (
         <div className="mb-6">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
             <h4 className="font-semibold text-gray-900">
               כל הנתונים ({allData.length} רשומות)
             </h4>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <button
                 onClick={selectAll}
                 className="text-xs px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
@@ -396,6 +771,24 @@ export default function ComparableDataViewer({
               >
                 בטל הכל
               </button>
+              {selectedIds.size > 0 && (
+                <button
+                  onClick={handleDeleteAll}
+                  className="text-xs px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 flex items-center gap-1"
+                  title="מחק נבחרים"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  מחק נבחרים ({selectedIds.size})
+                </button>
+              )}
+              <button
+                onClick={handleDeleteAllRows}
+                className="text-xs px-3 py-1 bg-red-200 text-red-800 rounded hover:bg-red-300 flex items-center gap-1"
+                title="מחק הכל"
+              >
+                <Trash2 className="w-3 h-3" />
+                מחק הכל
+              </button>
             </div>
           </div>
           
@@ -404,13 +797,40 @@ export default function ComparableDataViewer({
               <table className="w-full text-sm">
                 <thead className="bg-gray-100 sticky top-0">
                   <tr className="text-right">
-                    <th className="p-2 w-10"></th>
-                    <th className="p-2">כתובת</th>
-                    <th className="p-2">חדרים</th>
-                    <th className="p-2">שטח (מ"ר)</th>
-                    <th className="p-2">קומה</th>
-                    <th className="p-2">מחיר</th>
-                    <th className="p-2">מחיר למ"ר</th>
+                    <th className="p-2 w-20">
+                      <div className="flex items-center justify-center gap-2">
+                        <span className="text-xs">בחירה</span>
+                      </div>
+                    </th>
+                    {/* CRITICAL: Dynamic headers from CSV - not hardcoded */}
+                    {csvHeaders.length > 0 ? (
+                      csvHeaders
+                        .filter(header => !hiddenColumns.has(header)) // Filter out hidden columns
+                        .map((header) => (
+                          <th key={header} className="p-2 relative group" title={header}>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="flex-1">{header}</span>
+                              <button
+                                onClick={(e) => handleColumnHide(header, e)}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-red-100 rounded"
+                                title="הסתר עמודה"
+                              >
+                                <EyeOff className="w-3 h-3 text-red-600" />
+                              </button>
+                            </div>
+                          </th>
+                        ))
+                    ) : (
+                      // Fallback to default headers if no CSV headers loaded yet
+                      <>
+                        <th className="p-2">כתובת</th>
+                        <th className="p-2">חדרים</th>
+                        <th className="p-2">שטח (מ"ר)</th>
+                        <th className="p-2">קומה</th>
+                        <th className="p-2">מחיר</th>
+                        <th className="p-2">מחיר למ"ר</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -420,25 +840,186 @@ export default function ComparableDataViewer({
                     return (
                       <tr
                         key={record.id}
-                        className={`border-t cursor-pointer hover:bg-gray-50 ${
+                        className={`border-t hover:bg-gray-50 ${
                           isSelected ? 'bg-blue-50' : ''
                         }`}
-                        onClick={() => toggleSelection(record.id!)}
                       >
-                        <td className="p-2 text-center">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleSelection(record.id!)}
-                            className="w-4 h-4"
-                          />
+                        <td className="p-2 text-center" onClick={(e) => {
+                          // Don't toggle selection if clicking delete button
+                          if ((e.target as HTMLElement).closest('button')) {
+                            e.stopPropagation()
+                            return
+                          }
+                          toggleSelection(record.id!)
+                        }}>
+                          <div className="flex items-center justify-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleSelection(record.id!)}
+                              onClick={(e) => e.stopPropagation()}
+                              className="w-4 h-4 cursor-pointer"
+                            />
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleRowDelete(record.id!, e)
+                              }}
+                              className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                              title="מחק שורה"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
                         </td>
-                        <td className="p-2" dir="rtl">{record.address || 'N/A'}</td>
-                        <td className="p-2">{record.rooms || 'N/A'}</td>
-                        <td className="p-2">{record.area || 'N/A'}</td>
-                        <td className="p-2">{record.floor_number ?? 'N/A'}</td>
-                        <td className="p-2 font-semibold">{formatPrice(record.price)}</td>
-                        <td className="p-2 text-gray-600">{formatPrice(record.verified_price_per_sqm)}</td>
+                        {/* CRITICAL: Dynamic cells based on CSV headers */}
+                        {csvHeaders.length > 0 ? (
+                          csvHeaders
+                            .filter(header => !hiddenColumns.has(header)) // Filter out hidden columns
+                            .map((hebrewHeader) => {
+                            // Get original field name from mapping for data access
+                            const fieldName = headerToFieldMap.get(hebrewHeader) || hebrewHeader
+                            const isEditing = editingCell?.recordId === record.id && editingCell?.fieldName === fieldName
+                            const editValue = cellEditValues[record.id!]?.[fieldName]
+                            const displayValue = editValue !== undefined ? editValue : (record as any)[fieldName]
+                            
+                            // Format price fields if detected (check both Hebrew and English)
+                            if (hebrewHeader.toLowerCase().includes('מחיר') || fieldName.toLowerCase().includes('price')) {
+                              if (isEditing) {
+                                return (
+                                  <td key={hebrewHeader} className="p-1" onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex items-center gap-1">
+                                      <input
+                                        type="number"
+                                        value={editValue !== null && editValue !== undefined ? editValue : ''}
+                                        onChange={(e) => {
+                                          const numValue = parseFloat(e.target.value) || 0
+                                          setCellEditValues(prev => ({
+                                            ...prev,
+                                            [record.id!]: {
+                                              ...(prev[record.id!] || {}),
+                                              [fieldName]: numValue
+                                            }
+                                          }))
+                                        }}
+                                        onBlur={() => handleCellEditSave(record.id!, fieldName)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') {
+                                            handleCellEditSave(record.id!, fieldName)
+                                          } else if (e.key === 'Escape') {
+                                            handleCellEditCancel()
+                                          }
+                                        }}
+                                        className="w-full px-2 py-1 border border-blue-500 rounded text-sm"
+                                        autoFocus
+                                      />
+                                      <button
+                                        onClick={() => handleCellEditSave(record.id!, fieldName)}
+                                        className="p-1 text-green-600 hover:bg-green-50 rounded"
+                                        title="שמור"
+                                      >
+                                        <Check className="w-3 h-3" />
+                                      </button>
+                                      <button
+                                        onClick={handleCellEditCancel}
+                                        className="p-1 text-red-600 hover:bg-red-50 rounded"
+                                        title="בטל"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                )
+                              }
+                              return (
+                                <td 
+                                  key={hebrewHeader} 
+                                  className="p-2 relative group cursor-pointer"
+                                  onDoubleClick={(e) => handleCellEditStart(record.id!, fieldName, e)}
+                                  title="לחץ כפול לעריכה"
+                                >
+                                  <div className="flex items-center gap-1">
+                                    <span>{formatPrice(typeof displayValue === 'number' ? displayValue : null)}</span>
+                                    <Edit2 className="w-3 h-3 opacity-0 group-hover:opacity-50 text-gray-400" />
+                                  </div>
+                                </td>
+                              )
+                            }
+                            
+                            // Default formatting for non-price fields
+                            if (isEditing) {
+                              return (
+                                <td key={hebrewHeader} className="p-1" onClick={(e) => e.stopPropagation()}>
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="text"
+                                      value={editValue !== null && editValue !== undefined ? String(editValue) : ''}
+                                      onChange={(e) => {
+                                        setCellEditValues(prev => ({
+                                          ...prev,
+                                          [record.id!]: {
+                                            ...(prev[record.id!] || {}),
+                                            [fieldName]: e.target.value
+                                          }
+                                        }))
+                                      }}
+                                      onBlur={() => handleCellEditSave(record.id!, fieldName)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          handleCellEditSave(record.id!, fieldName)
+                                        } else if (e.key === 'Escape') {
+                                          handleCellEditCancel()
+                                        }
+                                      }}
+                                      className="w-full px-2 py-1 border border-blue-500 rounded text-sm"
+                                      dir={typeof editValue === 'string' && /[\u0590-\u05FF]/.test(String(editValue)) ? 'rtl' : 'ltr'}
+                                      autoFocus
+                                    />
+                                    <button
+                                      onClick={() => handleCellEditSave(record.id!, fieldName)}
+                                      className="p-1 text-green-600 hover:bg-green-50 rounded"
+                                      title="שמור"
+                                    >
+                                      <Check className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                      onClick={handleCellEditCancel}
+                                      className="p-1 text-red-600 hover:bg-red-50 rounded"
+                                      title="בטל"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                </td>
+                              )
+                            }
+                            
+                            return (
+                              <td 
+                                key={hebrewHeader} 
+                                className="p-2 relative group cursor-pointer"
+                                dir={typeof displayValue === 'string' && /[\u0590-\u05FF]/.test(String(displayValue)) ? 'rtl' : 'ltr'}
+                                onDoubleClick={(e) => handleCellEditStart(record.id!, fieldName, e)}
+                                title="לחץ כפול לעריכה"
+                              >
+                                <div className="flex items-center gap-1">
+                                  <span>{displayValue !== null && displayValue !== undefined ? String(displayValue) : 'N/A'}</span>
+                                  <Edit2 className="w-3 h-3 opacity-0 group-hover:opacity-50 text-gray-400" />
+                                </div>
+                              </td>
+                            )
+                          })
+                        ) : (
+                          // Fallback to hardcoded cells if no headers
+                          <>
+                            <td className="p-2" dir="rtl">{record.address || 'N/A'}</td>
+                            <td className="p-2">{record.rooms || 'N/A'}</td>
+                            <td className="p-2">{record.area || 'N/A'}</td>
+                            <td className="p-2">{record.floor_number ?? 'N/A'}</td>
+                            <td className="p-2 font-semibold">{formatPrice(record.price)}</td>
+                            <td className="p-2 text-gray-600">{formatPrice(record.verified_price_per_sqm)}</td>
+                          </>
+                        )}
                       </tr>
                     )
                   })}
@@ -447,22 +1028,43 @@ export default function ComparableDataViewer({
             </div>
           </div>
 
-          <div className="mt-4 flex items-center justify-between">
+          <div className="mt-4 flex items-center justify-between flex-wrap gap-3">
             <div className="text-sm text-gray-600">
               נבחרו: {selectedIds.size} מתוך {allData.length}
+              {hiddenColumns.size > 0 && (
+                <span className="mr-3 text-xs text-gray-500">
+                  (עמודות מוסתרות: {hiddenColumns.size})
+                </span>
+              )}
             </div>
-            <button
-              onClick={analyzeSelectedData}
-              disabled={selectedIds.size === 0}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
-                selectedIds.size === 0
-                  ? 'bg-gray-400 text-white cursor-not-allowed'
-                  : 'bg-purple-600 text-white hover:bg-purple-700'
-              }`}
-            >
-              <BarChart3 className="w-4 h-4" />
-              נתח נתונים נבחרים
-            </button>
+            <div className="flex gap-2 flex-wrap">
+              {/* Show hidden columns button */}
+              {hiddenColumns.size > 0 && (
+                <button
+                  onClick={() => {
+                    if (confirm(`האם אתה בטוח שברצונך להציג מחדש את כל העמודות המוסתרות?`)) {
+                      setHiddenColumns(new Set())
+                    }
+                  }}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-gray-500 text-white hover:bg-gray-600"
+                >
+                  <EyeOff className="w-4 h-4" />
+                  הצג עמודות מוסתרות
+                </button>
+              )}
+              <button
+                onClick={analyzeSelectedData}
+                disabled={selectedIds.size === 0}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
+                  selectedIds.size === 0
+                    ? 'bg-gray-400 text-white cursor-not-allowed'
+                    : 'bg-purple-600 text-white hover:bg-purple-700'
+                }`}
+              >
+                <BarChart3 className="w-4 h-4" />
+                נתח נתונים נבחרים
+              </button>
+            </div>
           </div>
         </div>
       )}
