@@ -29,6 +29,9 @@ if (!existsSync(databaseClientPath)) {
     join(process.cwd(), 'comparable-data-management', 'database-client.js'),
     join('/var/task', 'backend', 'comparable-data-management', 'database-client.js'),
     join('/var/task', 'comparable-data-management', 'database-client.js'),
+    // Try relative paths from current working directory
+    resolve(process.cwd(), 'backend', 'comparable-data-management', 'database-client.js'),
+    resolve(process.cwd(), 'comparable-data-management', 'database-client.js'),
   ];
   
   for (const altPath of alternatives) {
@@ -41,9 +44,32 @@ if (!existsSync(databaseClientPath)) {
 }
 
 console.log('🔍 Loading database-client.js from:', databaseClientPath);
+console.log('🔍 Current working directory:', process.cwd());
+console.log('🔍 __dirname:', __dirname);
+console.log('🔍 File exists?', existsSync(databaseClientPath));
 
-// Use require for CommonJS module
-const { ComparableDataDatabaseClient } = require(databaseClientPath);
+// Use require for CommonJS module - with error handling
+let ComparableDataDatabaseClient;
+try {
+  if (!existsSync(databaseClientPath)) {
+    // Last resort: try to require with relative path
+    try {
+      const relativePath = './database-client.js';
+      ComparableDataDatabaseClient = require(relativePath).ComparableDataDatabaseClient;
+      console.log('✅ Loaded database-client.js using relative path');
+    } catch (relError) {
+      console.error('❌ Failed to load with relative path:', relError.message);
+      throw new Error(`Cannot find database-client.js. Tried: ${databaseClientPath} and relative path`);
+    }
+  } else {
+    ComparableDataDatabaseClient = require(databaseClientPath).ComparableDataDatabaseClient;
+    console.log('✅ Loaded database-client.js successfully');
+  }
+} catch (requireError) {
+  console.error('❌ Failed to require database-client.js:', requireError.message);
+  console.error('❌ Require stack:', requireError.stack);
+  throw requireError;
+}
 
 async function queryComparableData() {
   try {
