@@ -119,14 +119,21 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                    formData.signature !== null
     
     console.log('Validation check:', { isValid, formData })
-    onValidationChange(isValid)
     return isValid
-  }, [formData, onValidationChange])
+  }, [formData])
 
-  // Validate only when formData changes, not on every render
+  // CRITICAL: Use ref to prevent infinite loops - track last validation state
+  const lastValidationStateRef = useRef<boolean | null>(null)
+  
+  // Validate only when formData changes and update validation if it changed
   useEffect(() => {
-    validateForm()
-  }, [validateForm])
+    const isValid = validateForm()
+    // Only call onValidationChange if validation state actually changed
+    if (lastValidationStateRef.current !== isValid) {
+      onValidationChange(isValid)
+      lastValidationStateRef.current = isValid
+    }
+  }, [formData]) // Only depend on formData, not onValidationChange or validateForm
 
   const updateField = useCallback((field: string, value: any) => {
     console.log(`🔄 Step1 - Updating field: ${field} = ${value}`)

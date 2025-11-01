@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { 
   Brain, 
   MapPin, 
@@ -49,9 +49,14 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
   const [gisMapPreview, setGisMapPreview] = useState<string | null>(null)
   
   // Step 4 is optional - always allow proceeding
+  // CRITICAL: Use ref to prevent infinite loops - only call once on mount
+  const validationCalledRef = useRef(false)
   useEffect(() => {
-    onValidationChange(true)
-  }, [onValidationChange])
+    if (!validationCalledRef.current) {
+      onValidationChange(true)
+      validationCalledRef.current = true
+    }
+  }, []) // Empty dependency array - only run once on mount
 
   // Restore comparableDataAnalysis from marketAnalysis or existing comparableDataAnalysis
   useEffect(() => {

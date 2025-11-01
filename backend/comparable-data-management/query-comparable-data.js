@@ -7,9 +7,10 @@
  * CRITICAL: Database client logic is inlined here to avoid require issues in Vercel
  */
 
-// Load environment variables
-import dotenv from 'dotenv';
-dotenv.config();
+// CRITICAL: Don't use dotenv in Vercel - env vars are automatically available
+// dotenv is only needed for local development, but Vercel provides env vars automatically
+// In Vercel, env vars are already loaded, so we skip dotenv entirely
+// We don't need to import dotenv at all in Vercel production
 
 // Lazy-load database client based on environment
 let ClientClass = null;

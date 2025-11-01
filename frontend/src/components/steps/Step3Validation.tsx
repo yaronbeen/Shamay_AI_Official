@@ -2,7 +2,7 @@
 
 import { CheckCircle, XCircle, AlertTriangle, FileText, Building, Users, MapPin, Eye, Edit3, Save, Loader2, ChevronLeft, ChevronRight, Download, Maximize2, X, RotateCcw, History, ChevronRightCircleIcon } from 'lucide-react'
 import { ValuationData } from '../ValuationWizard'
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { DataSource } from '../ui/DataSource'
 import { ProvenanceViewer } from '../ProvenanceViewer'
 import { Step3PDFViewer } from '../Step3PDFViewer'
@@ -109,9 +109,14 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
   const [isRestoringAI, setIsRestoringAI] = useState(false)
 
   // Step 3 is optional - always allow proceeding
+  // CRITICAL: Use ref to prevent infinite loops - only call once on mount
+  const validationCalledRef = React.useRef(false)
   useEffect(() => {
-    onValidationChange(true)
-  }, [onValidationChange])
+    if (!validationCalledRef.current) {
+      onValidationChange(true)
+      validationCalledRef.current = true
+    }
+  }, []) // Empty dependency array - only run once on mount
 
   // Processing is now handled in Step 2 - just display the results here
 

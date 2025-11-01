@@ -893,14 +893,17 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
     // Step 2 is optional - always allow proceeding to next step
     // Users can skip document uploads if they want
     console.log('Step 2 validation: Always valid (optional step)')
-    onValidationChange(true)
     return true
-  }, [onValidationChange])
+  }, [])
 
-  // Update validation when uploads change
+  // CRITICAL: Use ref to prevent infinite loops - only call onValidationChange once on mount
+  const validationCalledRef = useRef(false)
   useEffect(() => {
-    validation()
-  }, [validation])
+    if (!validationCalledRef.current) {
+      onValidationChange(true)
+      validationCalledRef.current = true
+    }
+  }, []) // Empty dependency array - only run once on mount
 
   // Save uploads to session data whenever uploads change
   useEffect(() => {
