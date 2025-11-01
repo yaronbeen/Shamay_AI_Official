@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { Upload, BarChart3, Loader2, FileText, AlertCircle, CheckCircle, X, Check, Edit2, Trash2, EyeOff } from 'lucide-react'
 import { ValuationData } from '../ValuationWizard'
 
@@ -924,7 +924,8 @@ export default function ComparableDataViewer({
 
           <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
             <h4 className="font-semibold text-gray-900">
-              {(() => {
+              {useMemo(() => {
+                // CRITICAL: Move filter logic to useMemo to prevent React hydration errors
                 const filteredData = allData.filter((record) => {
                   // City filter
                   if (filterCity) {
@@ -955,7 +956,7 @@ export default function ComparableDataViewer({
                   return true
                 })
                 return `כל הנתונים (${filteredData.length} מתוך ${allData.length} רשומות)`
-              })()}
+              }, [allData, filterCity, filterRooms, filterConstructionYear])}
             </h4>
             <div className="flex gap-2 flex-wrap">
               <button

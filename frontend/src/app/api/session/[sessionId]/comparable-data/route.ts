@@ -75,9 +75,13 @@ export async function GET(
     const userId = session?.user?.id || null
     
     const result = await new Promise((resolve, reject) => {
+      // CRITICAL: Set working directory to where query-comparable-data.js is located
+      // This ensures relative requires (like './database-client.js') work correctly
+      const scriptDir = join(backendScript, '..')
+      
       const child = spawn('node', [backendScript], {
         stdio: ['pipe', 'pipe', 'pipe'],
-        cwd: projectRoot, // Ensure we're in the project root
+        cwd: scriptDir, // Set cwd to script directory for relative requires
         env: {
           ...process.env,
           QUERY_CITY: city || '',

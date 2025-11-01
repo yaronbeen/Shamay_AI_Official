@@ -758,9 +758,11 @@ class ShumaDBEnhanced {
         hasToken: !!process.env.BLOB_READ_WRITE_TOKEN
       })
       
+      // CRITICAL: Allow overwrite in case blob already exists (for updates/re-saves)
       const blob = await put(pathname, buffer, {
         access: 'public',
         addRandomSuffix: false,
+        allowOverwrite: true, // Allow overwriting existing blobs
       })
       
       console.log('✅ [BLOB] File uploaded successfully:', {
@@ -989,13 +991,13 @@ class ShumaDBEnhanced {
           originalSize: dataSize
         })
         
+        // CRITICAL: Don't set updated_at as the column doesn't exist in images table
         const updateResult = await client.query(`
           UPDATE images 
           SET 
             image_data = NULL,
             image_url = $1,
-            metadata = $2,
-            updated_at = CURRENT_TIMESTAMP
+            metadata = $2
           WHERE session_id = $3 AND image_type = $4
         `, [
           imageUrl,
