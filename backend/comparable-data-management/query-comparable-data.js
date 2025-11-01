@@ -15,6 +15,7 @@
 import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { existsSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -24,8 +25,119 @@ async function tryImportNeon() {
   const isVercel = process.env.VERCEL || process.env.VERCEL_ENV === 'production';
   
   if (isVercel) {
-    // In Vercel, try multiple possible locations
-    // First try standard import (uses NODE_PATH from spawn env)
+    // CRITICAL: In Vercel, when we spawn a script, it doesn't have direct access to
+    // the parent process's node_modules. We need to find the actual path first.
+    
+    // Step 1: Try to find the package by checking actual file system
+    // This is more reliable than relying on module resolution
+    const possibleNodeModulesDirs = [
+      '/var/task/.next/server/node_modules', // Next.js bundled (MOST LIKELY)
+      '/var/task/frontend/.next/server/node_modules',
+      '/var/task/node_modules',
+      '/var/task/frontend/node_modules',
+      '/var/task/backend/node_modules',
+      join(process.cwd(), '.next', 'server', 'node_modules'),
+      join(process.cwd(), 'node_modules'),
+      join(process.cwd(), 'frontend', 'node_modules'),
+      join(__dirname, '..', '..', '.next', 'server', 'node_modules'),
+      join(__dirname, '..', '..', 'node_modules'),
+      join(__dirname, '..', '..', 'frontend', 'node_modules')
+    ];
+    
+    // First, find where the package actually exists
+    let foundPath = null;
+    for (const nodeModulesDir of possibleNodeModulesDirs) {
+      const packagePath = join(nodeModulesDir, '@neondatabase', 'serverless');
+      const indexPath = join(packagePath, 'index.js');
+      const packageJsonPath = join(packagePath, 'package.json');
+      
+      if (existsSync(packagePath) || existsSync(indexPath) || existsSync(packageJsonPath)) {
+        foundPath = packagePath;
+        console.log(`✅ Found package at: ${foundPath}`);
+        break;
+      }
+    }
+    
+    // Step 2: If we found the path, use it directly
+    if (foundPath) {
+      try {
+        // Try using createRequire with the found path
+        const require = createRequire(import.meta.url);
+        
+        // Try to require the package directly from the found path
+        try {
+          const neon = require(foundPath);
+          if (neon.Client || neon.default?.Client) {
+            console.log(`✅ Successfully imported from found path: ${foundPath}`);
+            return neon;
+          }
+        } catch (requireError) {
+          // If direct require fails, try importing the index.js file
+          try {
+            const indexPath = join(foundPath, 'index.js');
+            if (existsSync(indexPath)) {
+              const neon = require(indexPath);
+              if (neon.Client || neon.default?.Client) {
+                console.log(`✅ Successfully imported from index: ${indexPath}`);
+                return neon;
+              }
+            }
+          } catch (indexError) {
+            console.log(`❌ Failed to require from ${foundPath}: ${indexError.message}`);
+          }
+        }
+        
+        // Try ES module import from the found path
+        try {
+          const indexPath = join(foundPath, 'index.js');
+          if (existsSync(indexPath)) {
+            const neon = await import('file://' + indexPath);
+            if (neon.Client || neon.default?.Client) {
+              console.log(`✅ Successfully imported using ES import from: ${indexPath}`);
+              return neon;
+            }
+          }
+        } catch (importError) {
+          console.log(`❌ Failed to ES import from ${foundPath}: ${importError.message}`);
+        }
+      } catch (e) {
+        console.log(`❌ Failed to import from found path ${foundPath}: ${e.message}`);
+      }
+    }
+    
+    // Step 3: Fallback to createRequire with resolve (uses NODE_PATH)
+    try {
+      console.log('🔍 Trying createRequire with resolve: @neondatabase/serverless');
+      const require = createRequire(import.meta.url);
+      
+      // Try to resolve the module - this will find it if it exists anywhere in the path
+      try {
+        const resolvedPath = require.resolve('@neondatabase/serverless');
+        console.log(`✅ Resolved to: ${resolvedPath}`);
+        const neon = require(resolvedPath);
+        if (neon.Client || neon.default?.Client) {
+          console.log('✅ Successfully imported using createRequire resolve');
+          return neon;
+        }
+      } catch (resolveError) {
+        console.log('❌ createRequire resolve failed:', resolveError.message);
+      }
+      
+      // Fallback: try direct require
+      try {
+        const neon = require('@neondatabase/serverless');
+        if (neon.Client || neon.default?.Client) {
+          console.log('✅ Successfully imported using direct require');
+          return neon;
+        }
+      } catch (requireError) {
+        console.log('❌ Direct require failed:', requireError.message);
+      }
+    } catch (e) {
+      console.log('❌ createRequire failed:', e.message);
+    }
+    
+    // Try standard ES import (uses NODE_PATH)
     try {
       console.log('🔍 Trying standard import: @neondatabase/serverless');
       const neon = await import('@neondatabase/serverless');
@@ -37,43 +149,79 @@ async function tryImportNeon() {
       console.log('❌ Standard import failed:', e.message);
     }
     
-    // Try using createRequire for CommonJS resolution (more reliable for node_modules)
-    try {
-      console.log('🔍 Trying createRequire: @neondatabase/serverless');
-      const require = createRequire(import.meta.url);
-      const neon = require('@neondatabase/serverless');
-      if (neon.Client || neon.default?.Client) {
-        console.log('✅ Successfully imported using createRequire');
-        return neon;
-      }
-    } catch (e) {
-      console.log('❌ createRequire failed:', e.message);
-    }
-    
-    // Try absolute paths (as ES modules with file:// protocol)
+    // Try absolute paths with file existence check
+    // CRITICAL: In Vercel, Next.js bundles node_modules in .next/server/node_modules
     const possiblePaths = [
-      join('/var/task', 'frontend', 'node_modules', '@neondatabase', 'serverless', 'index.js'),
-      join('/var/task', 'backend', 'node_modules', '@neondatabase', 'serverless', 'index.js'),
-      join('/var/task', 'node_modules', '@neondatabase', 'serverless', 'index.js'),
-      join(__dirname, '..', '..', 'frontend', 'node_modules', '@neondatabase', 'serverless', 'index.js'),
-      join(__dirname, '..', '..', 'node_modules', '@neondatabase', 'serverless', 'index.js')
+      '/var/task/.next/server/node_modules/@neondatabase/serverless', // Next.js bundled - MOST IMPORTANT
+      '/var/task/frontend/.next/server/node_modules/@neondatabase/serverless',
+      '/var/task/node_modules/@neondatabase/serverless',
+      '/var/task/frontend/node_modules/@neondatabase/serverless',
+      '/var/task/backend/node_modules/@neondatabase/serverless',
+      join(process.cwd(), '.next', 'server', 'node_modules', '@neondatabase', 'serverless'),
+      join(process.cwd(), 'node_modules', '@neondatabase', 'serverless'),
+      join(process.cwd(), 'frontend', 'node_modules', '@neondatabase', 'serverless'),
+      join(__dirname, '..', '..', '.next', 'server', 'node_modules', '@neondatabase', 'serverless'),
+      join(__dirname, '..', '..', 'node_modules', '@neondatabase', 'serverless'),
+      join(__dirname, '..', '..', 'frontend', 'node_modules', '@neondatabase', 'serverless')
     ];
     
     for (const modulePath of possiblePaths) {
       try {
-        console.log(`🔍 Trying absolute path: ${modulePath}`);
-        const neon = await import('file://' + modulePath);
-        if (neon.Client || neon.default?.Client) {
-          console.log(`✅ Successfully imported from: ${modulePath}`);
-          return neon;
+        // Check if directory exists first
+        const indexPath = join(modulePath, 'index.js');
+        const packageJsonPath = join(modulePath, 'package.json');
+        
+        if (existsSync(modulePath) || existsSync(indexPath) || existsSync(packageJsonPath)) {
+          console.log(`🔍 Trying path (exists): ${modulePath}`);
+          try {
+            // Try as directory import
+            const neon = await import('file://' + join(modulePath, 'index.js'));
+            if (neon.Client || neon.default?.Client) {
+              console.log(`✅ Successfully imported from: ${modulePath}`);
+              return neon;
+            }
+          } catch (e) {
+            // Try with require
+            try {
+              const require = createRequire(import.meta.url);
+              const neon = require(modulePath);
+              if (neon.Client || neon.default?.Client) {
+                console.log(`✅ Successfully imported using require from: ${modulePath}`);
+                return neon;
+              }
+            } catch (reqError) {
+              console.log(`❌ Failed to import from ${modulePath}: ${reqError.message}`);
+            }
+          }
         }
       } catch (e) {
         // Continue to next path
-        console.log(`❌ Failed to import from ${modulePath}: ${e.message}`);
       }
     }
     
-    throw new Error('Cannot find @neondatabase/serverless in any location');
+    // Last resort: Check NODE_PATH and try to use it
+    const nodePath = process.env.NODE_PATH || '';
+    if (nodePath) {
+      console.log(`🔍 NODE_PATH is set: ${nodePath}`);
+      const paths = nodePath.split(':').filter(Boolean);
+      for (const basePath of paths) {
+        const fullPath = join(basePath, '@neondatabase', 'serverless');
+        if (existsSync(fullPath)) {
+          try {
+            const require = createRequire(import.meta.url);
+            const neon = require(fullPath);
+            if (neon.Client || neon.default?.Client) {
+              console.log(`✅ Successfully imported from NODE_PATH: ${fullPath}`);
+              return neon;
+            }
+          } catch (e) {
+            console.log(`❌ Failed to import from NODE_PATH ${fullPath}: ${e.message}`);
+          }
+        }
+      }
+    }
+    
+    throw new Error('Cannot find @neondatabase/serverless in any location. Check that it is installed in package.json.');
   } else {
     // Local: just try standard import
     return await import('@neondatabase/serverless');
