@@ -1,11 +1,22 @@
 'use client'
 
-import { CheckCircle, XCircle, AlertTriangle, FileText, Building, Users, MapPin, Eye, Edit3, Save, Loader2, ChevronLeft, ChevronRight, Download, Maximize2, X, RotateCcw, History, ChevronRightCircleIcon } from 'lucide-react'
+import { 
+  CheckCircle, 
+  XCircle, 
+  FileText, 
+  Building, 
+  Edit3, 
+  Save, 
+  Loader2, 
+  ChevronLeft, 
+  RotateCcw, 
+  History, 
+  ChevronRightCircleIcon,
+  Info,
+  X
+} from 'lucide-react'
 import { ValuationData } from '../ValuationWizard'
-import React, { useState, useEffect, useRef } from 'react'
-import { DataSource } from '../ui/DataSource'
-import { ProvenanceViewer } from '../ProvenanceViewer'
-import { Step3PDFViewer } from '../Step3PDFViewer'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 
 interface Step3ValidationProps {
   data: ValuationData
@@ -15,416 +26,421 @@ interface Step3ValidationProps {
 }
 
 type ExtractedData = ValuationData['extractedData'] & {
-  // Support nested structures for backward compatibility
-  land_registry?: {
-    registration_office?: string
-    gush?: number | string
-    chelka?: number | string
-    sub_chelka?: string
-    ownership_type?: string
-    attachments?: string | Array<{
-      type?: string
-      area?: number
-      color?: string
-      symbol?: string
-      description?: string
-    }>
-    owners?: Array<any>
-    owners_count?: number
-    registered_area?: number | string
-    apartment_registered_area?: number | string
-    balcony_area?: number | string
-    confidence?: number
-    [key: string]: any
-  }
-  
-  // Building Permit Data
-  building_permit?: {
-    permit_number?: string
-    permit_date?: string
-    permitted_usage?: string
-    local_committee_name?: string
-    building_description?: string
-    building_floors?: number | string
-    building_units?: number | string
-    confidence?: number
-    [key: string]: any
-  }
-  
-  // Shared Building Order Data (Beit Meshutaf)
-  shared_building?: {
-    order_issue_date?: string
-    building_description?: string
-    building_floors?: number | string
-    building_address?: string
-    total_sub_plots?: number | string
-    sub_plots?: Array<any>
-    confidence?: number
-    [key: string]: any
-  }
-  
-  // Image Analysis - Interior
-  interior_analysis?: {
-    property_layout_description?: string
-    room_analysis?: Array<{
-      room_type: string
-      size_estimate: string
-      features: string
-      condition: string
-    }>
-    condition_assessment?: string
-    interior_features?: string
-    finish_level?: string
-    [key: string]: any
-  }
-  
-  // Image Analysis - Exterior  
-  exterior_analysis?: {
-    building_condition?: string
-    building_features?: string
-    building_type?: string
-    exterior_assessment?: string
-    building_year?: string
-    [key: string]: any
-  }
-  
+  land_registry?: Record<string, any>
+  building_permit?: Record<string, any>
+  shared_building?: Record<string, any>
+  interior_analysis?: Record<string, any>
+  exterior_analysis?: Record<string, any>
   [key: string]: any
 }
 
+// Reusable Field Editor Component with Provenance Tooltip
+function EditableField({
+  field,
+  label,
+  value,
+  editingField,
+  tempValue,
+  onEdit,
+  onSave,
+  onCancel,
+  onValueChange,
+  dataSource,
+  provenanceInfo,
+  onNavigateToDocument,
+  type = 'text',
+  options
+}: {
+  field: string
+  label: string
+  value: string | number | undefined
+  editingField: string | null
+  tempValue: string
+  onEdit: (field: string, value: string) => void
+  onSave: (field: string) => void
+  onCancel: () => void
+  onValueChange: (value: string) => void
+  dataSource: string
+  provenanceInfo?: {
+    documentName?: string
+    pageNumber?: number
+    confidence?: number
+    extractionMethod?: string
+  } | null
+  onNavigateToDocument?: (documentName: string, pageNumber?: number) => void
+  type?: 'text' | 'textarea' | 'select'
+  options?: string[]
+}) {
+  const displayValue = value || 'לא נמצא'
+  const isEditing = editingField === field
+  const [showTooltip, setShowTooltip] = useState(false)
+
+  const tooltipContent = provenanceInfo ? (
+    <div className="text-sm space-y-1">
+      {provenanceInfo.documentName && (
+        <p><strong>מסמך:</strong> {provenanceInfo.documentName}</p>
+      )}
+      {provenanceInfo.pageNumber && (
+        <p><strong>עמוד:</strong> {provenanceInfo.pageNumber}</p>
+      )}
+      {provenanceInfo.confidence !== undefined && (
+        <p><strong>רמת ביטחון:</strong> {Math.round(provenanceInfo.confidence * 100)}%</p>
+      )}
+      {provenanceInfo.extractionMethod && (
+        <p><strong>שיטת חילוץ:</strong> {provenanceInfo.extractionMethod === 'manual' ? 'ידני' : 'AI'}</p>
+      )}
+      {onNavigateToDocument && provenanceInfo.documentName && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onNavigateToDocument(provenanceInfo.documentName!, provenanceInfo.pageNumber)
+            setShowTooltip(false)
+          }}
+          className="mt-2 text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
+        >
+          הצג במסמך
+        </button>
+      )}
+    </div>
+  ) : (
+    <div className="text-sm text-gray-500">אין מידע מקור זמין</div>
+  )
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-2 text-right flex items-center gap-2">
+        <span className="flex-1">{label}</span>
+        <span className="relative inline-block">
+          <button
+            type="button"
+            onMouseEnter={() => setShowTooltip(true)}
+            onMouseLeave={() => setShowTooltip(false)}
+            onClick={(e) => {
+              e.stopPropagation()
+              setShowTooltip(!showTooltip)
+              if (onNavigateToDocument && provenanceInfo?.documentName) {
+                onNavigateToDocument(provenanceInfo.documentName, provenanceInfo.pageNumber)
+              }
+            }}
+            className={`text-blue-500 hover:text-blue-700 transition-colors ${provenanceInfo ? 'cursor-pointer' : 'cursor-help opacity-50'}`}
+            title={provenanceInfo ? 'מידע מקור זמין - לחץ להצגה' : 'אין מידע מקור זמין'}
+          >
+            <Info className="w-4 h-4" />
+          </button>
+          {(showTooltip && provenanceInfo) && (
+            <div 
+              className="absolute right-0 bottom-full mb-2 w-64 bg-gray-900 text-white p-3 rounded-lg shadow-lg z-50 text-right"
+              onMouseEnter={() => setShowTooltip(true)}
+              onMouseLeave={() => setShowTooltip(false)}
+            >
+              <div className="text-xs mb-1 font-semibold border-b border-gray-700 pb-1">מידע מקור</div>
+              {tooltipContent}
+              <div className="absolute bottom-0 right-4 translate-y-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+            </div>
+          )}
+          {(showTooltip && !provenanceInfo) && (
+            <div 
+              className="absolute right-0 bottom-full mb-2 w-64 bg-gray-800 text-white p-3 rounded-lg shadow-lg z-50 text-right"
+              onMouseEnter={() => setShowTooltip(true)}
+              onMouseLeave={() => setShowTooltip(false)}
+            >
+              <div className="text-xs mb-1 font-semibold border-b border-gray-700 pb-1">מידע מקור</div>
+              <div className="text-sm text-gray-300">אין מידע מקור זמין לשדה זה</div>
+              <div className="absolute bottom-0 right-4 translate-y-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+            </div>
+          )}
+        </span>
+      </label>
+      <div className="flex items-center gap-2">
+        {isEditing ? (
+          <div className="flex-1 flex items-center gap-2">
+            {type === 'textarea' ? (
+              <textarea
+                value={tempValue}
+                onChange={(e) => onValueChange(e.target.value)}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-right min-h-[80px]"
+                dir="rtl"
+              />
+            ) : type === 'select' && options ? (
+              <select
+                value={tempValue}
+                onChange={(e) => onValueChange(e.target.value)}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-right"
+                dir="rtl"
+              >
+                {options.map(opt => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type={type}
+                value={tempValue}
+                onChange={(e) => onValueChange(e.target.value)}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-right"
+                dir="rtl"
+              />
+            )}
+            <button
+              onClick={() => onSave(field)}
+              className="p-1 text-green-600 hover:bg-green-100 rounded"
+            >
+              <Save className="w-4 h-4" />
+            </button>
+            <button
+              onClick={onCancel}
+              className="p-1 text-red-600 hover:bg-red-100 rounded"
+            >
+              <XCircle className="w-4 h-4" />
+            </button>
+          </div>
+        ) : (
+          <>
+            <span className="flex-1 text-right">{String(displayValue)}</span>
+            <button
+              onClick={() => onEdit(field, String(value || ''))}
+              className="p-1 text-blue-600 hover:bg-blue-100 rounded"
+            >
+              <Edit3 className="w-4 h-4" />
+            </button>
+          </>
+        )}
+      </div>
+      <p className="text-xs text-gray-500 mt-1">{dataSource}</p>
+    </div>
+  )
+}
+
 export function Step3Validation({ data, updateData, onValidationChange, sessionId }: Step3ValidationProps) {
-  const [isProcessing, setIsProcessing] = useState(false)
   const [extractedData, setExtractedData] = useState<ExtractedData>({})
   const [editingField, setEditingField] = useState<string | null>(null)
   const [tempValue, setTempValue] = useState<string>('')
   const [currentFileIndex, setCurrentFileIndex] = useState(0)
-  const [isFullscreen, setIsFullscreen] = useState(false)
-  const [allFiles, setAllFiles] = useState<Array<{type: string, name: string, preview?: string, url?: string, file?: File, source?: string}>>([])
+  const [allFiles, setAllFiles] = useState<Array<{
+    type: string
+    name: string
+    preview?: string
+    url?: string
+    file?: File
+    source?: string
+  }>>([])
   const [filesLoading, setFilesLoading] = useState(true)
-  const [showProvenanceViewer, setShowProvenanceViewer] = useState(false)
-  const [showPDFViewer, setShowPDFViewer] = useState(false)
+  const [provenanceData, setProvenanceData] = useState<Record<string, {
+    documentName?: string
+    pageNumber?: number
+    confidence?: number
+    extractionMethod?: string
+    bbox?: { x: number; y: number; width: number; height: number }
+    documentId?: string
+  }>>({})
+  const [pdfViewerPage, setPdfViewerPage] = useState<number>(1)
   
   // AI Extraction History
   const [aiExtractions, setAIExtractions] = useState<any[]>([])
   const [showAIHistory, setShowAIHistory] = useState(false)
   const [isRestoringAI, setIsRestoringAI] = useState(false)
 
-  // Step 3 is optional - always allow proceeding
-  // CRITICAL: Use ref to prevent infinite loops - only call once on mount
-  const validationCalledRef = React.useRef(false)
+  // Validation - always allow proceeding
+  const validationCalledRef = useRef(false)
   useEffect(() => {
     if (!validationCalledRef.current) {
       onValidationChange(true)
       validationCalledRef.current = true
     }
-  }, []) // Empty dependency array - only run once on mount
+  }, [onValidationChange])
 
-  // Processing is now handled in Step 2 - just display the results here
-
-  // Load extracted data and uploads from session on mount
+  // Load session data and provenance
   useEffect(() => {
     const loadSessionData = async () => {
-      if (sessionId && Object.keys(extractedData).length === 0) {
-        try {
-          const response = await fetch(`/api/session/${sessionId}`)
-          if (response.ok) {
-            const sessionData = await response.json()
-            
-            // Load extracted data - check both possible locations
-            const extractedDataFromSession = sessionData.extractedData || sessionData.data?.extractedData
-            if (extractedDataFromSession && Object.keys(extractedDataFromSession).length > 0) {
-              console.log('📊 Loading extracted data from session:', extractedDataFromSession)
-              setExtractedData(extractedDataFromSession)
-            } else {
-              console.log('📊 No extracted data found in session')
-            }
-            
-            // Load uploads
-            if (sessionData.data.uploads && Array.isArray(sessionData.data.uploads)) {
-              console.log('📁 Loading uploads from session:', sessionData.data.uploads)
-              
-              // Convert session uploads to the format expected by getAllFiles
-              const sessionUploads = sessionData.data.uploads.map((upload: any) => ({
-                type: upload.type,
-                name: upload.name,
-                preview: upload.url, // Use URL as preview for images
-                url: upload.url,
-                file: {
-                  name: upload.name,
-                  type: upload.mimeType
-                } as File
-              }))
-              
-              // DON'T update parent data - the wizard already has this data from the database
-              // Just use it locally in Step 3 for display purposes
-              console.log('📁 Using session data locally (not updating parent to avoid unnecessary saves)')
-              console.log('📁 Session uploaded files:', sessionUploads.length)
-              console.log('📁 Session extracted data:', Object.keys(sessionData.extractedData || {}).length, 'fields')
-              
-              // Load files directly from session data
-              const files = await getAllFilesFromSessionData(sessionData.data.uploads || [])
-              console.log('📁 Files returned from getAllFilesFromSessionData:', files)
-              setAllFiles(files)
-              setFilesLoading(false)
-            } else {
-              // No uploads, but we still have local extracted data from props
-              console.log('📁 No uploads in session, using extracted data from props')
-              setFilesLoading(false)
-            }
-          }
-        } catch (error) {
-          console.error('❌ Error loading session data:', error)
-          setFilesLoading(false)
+      if (!sessionId || Object.keys(extractedData).length > 0) return
+      
+      try {
+        const [sessionResponse, provenanceResponse] = await Promise.all([
+          fetch(`/api/session/${sessionId}`),
+          fetch(`/api/provenance?sessionId=${sessionId}`).catch(() => null)
+        ])
+        
+        if (!sessionResponse.ok) return
+
+        const sessionData = await sessionResponse.json()
+        
+        // Load extracted data
+        const extractedDataFromSession = sessionData.extractedData || sessionData.data?.extractedData
+        if (extractedDataFromSession && Object.keys(extractedDataFromSession).length > 0) {
+          setExtractedData(extractedDataFromSession)
         }
+        
+        // Load files
+        if (sessionData.data?.uploads && Array.isArray(sessionData.data.uploads)) {
+          const files = await getAllFilesFromSessionData(sessionData.data.uploads)
+          setAllFiles(files)
+        }
+        
+        // Load provenance data
+        if (provenanceResponse && provenanceResponse.ok) {
+          const provenanceResult = await provenanceResponse.json()
+          const provenanceRecords = provenanceResult.provenance || []
+          
+          // Map provenance by field_path
+          const provenanceMap: Record<string, {
+            documentName?: string
+            documentId?: string
+            pageNumber?: number
+            confidence?: number
+            extractionMethod?: string
+            bbox?: { x: number; y: number; width: number; height: number }
+          }> = {}
+          
+          provenanceRecords.forEach((record: any) => {
+            if (record.is_active && record.field_path) {
+              // Take the first active record for each field
+              if (!provenanceMap[record.field_path]) {
+                let bbox = null
+                if (record.bbox) {
+                  try {
+                    bbox = typeof record.bbox === 'string' ? JSON.parse(record.bbox) : record.bbox
+                  } catch {
+                    bbox = null
+                  }
+                }
+                provenanceMap[record.field_path] = {
+                  documentName: record.document_name,
+                  documentId: record.document_id,
+                  pageNumber: record.page_number,
+                  confidence: parseFloat(record.confidence) || undefined,
+                  extractionMethod: record.extraction_method === 'manual' ? 'manual' : 'ai',
+                  bbox: bbox
+                }
+              }
+            }
+          })
+          
+          setProvenanceData(provenanceMap)
+        }
+        
+        setFilesLoading(false)
+      } catch (error) {
+        console.error('Error loading session data:', error)
+        setFilesLoading(false)
+      }
+    }
+
+    loadSessionData()
+  }, [sessionId, extractedData])
+  
+  // Function to navigate to a specific document/page
+  const navigateToDocument = (documentName: string, pageNumber?: number) => {
+    const fileIndex = allFiles.findIndex(f => f.name === documentName || f.name.includes(documentName))
+    if (fileIndex !== -1) {
+      setCurrentFileIndex(fileIndex)
+      setPdfViewerPage(pageNumber || 1)
+    }
+  }
+  
+  // Function to select a field and highlight it
+  const handleFieldClick = (fieldPath: string) => {
+    const provenance = getProvenanceForField(fieldPath)
+    if (provenance && provenance.pageNumber) {
+      setPdfViewerPage(provenance.pageNumber)
+      navigateToDocument(provenance.documentName || '', provenance.pageNumber)
+    }
+  }
+  
+  // Helper to get provenance info for a field (tries multiple field name variations)
+  const getProvenanceForField = (fieldName: string) => {
+    // Try exact match first
+    if (provenanceData[fieldName]) {
+      return provenanceData[fieldName]
+    }
+    
+    // Try snake_case version
+    const snakeCase = fieldName.replace(/([A-Z])/g, '_$1').toLowerCase()
+    if (provenanceData[snakeCase]) {
+      return provenanceData[snakeCase]
+    }
+    
+    // Try with common prefixes
+    const prefixes = ['land_registry.', 'building_permit.', 'shared_building.']
+    for (const prefix of prefixes) {
+      if (provenanceData[`${prefix}${fieldName}`]) {
+        return provenanceData[`${prefix}${fieldName}`]
+      }
+      if (provenanceData[`${prefix}${snakeCase}`]) {
+        return provenanceData[`${prefix}${snakeCase}`]
       }
     }
     
-    loadSessionData()
-  }, [sessionId, extractedData, updateData])
+    return null
+  }
 
-  // Sync local extractedData state with props data
+  // Sync with props
   useEffect(() => {
     if (data.extractedData && Object.keys(data.extractedData).length > 0) {
-      console.log('📊 Syncing local extractedData with props data:', data.extractedData)
       setExtractedData(data.extractedData)
     }
   }, [data.extractedData])
 
-  // Remove the problematic useEffect that was causing infinite loops
+  const getAllFilesFromSessionData = async (sessionUploads: any[]) => {
+    const files: Array<{
+      type: string
+      name: string
+      preview?: string
+      url?: string
+      file?: File
+    }> = []
 
-  // Track currentFileIndex changes (simplified logging)
-  useEffect(() => {
-    if (allFiles.length > 0) {
-      console.log('🔄 File changed to index:', currentFileIndex, 'of', allFiles.length)
-    }
-  }, [currentFileIndex, allFiles])
+    if (!Array.isArray(sessionUploads)) return files
 
-  const updateExtractedData = async (field: string, value: string) => {
-    const newExtractedData = {
-      ...extractedData,
-      [field]: value
+    for (const upload of sessionUploads) {
+      if (upload.status !== 'completed') continue
+
+      const fileName = upload.name || upload.fileName || `${upload.type}_document`
+      const fileType = upload.mimeType || 'application/octet-stream'
+      const isPDF = fileType === 'application/pdf' || 
+                   fileType.includes('pdf') || 
+                   fileName.toLowerCase().endsWith('.pdf') ||
+                   ['tabu', 'permit', 'condo'].includes(upload.type)
+
+      if (isPDF && upload.url) {
+        files.push({
+          type: upload.type,
+          name: fileName,
+          preview: upload.url,
+          url: upload.url,
+          file: new File([], fileName, { type: 'application/pdf' })
+        })
+      }
     }
-    
-    setExtractedData(newExtractedData)
-    
-    // Update parent data - this will trigger auto-save via the wizard's updateData
-    // No need to manually save here, let the wizard handle it
-    updateData({
-      extractedData: newExtractedData
+
+    return files
+  }
+
+  // Filter PDF files
+  const pdfFiles = useMemo(() => {
+    return allFiles.filter((f) => {
+      const name = (f.name || '').toLowerCase()
+      const url = (f.url || '').toLowerCase()
+      const type = (f.type || f.file?.type || '').toLowerCase()
+      const isPdf = type === 'application/pdf' || name.endsWith('.pdf') || url.endsWith('.pdf')
+      const isGarmushka = url.includes('garmushka') || name.includes('garmushka')
+      const isFromUploads = url.includes('/uploads/') || 
+                           url.includes('/api/files/') || 
+                           url.includes('vercel-storage')
+      return isPdf && isFromUploads && !isGarmushka
     })
-    
-    console.log('✅ Step3 - Updated extracted data field:', field)
-  }
+  }, [allFiles])
 
-  // Load AI extraction history
-  const loadAIExtractions = async () => {
-    if (!sessionId) return
-    
-    try {
-      const response = await fetch(`/api/session/${sessionId}/ai-extractions`)
-      if (response.ok) {
-        const { extractions } = await response.json()
-        setAIExtractions(extractions || [])
-        console.log('📚 Loaded AI extraction history:', extractions?.length || 0, 'versions')
-      }
-    } catch (error) {
-      console.error('❌ Error loading AI extractions:', error)
-    }
-  }
+  const currentFile = pdfFiles[currentFileIndex]
 
-  // Restore AI extraction (revert to original AI values)
-  const restoreAIExtraction = async (extractionId: number) => {
-    if (!sessionId) return
-    
-    setIsRestoringAI(true)
-    try {
-      const response = await fetch(`/api/session/${sessionId}/ai-extractions`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          extractionId,
-          action: 'restore'
-        })
-      })
-      
-      if (response.ok) {
-        const { restoredFields } = await response.json()
-        console.log('✅ Restored AI extraction:', restoredFields)
-        
-        // Create the complete updated extracted data
-        const updatedExtractedData = { ...extractedData, ...restoredFields }
-        
-        // Update local state
-        setExtractedData(updatedExtractedData)
-        
-        // Update parent data with complete extracted data object
-        updateData({
-          extractedData: updatedExtractedData
-        })
-        
-        // Reload AI extraction history
-        await loadAIExtractions()
-        
-        alert('✅ נתונים שוחזרו לגרסת הבינה המלאכותית המקורית')
-      } else {
-        const errorData = await response.json()
-        console.error('❌ Failed to restore AI extraction:', errorData)
-        alert(`❌ שגיאה בשחזור הנתונים: ${errorData.error || 'Unknown error'}`)
-      }
-    } catch (error) {
-      console.error('❌ Error restoring AI extraction:', error)
-      alert('❌ שגיאה בשחזור הנתונים')
-    } finally {
-      setIsRestoringAI(false)
+  const getFileTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      'tabu': 'תעודת בעלות',
+      'building_permit': 'היתר בנייה',
+      'permit': 'היתר בנייה',
+      'condominium_order': 'צו בית משותף',
+      'planning_sheet': 'תכנית בניין עיר'
     }
-  }
-
-  // Load AI extractions on mount
-  useEffect(() => {
-    if (sessionId && aiExtractions.length === 0) {
-      loadAIExtractions()
-    }
-  }, [sessionId])
-
-  const extractLandRegistryData = async (): Promise<Partial<ExtractedData>> => {
-    try {
-      const response = await fetch(`/api/session/${sessionId}/land-registry-analysis`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      })
-      
-      if (response.ok) {
-        const result = await response.json()
-        return {
-          registrationOffice: result.registration_office || 'לא נמצא',
-          gush: result.gush || 'לא נמצא',
-          parcel: result.chelka || 'לא נמצא',
-          ownershipType: result.ownership_type || 'לא נמצא',
-          attachments: result.attachments || 'לא נמצא'
-        }
-      }
-    } catch (error) {
-      console.error('Land registry extraction failed:', error)
-    }
-    
-    return {
-      registrationOffice: 'לא נמצא',
-      gush: 'לא נמצא',
-      parcel: 'לא נמצא',
-      ownershipType: 'לא נמצא',
-      attachments: 'לא נמצא'
-    }
-  }
-
-  const extractBuildingPermitData = async (): Promise<Partial<ExtractedData>> => {
-    try {
-      const response = await fetch(`/api/session/${sessionId}/building-permit-analysis`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      })
-      
-      if (response.ok) {
-        const result = await response.json()
-        return {
-          buildingYear: result.building_year || 'לא נמצא',
-          buildingRights: result.permitted_description || 'לא נמצא',
-          permittedUse: result.permitted_use || 'לא נמצא',
-          builtArea: result.built_area || 'לא נמצא',
-          buildingDescription: result.building_description || 'לא נמצא'
-        }
-      }
-    } catch (error) {
-      console.error('Building permit extraction failed:', error)
-    }
-    
-    return {
-      buildingYear: 'לא נמצא',
-      buildingRights: 'לא נמצא',
-      permittedUse: 'לא נמצא',
-      builtArea: 'לא נמצא',
-      buildingDescription: 'לא נמצא'
-    }
-  }
-
-  const extractImageAnalysisData = async (): Promise<Partial<ExtractedData>> => {
-    try {
-      // Call both interior and exterior analysis APIs
-      const [interiorResponse, exteriorResponse] = await Promise.allSettled([
-        fetch(`/api/session/${sessionId}/interior-analysis`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
-        }),
-        fetch(`/api/session/${sessionId}/exterior-analysis`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
-        })
-      ])
-      
-      const result: Partial<ExtractedData> = {}
-      
-      // Process interior analysis results
-      if (interiorResponse.status === 'fulfilled' && interiorResponse.value.ok) {
-        const interiorData = await interiorResponse.value.json()
-        if (interiorData.success && interiorData.extractedData) {
-          result.propertyLayoutDescription = interiorData.extractedData.property_layout_description || 'לא נמצא'
-          result.roomAnalysis = interiorData.extractedData.room_analysis || []
-          result.conditionAssessment = interiorData.extractedData.condition_assessment || 'לא נמצא'
-        }
-      }
-      
-      // Process exterior analysis results
-      if (exteriorResponse.status === 'fulfilled' && exteriorResponse.value.ok) {
-        const exteriorData = await exteriorResponse.value.json()
-        if (exteriorData.success && exteriorData.extractedData) {
-          result.buildingCondition = exteriorData.extractedData.building_condition || 'לא נמצא'
-          result.buildingFeatures = exteriorData.extractedData.building_features || 'לא נמצא'
-          result.buildingType = exteriorData.extractedData.building_type || 'לא נמצא'
-          result.overallAssessment = exteriorData.extractedData.overall_assessment || 'לא נמצא'
-        }
-      }
-      
-      return result
-    } catch (error) {
-      console.error('Image analysis failed:', error)
-    }
-    
-    return {
-      propertyLayoutDescription: 'לא נמצא',
-      roomAnalysis: [],
-      conditionAssessment: 'לא נמצא',
-      buildingCondition: 'לא נמצא',
-      buildingFeatures: 'לא נמצא',
-      buildingType: 'לא נמצא',
-      overallAssessment: 'לא נמצא'
-    }
-  }
-
-  const extractComparableData = async (): Promise<Partial<ExtractedData>> => {
-    try {
-      const response = await fetch(`/api/session/${sessionId}/comparable-data?city=${encodeURIComponent(data.city)}&rooms=${data.rooms}&area=${data.area}`)
-      
-      if (response.ok) {
-        const result = await response.json()
-        if (result.success && result.data && result.data.length > 0) {
-          const prices = result.data.map((item: any) => parseFloat(item.price_per_sqm))
-          const avgPrice = prices.reduce((a: number, b: number) => a + b, 0) / prices.length
-          const medianPrice = prices.sort((a: number, b: number) => a - b)[Math.floor(prices.length / 2)]
-          
-          return {
-            averagePricePerSqm: `₪${Math.round(avgPrice).toLocaleString()}`,
-            medianPricePerSqm: `₪${Math.round(medianPrice).toLocaleString()}`,
-            adjustmentFactor: 'מבוסס על מאפייני הנכס'
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Comparable data extraction failed:', error)
-    }
-    
-    return {
-      averagePricePerSqm: 'לא נמצא',
-      medianPricePerSqm: 'לא נמצא',
-      adjustmentFactor: 'לא נמצא'
-    }
+    return labels[type] || type
   }
 
   const handleFieldEdit = (field: string, currentValue: string) => {
@@ -433,18 +449,13 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
   }
 
   const handleFieldSave = (field: string) => {
-    setExtractedData(prev => ({
-      ...prev,
+    const newExtractedData = {
+      ...extractedData,
       [field]: tempValue
-    }))
+    }
     
-    updateData({
-      extractedData: {
-        ...extractedData,
-        [field]: tempValue
-      }
-    })
-    
+    setExtractedData(newExtractedData)
+    updateData({ extractedData: newExtractedData })
     setEditingField(null)
     setTempValue('')
   }
@@ -455,250 +466,111 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
   }
 
   const getDataSource = (field: string): string => {
-    const sourceMap: { [key: string]: string } = {
+    const sourceMap: Record<string, string> = {
       registrationOffice: 'נשלף מתוך תעודת בעלות (עמוד 1)',
       gush: 'נשלף מתוך תעודת בעלות (עמוד 1)',
       parcel: 'נשלף מתוך תעודת בעלות (עמוד 1)',
+      chelka: 'נשלף מתוך תעודת בעלות (עמוד 1)',
       ownershipType: 'נשלף מתוך תעודת בעלות (עמוד 2)',
       attachments: 'נשלף מתוך תעודת בעלות (עמוד 3)',
       sharedAreas: 'נשלף מתוך צו בית משותף (סעיף 2)',
-      buildingRights: 'נשלף מתוך מידע תכנוני (סעיף 1)',
-      permittedUse: 'נשלף מתוך מידע תכנוני (סעיף 1)',
-      buildingYear: 'נשלף מתוך היתר בנייה (מס\' 4567/21)',
+      buildingYear: 'נשלף מתוך היתר בנייה',
       floor: 'נשלף מתוך צו בית משותף',
       builtArea: 'נשלף מתוך היתר בנייה (עמוד 2)',
       buildingDescription: 'נשלף מתוך צו בית משותף (סעיף 1)',
       propertyCondition: 'נקבע מתמונות הנכס',
       finishLevel: 'נקבע מתמונות הנכס',
-      // Interior Analysis
       propertyLayoutDescription: 'נשלף מניתוח תמונות פנים',
       conditionAssessment: 'נשלף מניתוח תמונות פנים',
-      // Exterior Analysis
       buildingCondition: 'נשלף מניתוח תמונות חוץ',
       buildingFeatures: 'נשלף מניתוח תמונות חוץ',
       buildingType: 'נשלף מניתוח תמונות חוץ',
       overallAssessment: 'נשלף מניתוח תמונות חוץ',
-      // Comparable Sales
+      permittedUse: 'נשלף מתוך מידע תכנוני',
       averagePricePerSqm: 'חושב מתוך נכסים דומים',
       medianPricePerSqm: 'חושב מתוך נכסים דומים',
       adjustmentFactor: 'מבוסס על מאפייני הנכס'
     }
-    
     return sourceMap[field] || 'נשלף מהמסמכים'
   }
 
-  // Get all uploaded files from session data directly
-  const getAllFilesFromSessionData = async (sessionUploads: any[]) => {
-    const files: Array<{type: string, name: string, preview?: string, url?: string, file?: File}> = []
-    
-    console.log('🔍 getAllFilesFromSessionData called with:', sessionUploads)
-    
-    if (!sessionUploads || !Array.isArray(sessionUploads)) {
-      console.warn('⚠️ sessionUploads is not an array or is undefined:', sessionUploads)
-      return files
-    }
-    
-    for (const upload of sessionUploads) {
-      try {
-        console.log('🔍 Processing upload:', upload)
-        console.log('🔍 Upload details:', {
-          id: upload.id,
-          type: upload.type,
-          name: upload.name,
-          fileName: upload.fileName,
-          mimeType: upload.mimeType,
-          url: upload.url,
-          status: upload.status
-        })
-        
-        // Skip if upload is not completed
-        if (upload.status !== 'completed') {
-          console.log('⏭️ Skipping incomplete upload:', upload.id, 'status:', upload.status)
-          continue
-        }
-        
-        let preview = upload.url
-        let url = upload.url
-        let fileName = upload.name || upload.fileName || `${upload.type}_document`
-        let fileType = upload.mimeType || 'application/octet-stream'
-        
-        // Check if it's a PDF by file extension or MIME type
-        const isPDF = fileType === 'application/pdf' || 
-                     fileType.includes('pdf') || 
-                     fileName.toLowerCase().endsWith('.pdf') ||
-                     upload.type === 'tabu' || 
-                     upload.type === 'permit' || 
-                     upload.type === 'condo'
-        
-        console.log('🔍 PDF check for:', fileName, {
-          fileType,
-          fileName,
-          uploadType: upload.type,
-          isPDF,
-          url
-        })
-        
-        // Process PDFs and documents, skip images
-        if (isPDF) {
-          if (url) {
-            // Use the server URL for PDFs
-            files.push({
-              type: upload.type,
-              name: fileName,
-              preview: preview,
-              url: url,
-              file: new File([], fileName, { type: 'application/pdf' })
-            })
-            console.log('📄 Added PDF file:', fileName, url, 'type:', fileType)
-          } else {
-            console.warn('⚠️ PDF file has no URL:', fileName)
-          }
-        } else if (fileType.includes('image')) {
-          // Skip images for document processing
-          console.log('⏭️ Skipping image file:', fileName, 'type:', fileType)
-        } else {
-          // Process other document types
-          if (url) {
-            files.push({
-              type: upload.type,
-              name: fileName,
-              preview: preview,
-              url: url,
-              file: new File([], fileName, { type: fileType })
-            })
-            console.log('📄 Added document file:', fileName, url, 'type:', fileType)
-          } else {
-            console.warn('⚠️ Document file has no URL:', fileName)
-          }
-        }
-      } catch (error) {
-        console.warn(`⚠️ Error processing upload ${upload.id || 'unknown'}:`, error)
+  // Load AI extractions
+  const loadAIExtractions = async () => {
+    if (!sessionId) return
+    try {
+      const response = await fetch(`/api/session/${sessionId}/ai-extractions`)
+      if (response.ok) {
+        const { extractions } = await response.json()
+        setAIExtractions(extractions || [])
       }
-    }
-    
-    console.log('📁 getAllFilesFromSessionData returning:', files.length, 'files')
-    return files
-  }
-
-  // Removed getAllFiles function to prevent infinite loops
-
-  const currentFile = allFiles[currentFileIndex]
-
-  const navigateFile = (direction: 'prev' | 'next') => {
-    if (direction === 'prev') {
-      setCurrentFileIndex(prev => prev > 0 ? prev - 1 : allFiles.length - 1)
-    } else {
-      setCurrentFileIndex(prev => prev < allFiles.length - 1 ? prev + 1 : 0)
+    } catch (error) {
+      console.error('Error loading AI extractions:', error)
     }
   }
 
-  const getFileTypeLabel = (type: string) => {
-    const labels: { [key: string]: string } = {
-      'tabu': 'תעודת בעלות',
-      'building_permit': 'היתר בנייה',
-      'permit': 'היתר בנייה',
-      'condominium_order': 'צו בית משותף',
-      'planning_sheet': 'תכנית בניין עיר',
-      'interior_image': 'תמונה פנים',
-      'building_front': 'תמונת חזית'
+  useEffect(() => {
+    if (sessionId && aiExtractions.length === 0) {
+      loadAIExtractions()
     }
-    return labels[type] || type
+  }, [sessionId])
+
+  const restoreAIExtraction = async (extractionId: number) => {
+    if (!sessionId) return
+    setIsRestoringAI(true)
+    try {
+      const response = await fetch(`/api/session/${sessionId}/ai-extractions`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ extractionId, action: 'restore' })
+      })
+      
+      if (response.ok) {
+        const { restoredFields } = await response.json()
+        const updatedExtractedData = { ...extractedData, ...restoredFields }
+        setExtractedData(updatedExtractedData)
+        updateData({ extractedData: updatedExtractedData })
+        await loadAIExtractions()
+        alert('✅ נתונים שוחזרו לגרסת הבינה המלאכותית המקורית')
+      }
+    } catch (error) {
+      console.error('Error restoring AI extraction:', error)
+      alert('❌ שגיאה בשחזור הנתונים')
+    } finally {
+      setIsRestoringAI(false)
+    }
   }
 
-  // Generate PDF preview
-  const generatePDFPreview = async (file: File): Promise<string> => {
-    return new Promise((resolve) => {
-      // Create a more realistic PDF preview
-      const svgContent = `
-        <svg width="300" height="400" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <linearGradient id="pdfGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" style="stop-color:#e3f2fd;stop-opacity:1" />
-              <stop offset="100%" style="stop-color:#bbdefb;stop-opacity:1" />
-            </linearGradient>
-          </defs>
-          <rect width="300" height="400" fill="url(#pdfGradient)" stroke="#1976d2" stroke-width="2" rx="8"/>
-          <rect x="20" y="20" width="260" height="30" fill="#1976d2" rx="4"/>
-          <text x="150" y="40" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="white">
-            PDF Document
-          </text>
-          <rect x="20" y="60" width="260" height="200" fill="white" stroke="#ddd" stroke-width="1" rx="4"/>
-          <text x="30" y="80" font-family="Arial, sans-serif" font-size="12" fill="#333">
-            Document Type: ${getFileTypeLabel(file.name.includes('tabu') ? 'tabu' : file.name.includes('permit') ? 'building_permit' : 'condominium_order')}
-          </text>
-          <text x="30" y="100" font-family="Arial, sans-serif" font-size="10" fill="#666">
-            File: ${file.name}
-          </text>
-          <text x="30" y="120" font-family="Arial, sans-serif" font-size="10" fill="#666">
-            Size: ${(file.size / 1024 / 1024).toFixed(2)} MB
-          </text>
-          <text x="30" y="140" font-family="Arial, sans-serif" font-size="10" fill="#666">
-            Status: Processed
-          </text>
-          <rect x="20" y="280" width="260" height="80" fill="#f5f5f5" stroke="#ddd" stroke-width="1" rx="4"/>
-          <text x="30" y="300" font-family="Arial, sans-serif" font-size="10" fill="#666">
-            Data extracted:
-          </text>
-          <text x="30" y="315" font-family="Arial, sans-serif" font-size="9" fill="#888">
-            • Property details
-          </text>
-          <text x="30" y="330" font-family="Arial, sans-serif" font-size="9" fill="#888">
-            • Legal information
-          </text>
-          <text x="30" y="345" font-family="Arial, sans-serif" font-size="9" fill="#888">
-            • Building specifications
-          </text>
-        </svg>
-      `
-      resolve('data:image/svg+xml;base64,' + btoa(svgContent))
-    })
-  }
-
-  if (isProcessing) {
-    return (
-      <div className="max-w-4xl mx-auto p-6">
-        <div className="text-center py-12">
-          <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">מעבד מסמכים...</h2>
-          <p className="text-gray-600">מנתח מסמכים ומחלץ נתונים באמצעות AI</p>
-          <div className="mt-4 text-sm text-gray-500">
-            <p>⏱️ זה עשוי לקחת מספר דקות</p>
-            <p>💰 עלות: ~$0.50-2.00 למסמך</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // Use props data as fallback if local state is empty
-  const displayExtractedData = data.extractedData || {}
+  const displayExtractedData = data.extractedData || extractedData
   const hasExtractedData = Object.keys(displayExtractedData).length > 0
 
   return (
     <div className="max-w-6xl mx-auto p-6">
+      {/* Header */}
       <div className="mb-8">
         <div className="flex justify-between items-center mb-2">
           <h2 className="text-2xl font-bold text-gray-900 text-right">
             תצוגת מסמכים ונתונים שחולצו
           </h2>
-          {aiExtractions.length > 0 && (
-            <button
-              onClick={() => setShowAIHistory(!showAIHistory)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
-            >
-              <History className="w-4 h-4" />
-              <span className="text-sm font-medium">
-                היסטוריית AI ({aiExtractions.length})
-              </span>
-            </button>
-          )}
+          <div className="flex items-center gap-3">
+            {aiExtractions.length > 0 && (
+              <button
+                onClick={() => setShowAIHistory(!showAIHistory)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
+              >
+                <History className="w-4 h-4" />
+                <span className="text-sm font-medium">
+                  היסטוריית AI ({aiExtractions.length})
+                </span>
+              </button>
+            )}
+          </div>
         </div>
         <p className="text-gray-600 text-right">
           סקור את המסמכים שהועלו ואת הנתונים שחולצו מהם באמצעות AI
         </p>
       </div>
 
-      {/* AI Extraction History Panel */}
+      {/* AI History Panel */}
       {showAIHistory && aiExtractions.length > 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6" dir="rtl">
           <div className="flex justify-between items-center mb-4">
@@ -712,15 +584,9 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
               <X className="w-5 h-5" />
             </button>
           </div>
-          <p className="text-sm text-blue-700 mb-4">
-            ניתן לשחזר גרסה קודמת של הנתונים שחולצו על ידי הבינה המלאכותית
-          </p>
           <div className="space-y-3">
             {aiExtractions.map((extraction, index) => (
-              <div
-                key={extraction.id}
-                className="bg-white rounded-lg p-4 border border-blue-200"
-              >
+              <div key={extraction.id} className="bg-white rounded-lg p-4 border border-blue-200">
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
@@ -732,31 +598,16 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
                           🤖 גרסה נוכחית
                         </span>
                       )}
-                      {!extraction.is_active && (
-                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
-                          ✏️ נערך ידנית
-                        </span>
-                      )}
                     </div>
                     <div className="text-xs text-gray-600 space-y-1">
-                      <p>
-                        תאריך: {new Date(extraction.extraction_date).toLocaleString('he-IL')}
-                      </p>
-                      <p>
-                        סוג: {extraction.extraction_type === 'combined' ? 'משולב' : extraction.extraction_type}
-                      </p>
-                      {extraction.ai_model && (
-                        <p>מודל AI: {extraction.ai_model}</p>
-                      )}
-                      <p className="text-gray-500 mt-2">
-                        {Object.keys(extraction.extracted_fields || {}).length} שדות
-                      </p>
+                      <p>תאריך: {new Date(extraction.extraction_date).toLocaleString('he-IL')}</p>
+                      <p>{Object.keys(extraction.extracted_fields || {}).length} שדות</p>
                     </div>
                   </div>
                   <button
                     onClick={() => restoreAIExtraction(extraction.id)}
                     disabled={extraction.is_active || isRestoringAI}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <RotateCcw className="w-4 h-4" />
                     {extraction.is_active ? 'גרסה נוכחית' : 'שחזר גרסה זו'}
@@ -768,226 +619,127 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
         </div>
       )}
 
-      {/* Processing Status - Show if data was processed in Step 2 */}
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-          <div className="flex items-center gap-3">
-            <CheckCircle className="w-5 h-5 text-green-600" />
-            <div>
-              <h3 className="text-sm font-semibold text-green-900">עיבוד הושלם בהצלחה</h3>
-              <p className="text-green-700 text-xs">
-                הנתונים נחלצו מהמסמכים. ניתן לערוך ולאמת את הנתונים למטה.
-              </p>
-            </div>
+      {/* Success Status */}
+      <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+        <div className="flex items-center gap-3">
+          <CheckCircle className="w-5 h-5 text-green-600" />
+          <div>
+            <h3 className="text-sm font-semibold text-green-900">עיבוד הושלם בהצלחה</h3>
+            <p className="text-green-700 text-xs">
+              הנתונים נחלצו מהמסמכים. ניתן לערוך ולאמת את הנתונים למטה.
+            </p>
           </div>
         </div>
+      </div>
 
-      {/* Document Viewer and Data Validation */}
+      {/* Document Viewer */}
       <div className="grid grid-cols-1 gap-6 mb-6">
-        {/* Left Panel - PDF Viewer */}
         <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-2 text-right">צפייה במסמכים</h3>
-          
-          {/* Document Tabs */}
-          <div className="flex space-x-reverse space-x-1 mb-4">
-            {((allFiles || []).filter((f) => {
-              const name = (f.name || '').toLowerCase()
-              const url = (f.url || '').toLowerCase()
-              const source = (f.source || '').toLowerCase()
-              const type = (f.type || f.file?.type || '').toLowerCase()
-              const isPdf = type === 'application/pdf' || name.endsWith('.pdf') || url.endsWith('.pdf')
-              const isGarmushka = source.includes('garmushka') || name.includes('garmushka') || url.includes('garmushka') || type.includes('garmushka') 
-              const isFromUploads = url.includes('/frontend/uploads/') || url.includes('vercel-storage') || url.includes('/uploads/') || url.includes('/api/files/') || source.includes('step2') || source.includes('documents') || source.includes('upload')
-              return isPdf && isFromUploads && !isGarmushka
-            })).map((file, index) => (
-              <button
-                key={index}
-                onClick={() => setCurrentFileIndex(index)}
-                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  currentFileIndex === index
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {getFileTypeLabel(file.type)}
-              </button>
-            ))}
-          </div>
-
-          {/* Document Display Area */}
-          <div className="border border-gray-300 rounded-lg h-96 bg-gray-50 flex items-center justify-center">
-            {filesLoading ? (
-              <div className="text-center">
-                <Loader2 className="w-8 h-8 mx-auto mb-4 animate-spin text-blue-600" />
-                <p className="text-gray-600">טוען מסמכים...</p>
-              </div>
-            ) : ((allFiles || []).filter((f) => {
-              const name = (f.name || '').toLowerCase()
-              const url = (f.url || '').toLowerCase()
-              const source = (f.source || '').toLowerCase()
-              const type = (f.type || f.file?.type || '').toLowerCase()
-              const isPdf = type === 'application/pdf' || name.endsWith('.pdf') || url.endsWith('.pdf')
-              const isGarmushka = source.includes('garmushka') || name.includes('garmushka') || url.includes('garmushka')
-              const isFromUploads = url.includes('/frontend/uploads/') || url.includes('vercel-storage') || url.includes('/uploads/') || url.includes('/api/files/') || source.includes('step2') || source.includes('documents') || source.includes('upload')
-              return isPdf && isFromUploads && !isGarmushka
-            })).length > 0 ? (
-              <div className="text-center w-full h-full flex items-center justify-center">
-                {(() => {
-                  const files = (allFiles || []).filter((f) => {
-                    const name = (f.name || '').toLowerCase()
-                    const url = (f.url || '').toLowerCase()
-                    const source = (f.source || '').toLowerCase()
-                    const type = (f.type || f.file?.type || '').toLowerCase()
-                    const isPdf = type === 'application/pdf' || name.endsWith('.pdf') || url.endsWith('.pdf')
-                    const isGarmushka = source.includes('garmushka') || name.includes('garmushka') || url.includes('garmushka')
-                    const isFromUploads = url.includes('/frontend/uploads/') || url.includes('vercel-storage') || url.includes('/uploads/') || url.includes('/api/files/') || source.includes('step2') || source.includes('documents') || source.includes('upload')
-                    return isPdf && isFromUploads && !isGarmushka
-                  })
-                  const safeIndex = Math.min(currentFileIndex, Math.max(files.length - 1, 0))
-                  const currentFile = files[safeIndex]
-                  // Check file type from the file object or determine from URL/name
-                  const fileType = currentFile?.file?.type || (currentFile?.name?.endsWith('.pdf') ? 'application/pdf' : 'application/pdf')
-                  const isPDF = fileType === 'application/pdf'
-                  
-                  if (isPDF && currentFile?.url) {
-                    // Display PDF in iframe
-                    console.log('📄 Displaying PDF:', currentFile.name)
-                    return (
-                      <div className="relative w-full h-full">
-                        <iframe
-                          key={`pdf-${currentFile.url}-${safeIndex}`}
-                          src={currentFile.url}
-                          className="w-full h-full rounded border"
-                          title={getFileTypeLabel(currentFile.type)}
-                          onError={(e) => {
-                            console.error('❌ PDF iframe error:', currentFile.name)
-                          }}
-                          onLoad={() => {
-                            console.log('✅ PDF loaded successfully:', currentFile.name)
-                          }}
-                          onAbort={() => {
-                            console.warn('⚠️ PDF iframe aborted:', currentFile.url)
-                          }}
-                        />
-                        <button
-                          onClick={() => setIsFullscreen(true)}
-                          className="absolute top-2 left-2 bg-black bg-opacity-50 text-white p-2 rounded hover:bg-opacity-70 transition-opacity"
-                          title="צפייה במסך מלא"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )
-                  } else if (currentFile?.preview) {
-                    // Fallback to preview
-                    return (
-                      <div className="relative w-full h-full flex items-center justify-center">
-                        <img 
-                          src={currentFile.preview} 
-                          alt={getFileTypeLabel(currentFile.type)}
-                          className="max-w-full max-h-80 object-contain rounded border shadow-lg"
-                        />
-                        <button
-                          onClick={() => setIsFullscreen(true)}
-                          className="absolute top-2 left-2 bg-black bg-opacity-50 text-white p-2 rounded hover:bg-opacity-70 transition-opacity"
-                          title="צפייה במסך מלא"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )
-                  } else {
-                    // No preview available
-                    return (
-                      <div className="text-gray-500">
-                        <FileText className="w-16 h-16 mx-auto mb-4" />
-                        <p className="text-lg">קובץ לא נמצא</p>
-                        <p className="text-sm">לא ניתן להציג תצוגה מקדימה</p>
-                        {currentFile?.url && (
-                          <a 
-                            href={currentFile.url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="mt-2 inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                          >
-                            פתח קובץ
-                          </a>
-                        )}
-                      </div>
-                    )
-                  }
-                })()}
-              </div>
-            ) : (
-              <div className="text-gray-500">
-                <FileText className="w-16 h-16 mx-auto mb-4" />
-                <p className="text-lg">אין מסמכים להצגה</p>
-                <p className="text-sm">העלה מסמכים בשלב הקודם</p>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2 text-right">צפייה במסמכים</h3>
+            
+            {/* Document Tabs */}
+            {pdfFiles.length > 0 && (
+              <div className="flex space-x-reverse space-x-1 mb-4">
+                {pdfFiles.map((file, index) => (
+                  <button
+                    key={index}
+                    onClick={() => {
+                      setCurrentFileIndex(index)
+                      setPdfViewerPage(1)
+                    }}
+                    className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                      currentFileIndex === index
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {getFileTypeLabel(file.type)}
+                  </button>
+                ))}
               </div>
             )}
-          </div>
 
-          {/* File Navigation */}
-          {(() => {
-            const filesCount = ((allFiles || []).filter((f) => {
-              const name = (f.name || '').toLowerCase()
-              const url = (f.url || '').toLowerCase()
-              const source = (f.source || '').toLowerCase()
-              const type = (f.type || f.file?.type || '').toLowerCase()
-              const isPdf = type === 'application/pdf' || name.endsWith('.pdf') || url.endsWith('.pdf')
-              const isGarmushka = source.includes('garmushka') || name.includes('garmushka') || url.includes('garmushka')
-              const isFromUploads = url.includes('/frontend/uploads/') || url.includes('vercel-storage') || url.includes('/uploads/') || url.includes('/api/files/') || source.includes('step2') || source.includes('documents') || source.includes('upload')
-              return isPdf && isFromUploads && !isGarmushka
-            })).length
-            return filesCount > 1 && (
+            {/* Document Display */}
+            <div className="border border-gray-300 rounded-lg bg-gray-50">
+              {filesLoading ? (
+                <div className="flex items-center justify-center h-96">
+                  <div className="text-center">
+                    <Loader2 className="w-8 h-8 mx-auto mb-4 animate-spin text-blue-600" />
+                    <p className="text-gray-600">טוען מסמכים...</p>
+                  </div>
+                </div>
+              ) : currentFile?.url ? (
+                <div className="relative">
+                  <iframe
+                    key={`${currentFile.url}#page=${pdfViewerPage}`}
+                    src={`${currentFile.url}#page=${pdfViewerPage}&view=FitH`}
+                    title={currentFile.name || 'מסמך PDF'}
+                    className="w-full h-[700px] rounded-lg bg-white"
+                    allow="fullscreen"
+                  />
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-96 text-gray-500">
+                  <div className="text-center">
+                    <FileText className="w-16 h-16 mx-auto mb-4" />
+                    <p className="text-lg">אין מסמכים להצגה</p>
+                    <p className="text-sm">העלה מסמכים בשלב הקודם</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* File Navigation */}
+            {pdfFiles.length > 1 && (
               <div className="flex justify-between items-center mt-4">
                 <button
-                  onClick={() => setCurrentFileIndex(Math.max(0, currentFileIndex - 1))}
+                  onClick={() => {
+                    const nextIndex = Math.max(0, currentFileIndex - 1)
+                    setCurrentFileIndex(nextIndex)
+                    setPdfViewerPage(1)
+                  }}
                   disabled={currentFileIndex === 0}
-                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <ChevronRightCircleIcon className="w-4 h-4" />
                   <span>הקודם</span>
                 </button>
-                
-                <div className="text-center">
-                  <div className="text-sm text-gray-600">
-                    {Math.min(currentFileIndex + 1, filesCount)} מתוך {filesCount}
-                  </div>
+                <div className="text-sm text-gray-600">
+                  {currentFileIndex + 1} מתוך {pdfFiles.length}
                 </div>
-                
                 <button
-                  onClick={() => setCurrentFileIndex(Math.min(filesCount - 1, currentFileIndex + 1))}
-                  disabled={currentFileIndex >= filesCount - 1}
-                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  onClick={() => {
+                    const nextIndex = Math.min(pdfFiles.length - 1, currentFileIndex + 1)
+                    setCurrentFileIndex(nextIndex)
+                    setPdfViewerPage(1)
+                  }}
+                  disabled={currentFileIndex >= pdfFiles.length - 1}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span>הבא</span>
                   <ChevronLeft className="w-4 h-4" />
                 </button>
               </div>
-            )
-          })()}
+            )}
+          </div>
+      </div>
 
-        </div>
-        </div>
-
-      {/* Extraction Results Summary - Only show if data has been processed */}
+      {/* Extraction Summary */}
       {hasExtractedData && (
         <div className="bg-blue-50 rounded-lg border border-blue-200 p-6 mb-6">
           <h3 className="text-lg font-semibold text-blue-900 mb-4 text-right">סיכום חילוץ נתונים</h3>
-          
           <div className="grid grid-cols-1 gap-4">
             <div className="bg-white rounded-lg p-4 border border-blue-200">
               <div className="flex items-center gap-2 mb-2">
                 <FileText className="w-5 h-5 text-blue-600" />
                 <h4 className="font-medium text-gray-900">מצב משפטי</h4>
-                      </div>
+              </div>
               <div className="text-sm text-gray-600">
                 <p>גוש: {extractedData.gush || 'לא נמצא'}</p>
-                <p>חלקה: {extractedData.parcel || 'לא נמצא'}</p>
+                <p>חלקה: {extractedData.chelka || extractedData.parcel || 'לא נמצא'}</p>
                 <p>בעלות: {extractedData.ownershipType || 'לא נמצא'}</p>
               </div>
             </div>
-
             <div className="bg-white rounded-lg p-4 border border-blue-200">
               <div className="flex items-center gap-2 mb-2">
                 <Building className="w-5 h-5 text-green-600" />
@@ -999,1096 +751,443 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
                 <p>שימוש: {extractedData.permittedUse || 'לא נמצא'}</p>
               </div>
             </div>
-
-            <div className="bg-white rounded-lg p-4 border border-blue-200">
-              <div className="flex items-center gap-2 mb-2">
-                <Eye className="w-5 h-5 text-orange-600" />
-                <h4 className="font-medium text-gray-900">ניתוח תמונות</h4>
-              </div>
-              <div className="text-sm text-gray-600">
-                <p>פנים: {extractedData.propertyLayoutDescription ? '✓' : '✗'}</p>
-                <p>חוץ: {extractedData.buildingCondition ? '✓' : '✗'}</p>
-                <p>חדרים: {extractedData.roomAnalysis?.length || 0}</p>
-              </div>
-            </div>
-
-            {/* <div className="bg-white rounded-lg p-4 border border-blue-200">
-              <div className="flex items-center gap-2 mb-2">
-                <MapPin className="w-5 h-5 text-red-600" />
-                <h4 className="font-medium text-gray-900">מכירות דומות</h4>
-              </div>
-              <div className="text-sm text-gray-600">
-                <p>ממוצע: {extractedData.averagePricePerSqm || 'לא נמצא'}</p>
-                <p>חציוני: {extractedData.medianPricePerSqm || 'לא נמצא'}</p>
-                <p>התאמה: {extractedData.adjustmentFactor || 'לא נמצא'}</p>
-              </div>
-            </div> */}
-                  </div>
-                </div>
+          </div>
+        </div>
       )}
 
-
-      {/* Legal Status Section - Only show if data has been processed */}
+      {/* Legal Status Section */}
       {hasExtractedData && (
         <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">מצב משפטי</h3>
-        
-        <div className="grid grid-cols-1 gap-4">
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                משרד רישום מקרקעין
-              </label>
-              <div className="flex items-center gap-2">
-                {editingField === 'registrationOffice' ? (
-                  <div className="flex-1 flex items-center gap-2">
-                    <select
-                      value={tempValue}
-                      onChange={(e) => setTempValue(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-right"
-                      dir="rtl"
-                    />
-                    <button
-                      onClick={() => handleFieldSave('registrationOffice')}
-                      className="p-1 text-green-600 hover:bg-green-100 rounded"
-                    >
-                      <Save className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={handleFieldCancel}
-                      className="p-1 text-red-600 hover:bg-red-100 rounded"
-                    >
-                      <XCircle className="w-4 h-4" />
-                    </button>
-              </div>
-                ) : (
-                  <>
-                    <span className="flex-1 text-right">{extractedData.registrationOffice || 'לא נמצא'}</span>
-                    <button
-                      onClick={() => handleFieldEdit('registrationOffice', extractedData.registrationOffice || '')}
-                      className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                  </>
-                )}
+          <div className="grid grid-cols-1 gap-4">
+            <div className="space-y-4">
+              <EditableField
+                field="registrationOffice"
+                label="משרד רישום מקרקעין"
+                value={extractedData.registrationOffice}
+                editingField={editingField}
+                tempValue={tempValue}
+                onEdit={handleFieldEdit}
+                onSave={handleFieldSave}
+                onCancel={handleFieldCancel}
+                onValueChange={setTempValue}
+                dataSource={getDataSource('registrationOffice')}
+                provenanceInfo={getProvenanceForField('registrationOffice')}
+                onNavigateToDocument={navigateToDocument}
+                type="select"
+              />
+              <EditableField
+                field="gush"
+                label="מספר גוש"
+                value={extractedData.gush}
+                editingField={editingField}
+                tempValue={tempValue}
+                onEdit={handleFieldEdit}
+                onSave={handleFieldSave}
+                onCancel={handleFieldCancel}
+                onValueChange={setTempValue}
+                dataSource={getDataSource('gush')}
+                provenanceInfo={getProvenanceForField('gush')}
+                onNavigateToDocument={navigateToDocument}
+              />
+              <EditableField
+                field="chelka"
+                label="מספר חלקה"
+                value={extractedData.chelka || extractedData.parcel}
+                editingField={editingField}
+                tempValue={tempValue}
+                onEdit={handleFieldEdit}
+                onSave={handleFieldSave}
+                onCancel={handleFieldCancel}
+                onValueChange={setTempValue}
+                dataSource={getDataSource('chelka')}
+                provenanceInfo={getProvenanceForField('chelka') || getProvenanceForField('parcel')}
+                onNavigateToDocument={navigateToDocument}
+              />
             </div>
-              <p className="text-xs text-gray-500 mt-1">{getDataSource('registrationOffice')}</p>
-          </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                מספר גוש
-              </label>
-              <div className="flex items-center gap-2">
-                {editingField === 'gush' ? (
-                  <div className="flex-1 flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={tempValue}
-                      onChange={(e) => setTempValue(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-right"
-                      dir="rtl"
-                    />
-                    <button
-                      onClick={() => handleFieldSave('gush')}
-                      className="p-1 text-green-600 hover:bg-green-100 rounded"
-                    >
-                      <Save className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={handleFieldCancel}
-                      className="p-1 text-red-600 hover:bg-red-100 rounded"
-                    >
-                      <XCircle className="w-4 h-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <span className="flex-1 text-right">{extractedData.gush || 'לא נמצא'}</span>
-                    <button
-                      onClick={() => handleFieldEdit('gush', extractedData.gush ? String(extractedData.gush) : '')}
-                      className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                  </>
-                )}
-              </div>
-              <p className="text-xs text-gray-500 mt-1">{getDataSource('gush')}</p>
-            </div>
-
-          <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                מספר חלקה
-              </label>
-              <div className="flex items-center gap-2">
-                {editingField === 'parcel' ? (
-                  <div className="flex-1 flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={tempValue}
-                      onChange={(e) => setTempValue(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-right"
-                      dir="rtl"
-                    />
-                    <button
-                      onClick={() => handleFieldSave('parcel')}
-                      className="p-1 text-green-600 hover:bg-green-100 rounded"
-                    >
-                      <Save className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={handleFieldCancel}
-                      className="p-1 text-red-600 hover:bg-red-100 rounded"
-                    >
-                      <XCircle className="w-4 h-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <span className="flex-1 text-right">{extractedData.chelka || 'לא נמצא'}</span>
-                    <button
-                      onClick={() => handleFieldEdit('chelka', extractedData.chelka ? String(extractedData.chelka) : '')}
-                      className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                  </>
-                )}
-              </div>
-              <p className="text-xs text-gray-500 mt-1">{getDataSource('parcel')}</p>
+            <div className="space-y-4">
+              <EditableField
+                field="ownershipType"
+                label="סוג בעלות"
+                value={extractedData.ownershipType}
+                editingField={editingField}
+                tempValue={tempValue}
+                onEdit={handleFieldEdit}
+                onSave={handleFieldSave}
+                onCancel={handleFieldCancel}
+                onValueChange={setTempValue}
+                dataSource={getDataSource('ownershipType')}
+                provenanceInfo={getProvenanceForField('ownershipType')}
+                onNavigateToDocument={navigateToDocument}
+                type="select"
+              />
+              <EditableField
+                field="attachments"
+                label="נספחים"
+                value={typeof extractedData.attachments === 'string' 
+                  ? extractedData.attachments 
+                  : Array.isArray(extractedData.attachments) 
+                    ? (extractedData.attachments as any[]).map(a => a.description || a.type).join(', ')
+                    : ''}
+                editingField={editingField}
+                tempValue={tempValue}
+                onEdit={handleFieldEdit}
+                onSave={handleFieldSave}
+                onCancel={handleFieldCancel}
+                onValueChange={setTempValue}
+                dataSource={getDataSource('attachments')}
+                provenanceInfo={getProvenanceForField('attachments')}
+                onNavigateToDocument={navigateToDocument}
+              />
+              <EditableField
+                field="sharedAreas"
+                label="שטחים משותפים"
+                value={extractedData.sharedAreas}
+                editingField={editingField}
+                tempValue={tempValue}
+                onEdit={handleFieldEdit}
+                onSave={handleFieldSave}
+                onCancel={handleFieldCancel}
+                onValueChange={setTempValue}
+                dataSource={getDataSource('sharedAreas')}
+                provenanceInfo={getProvenanceForField('sharedAreas')}
+                onNavigateToDocument={navigateToDocument}
+              />
             </div>
           </div>
-
-          <div className="space-y-4">
-                <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                סוג בעלות
-              </label>
-              <div className="flex items-center gap-2">
-                {editingField === 'ownershipType' ? (
-                  <div className="flex-1 flex items-center gap-2">
-                  <select
-                      value={tempValue}
-                      onChange={(e) => setTempValue(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-right"
-                      dir="rtl"
-                    />
-                    <button
-                      onClick={() => handleFieldSave('ownershipType')}
-                      className="p-1 text-green-600 hover:bg-green-100 rounded"
-                    >
-                      <Save className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={handleFieldCancel}
-                      className="p-1 text-red-600 hover:bg-red-100 rounded"
-                    >
-                      <XCircle className="w-4 h-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <span className="flex-1 text-right">{extractedData.ownershipType || 'בעלות פרטית'}</span>
-                    <button
-                      onClick={() => handleFieldEdit('ownershipType', extractedData.ownershipType || '')}
-                      className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                  </>
-                )}
-              </div>
-              <p className="text-xs text-gray-500 mt-1">{getDataSource('ownershipType')}</p>
-                </div>
-                
-                <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                נספחים
-              </label>
-              <div className="flex items-center gap-2">
-                {editingField === 'attachments' ? (
-                  <div className="flex-1 flex items-center gap-2">
-                  <input
-                    type="text"
-                      value={tempValue}
-                      onChange={(e) => setTempValue(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-right"
-                      dir="rtl"
-                    />
-                    <button
-                      onClick={() => handleFieldSave('attachments')}
-                      className="p-1 text-green-600 hover:bg-green-100 rounded"
-                    >
-                      <Save className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={handleFieldCancel}
-                      className="p-1 text-red-600 hover:bg-red-100 rounded"
-                    >
-                      <XCircle className="w-4 h-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <span className="flex-1 text-right">{typeof extractedData.attachments === 'string' ? extractedData.attachments : Array.isArray(extractedData.attachments) ? (extractedData.attachments as any[]).map((a: any) => a.description || a.type).join(', ') : 'לא נמצא'}</span>
-                    <button
-                      onClick={() => handleFieldEdit('attachments', typeof extractedData.attachments === 'string' ? extractedData.attachments : Array.isArray(extractedData.attachments) ? (extractedData.attachments as any[]).map((a: any) => a.description || a.type).join(', ') : '')}
-                      className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                  </>
-                )}
-              </div>
-              <p className="text-xs text-gray-500 mt-1">{getDataSource('attachments')}</p>
-                </div>
-                
-                <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                שטחים משותפים
-              </label>
-              <div className="flex items-center gap-2">
-                {editingField === 'sharedAreas' ? (
-                  <div className="flex-1 flex items-center gap-2">
-                  <input
-                    type="text"
-                      value={tempValue}
-                      onChange={(e) => setTempValue(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-right"
-                      dir="rtl"
-                    />
-                    <button
-                      onClick={() => handleFieldSave('sharedAreas')}
-                      className="p-1 text-green-600 hover:bg-green-100 rounded"
-                    >
-                      <Save className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={handleFieldCancel}
-                      className="p-1 text-red-600 hover:bg-red-100 rounded"
-                    >
-                      <XCircle className="w-4 h-4" />
-                    </button>
-                </div>
-                ) : (
-                  <>
-                    <span className="flex-1 text-right">{extractedData.sharedAreas || 'לא נמצא'}</span>
-                    <button
-                      onClick={() => handleFieldEdit('sharedAreas', extractedData.sharedAreas || '')}
-                      className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                  </>
-                )}
-              </div>
-              <p className="text-xs text-gray-500 mt-1">{getDataSource('sharedAreas')}</p>
-            </div>
-          </div>
-        </div>
         </div>
       )}
 
-      {/* Building Details Section - Only show if data has been processed */}
+      {/* Building Details Section */}
       {hasExtractedData && (
         <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">פרטי הבניין</h3>
-        
-              <div className="grid grid-cols-1 gap-4">
-          <div className="space-y-4">
-                <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                שנת בנייה
-              </label>
-              <div className="flex items-center gap-2">
-                {editingField === 'buildingYear' ? (
-                  <div className="flex-1 flex items-center gap-2">
-                  <input
-                    type="text"
-                      value={tempValue}
-                      onChange={(e) => setTempValue(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-right"
-                      dir="rtl"
-                    />
-                    <button
-                      onClick={() => handleFieldSave('buildingYear')}
-                      className="p-1 text-green-600 hover:bg-green-100 rounded"
-                    >
-                      <Save className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={handleFieldCancel}
-                      className="p-1 text-red-600 hover:bg-red-100 rounded"
-                    >
-                      <XCircle className="w-4 h-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <span className="flex-1 text-right">{extractedData.buildingYear || 'לא נמצא'}</span>
-                    <button
-                      onClick={() => handleFieldEdit('buildingYear', extractedData.buildingYear || '')}
-                      className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                  </>
-                )}
-              </div>
-              <p className="text-xs text-gray-500 mt-1">{getDataSource('buildingYear')}</p>
-                </div>
-                
-                <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                קומה
-              </label>
-              <div className="flex items-center gap-2">
-                {editingField === 'floor' ? (
-                  <div className="flex-1 flex items-center gap-2">
-                  <input
-                    type="text"
-                      value={tempValue}
-                      onChange={(e) => setTempValue(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-right"
-                      dir="rtl"
-                    />
-                    <button
-                      onClick={() => handleFieldSave('floor')}
-                      className="p-1 text-green-600 hover:bg-green-100 rounded"
-                    >
-                      <Save className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={handleFieldCancel}
-                      className="p-1 text-red-600 hover:bg-red-100 rounded"
-                    >
-                      <XCircle className="w-4 h-4" />
-                    </button>
-                </div>
-                ) : (
-                  <>
-                    <span className="flex-1 text-right">{extractedData.floor || data.floor || '3'}</span>
-                    <button
-                      onClick={() => handleFieldEdit('floor', extractedData.floor || data.floor?.toString() || '')}
-                      className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                  </>
-                )}
-              </div>
-              <p className="text-xs text-gray-500 mt-1">{getDataSource('floor')}</p>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">פרטי הבניין</h3>
+          <div className="grid grid-cols-1 gap-4">
+            <div className="space-y-4">
+              <EditableField
+                field="buildingYear"
+                label="שנת בנייה"
+                value={extractedData.buildingYear}
+                editingField={editingField}
+                tempValue={tempValue}
+                onEdit={handleFieldEdit}
+                onSave={handleFieldSave}
+                onCancel={handleFieldCancel}
+                onValueChange={setTempValue}
+                dataSource={getDataSource('buildingYear')}
+                provenanceInfo={getProvenanceForField('buildingYear')}
+                onNavigateToDocument={navigateToDocument}
+              />
+              <EditableField
+                field="floor"
+                label="קומה"
+                value={extractedData.floor || data.floor}
+                editingField={editingField}
+                tempValue={tempValue}
+                onEdit={handleFieldEdit}
+                onSave={handleFieldSave}
+                onCancel={handleFieldCancel}
+                onValueChange={setTempValue}
+                dataSource={getDataSource('floor')}
+                provenanceInfo={getProvenanceForField('floor')}
+                onNavigateToDocument={navigateToDocument}
+              />
+            </div>
+            <div className="space-y-4">
+              <EditableField
+                field="builtArea"
+                label="שטח בנוי (מ'ר)"
+                value={extractedData.builtArea}
+                editingField={editingField}
+                tempValue={tempValue}
+                onEdit={handleFieldEdit}
+                onSave={handleFieldSave}
+                onCancel={handleFieldCancel}
+                onValueChange={setTempValue}
+                dataSource={getDataSource('builtArea')}
+                provenanceInfo={getProvenanceForField('builtArea')}
+                onNavigateToDocument={navigateToDocument}
+              />
+              <EditableField
+                field="buildingDescription"
+                label="תיאור הבניין"
+                value={extractedData.buildingDescription}
+                editingField={editingField}
+                tempValue={tempValue}
+                onEdit={handleFieldEdit}
+                onSave={handleFieldSave}
+                onCancel={handleFieldCancel}
+                onValueChange={setTempValue}
+                dataSource={getDataSource('buildingDescription')}
+                provenanceInfo={getProvenanceForField('buildingDescription')}
+                onNavigateToDocument={navigateToDocument}
+              />
+              <EditableField
+                field="permittedUse"
+                label="שימוש מותר"
+                value={extractedData.permittedUse}
+                editingField={editingField}
+                tempValue={tempValue}
+                onEdit={handleFieldEdit}
+                onSave={handleFieldSave}
+                onCancel={handleFieldCancel}
+                onValueChange={setTempValue}
+                dataSource={getDataSource('permittedUse')}
+                provenanceInfo={getProvenanceForField('permittedUse')}
+                onNavigateToDocument={navigateToDocument}
+              />
             </div>
           </div>
+        </div>
+      )}
 
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                שטח בנוי (מ"ר)
-              </label>
-              <div className="flex items-center gap-2">
-                {editingField === 'builtArea' ? (
-                  <div className="flex-1 flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={tempValue}
-                      onChange={(e) => setTempValue(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-right"
-                      dir="rtl"
-                    />
-                    <button
-                      onClick={() => handleFieldSave('builtArea')}
-                      className="p-1 text-green-600 hover:bg-green-100 rounded"
-                    >
-                      <Save className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={handleFieldCancel}
-                      className="p-1 text-red-600 hover:bg-red-100 rounded"
-                    >
-                      <XCircle className="w-4 h-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <span className="flex-1 text-right">{extractedData.builtArea || 'לא נמצא'}</span>
-                    <button
-                      onClick={() => handleFieldEdit('builtArea', extractedData.builtArea || '')}
-                      className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                  </>
-                )}
+      {/* Property Characteristics */}
+      {hasExtractedData && (
+        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">מאפייני הנכס</h3>
+          <div className="grid grid-cols-1 gap-4">
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                  מספר חדרים
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="flex-1 text-right">{data.rooms || '3'}</span>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">נשלף מנתוני המשתמש</p>
               </div>
-              <p className="text-xs text-gray-500 mt-1">{getDataSource('builtArea')}</p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                  קומה
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="flex-1 text-right">{data.floor || '3'}</span>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">נשלף מנתוני המשתמש</p>
+              </div>
+            </div>
+            <div className="space-y-4">
+              <EditableField
+                field="propertyCondition"
+                label="מצב הנכס"
+                value={extractedData.propertyCondition}
+                editingField={editingField}
+                tempValue={tempValue}
+                onEdit={handleFieldEdit}
+                onSave={handleFieldSave}
+                onCancel={handleFieldCancel}
+                onValueChange={setTempValue}
+                dataSource={getDataSource('propertyCondition')}
+                provenanceInfo={getProvenanceForField('propertyCondition')}
+                onNavigateToDocument={navigateToDocument}
+                type="select"
+                options={['מצוין', 'טוב', 'בינוני', 'גרוע', 'דורש שיפוץ']}
+              />
+              <EditableField
+                field="finishLevel"
+                label="רמת גימור"
+                value={extractedData.finishLevel}
+                editingField={editingField}
+                tempValue={tempValue}
+                onEdit={handleFieldEdit}
+                onSave={handleFieldSave}
+                onCancel={handleFieldCancel}
+                onValueChange={setTempValue}
+                dataSource={getDataSource('finishLevel')}
+                provenanceInfo={getProvenanceForField('finishLevel')}
+                onNavigateToDocument={navigateToDocument}
+                type="select"
+                options={['בסיסי', 'בינוני', 'גבוה', 'יוקרתי', 'לוקסוס']}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Interior Analysis */}
+      {hasExtractedData && (
+        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">ניתוח פנים הנכס</h3>
+          <div className="space-y-4">
+            <EditableField
+              field="propertyLayoutDescription"
+              label="תיאור תכנון הנכס"
+              value={extractedData.propertyLayoutDescription}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מניתוח תמונות פנים"
+              provenanceInfo={getProvenanceForField('propertyLayoutDescription')}
+              onNavigateToDocument={navigateToDocument}
+              type="textarea"
+            />
+            <EditableField
+              field="conditionAssessment"
+              label="הערכת מצב כללי"
+              value={extractedData.conditionAssessment}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מניתוח תמונות פנים"
+              provenanceInfo={getProvenanceForField('conditionAssessment')}
+              onNavigateToDocument={navigateToDocument}
+              type="textarea"
+            />
+            {extractedData.roomAnalysis && extractedData.roomAnalysis.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                  ניתוח חדרים
+                </label>
+                <div className="space-y-3">
+                  {extractedData.roomAnalysis.map((room: any, index: number) => (
+                    <div key={index} className="bg-gray-50 rounded-lg p-4">
+                      <div className="flex justify-between items-start mb-2">
+                        <h4 className="font-medium text-gray-900">{room.room_type}</h4>
+                        <span className="text-sm text-gray-600">{room.condition}</span>
                       </div>
-
-          <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                תיאור הבניין
-              </label>
-              <div className="flex items-center gap-2">
-                {editingField === 'buildingDescription' ? (
-                  <div className="flex-1 flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={tempValue}
-                      onChange={(e) => setTempValue(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-right"
-                      dir="rtl"
-                    />
-                    <button
-                      onClick={() => handleFieldSave('buildingDescription')}
-                      className="p-1 text-green-600 hover:bg-green-100 rounded"
-                    >
-                      <Save className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={handleFieldCancel}
-                      className="p-1 text-red-600 hover:bg-red-100 rounded"
-                    >
-                      <XCircle className="w-4 h-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <span className="flex-1 text-right">{extractedData.buildingDescription || 'לא נמצא'}</span>
-                    <button
-                      onClick={() => handleFieldEdit('buildingDescription', extractedData.buildingDescription || '')}
-                      className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                  </>
-                )}
-              </div>
-              <p className="text-xs text-gray-500 mt-1">{getDataSource('buildingDescription')}</p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                שימוש מותר
-              </label>
-              <div className="flex items-center gap-2">
-                {editingField === 'permittedUse' ? (
-                  <div className="flex-1 flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={tempValue}
-                      onChange={(e) => setTempValue(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-right"
-                      dir="rtl"
-                    />
-                    <button
-                      onClick={() => handleFieldSave('permittedUse')}
-                      className="p-1 text-green-600 hover:bg-green-100 rounded"
-                    >
-                      <Save className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={handleFieldCancel}
-                      className="p-1 text-red-600 hover:bg-red-100 rounded"
-                    >
-                      <XCircle className="w-4 h-4" />
-                    </button>
+                      <div className="text-sm text-gray-700">
+                        <p><strong>תכונות:</strong> {room.features}</p>
+                        <p><strong>הערכת גודל:</strong> {room.size_estimate}</p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                ) : (
-                  <>
-                    <span className="flex-1 text-right">{extractedData.permittedUse || 'לא נמצא'}</span>
-                    <button
-                      onClick={() => handleFieldEdit('permittedUse', extractedData.permittedUse || '')}
-                      className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                  </>
-                )}
               </div>
-              <p className="text-xs text-gray-500 mt-1">{getDataSource('permittedUse')}</p>
-            </div>
+            )}
           </div>
-        </div>
         </div>
       )}
 
-      {/* Property Characteristics Section - Only show if data has been processed */}
+      {/* Exterior Analysis */}
       {hasExtractedData && (
         <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">מאפייני הנכס</h3>
-        
-              <div className="grid grid-cols-1 gap-4">
-          <div className="space-y-4">
-                <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                מספר חדרים
-              </label>
-              <div className="flex items-center gap-2">
-                <span className="flex-1 text-right">{data.rooms || '3'}</span>
-              </div>
-              <p className="text-xs text-gray-500 mt-1">נשלף מנתוני המשתמש</p>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">ניתוח חוץ הנכס</h3>
+          <div className="grid grid-cols-1 gap-4">
+            <div className="space-y-4">
+              <EditableField
+                field="buildingCondition"
+                label="מצב הבניין"
+                value={extractedData.buildingCondition}
+                editingField={editingField}
+                tempValue={tempValue}
+                onEdit={handleFieldEdit}
+                onSave={handleFieldSave}
+                onCancel={handleFieldCancel}
+                onValueChange={setTempValue}
+                dataSource="נשלף מניתוח תמונות חוץ"
+                provenanceInfo={getProvenanceForField('buildingCondition')}
+                onNavigateToDocument={navigateToDocument}
+                type="select"
+                options={['מצוין', 'טוב', 'בינוני', 'גרוע', 'דורש שיפוץ']}
+              />
+              <EditableField
+                field="buildingType"
+                label="סוג הבניין"
+                value={extractedData.buildingType}
+                editingField={editingField}
+                tempValue={tempValue}
+                onEdit={handleFieldEdit}
+                onSave={handleFieldSave}
+                onCancel={handleFieldCancel}
+                onValueChange={setTempValue}
+                dataSource="נשלף מניתוח תמונות חוץ"
+                provenanceInfo={getProvenanceForField('buildingType')}
+                onNavigateToDocument={navigateToDocument}
+                type="select"
+                options={['מגדל מגורים', 'בניין מגורים נמוך', 'בית פרטי', 'דופלקס', 'נטהאוז', 'וילה', 'קוטג']}
+              />
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                קומה
-              </label>
-              <div className="flex items-center gap-2">
-                <span className="flex-1 text-right">{data.floor || '3'}</span>
-              </div>
-              <p className="text-xs text-gray-500 mt-1">נשלף מנתוני המשתמש</p>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                מצב הנכס
-              </label>
-              <div className="flex items-center gap-2">
-                {editingField === 'propertyCondition' ? (
-                  <div className="flex-1 flex items-center gap-2">
-                  <select
-                      value={tempValue}
-                      onChange={(e) => setTempValue(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-right"
-                      dir="rtl"
-                    >
-                      <option value="">בחר מצב נכס</option>
-                      <option value="מצוין">מצוין</option>
-                      <option value="טוב">טוב</option>
-                      <option value="בינוני">בינוני</option>
-                      <option value="גרוע">גרוע</option>
-                      <option value="דורש שיפוץ">דורש שיפוץ</option>
-                    </select>
-                    <button
-                      onClick={() => handleFieldSave('propertyCondition')}
-                      className="p-1 text-green-600 hover:bg-green-100 rounded"
-                    >
-                      <Save className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={handleFieldCancel}
-                      className="p-1 text-red-600 hover:bg-red-100 rounded"
-                    >
-                      <XCircle className="w-4 h-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <span className="flex-1 text-right">{extractedData.propertyCondition || 'מצוין'}</span>
-                    <button
-                      onClick={() => handleFieldEdit('propertyCondition', extractedData.propertyCondition || '')}
-                      className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                  </>
-                )}
-              </div>
-              <p className="text-xs text-gray-500 mt-1">{getDataSource('propertyCondition')}</p>
-                </div>
-                
-                <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                רמת גימור
-              </label>
-              <div className="flex items-center gap-2">
-                {editingField === 'finishLevel' ? (
-                  <div className="flex-1 flex items-center gap-2">
-                  <select
-                      value={tempValue}
-                      onChange={(e) => setTempValue(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-right"
-                      dir="rtl"
-                    >
-                      <option value="">בחר רמת גימור</option>
-                      <option value="בסיסי">בסיסי</option>
-                      <option value="בינוני">בינוני</option>
-                      <option value="גבוה">גבוה</option>
-                      <option value="יוקרתי">יוקרתי</option>
-                      <option value="לוקסוס">לוקסוס</option>
-                    </select>
-                    <button
-                      onClick={() => handleFieldSave('finishLevel')}
-                      className="p-1 text-green-600 hover:bg-green-100 rounded"
-                    >
-                      <Save className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={handleFieldCancel}
-                      className="p-1 text-red-600 hover:bg-red-100 rounded"
-                    >
-                      <XCircle className="w-4 h-4" />
-                    </button>
-                </div>
-                ) : (
-                  <>
-                    <span className="flex-1 text-right">{extractedData.finishLevel || 'בסיסי'}</span>
-                    <button
-                      onClick={() => handleFieldEdit('finishLevel', extractedData.finishLevel || '')}
-                      className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                  </>
-                )}
-              </div>
-              <p className="text-xs text-gray-500 mt-1">{getDataSource('finishLevel')}</p>
-            </div>
-              </div>
+            <div className="space-y-4">
+              <EditableField
+                field="buildingFeatures"
+                label="תכונות הבניין"
+                value={extractedData.buildingFeatures}
+                editingField={editingField}
+                tempValue={tempValue}
+                onEdit={handleFieldEdit}
+                onSave={handleFieldSave}
+                onCancel={handleFieldCancel}
+                onValueChange={setTempValue}
+                dataSource="נשלף מניתוח תמונות חוץ"
+                provenanceInfo={getProvenanceForField('buildingFeatures')}
+                onNavigateToDocument={navigateToDocument}
+              />
+              <EditableField
+                field="overallAssessment"
+                label="הערכה כללית"
+                value={extractedData.overallAssessment}
+                editingField={editingField}
+                tempValue={tempValue}
+                onEdit={handleFieldEdit}
+                onSave={handleFieldSave}
+                onCancel={handleFieldCancel}
+                onValueChange={setTempValue}
+                dataSource="נשלף מניתוח תמונות חוץ"
+                provenanceInfo={getProvenanceForField('overallAssessment')}
+                onNavigateToDocument={navigateToDocument}
+                type="textarea"
+              />
             </div>
           </div>
-        )}
-
-      {/* Interior Analysis Section - Only show if data has been processed */}
-      {hasExtractedData && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">ניתוח פנים הנכס</h3>
-        
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-            תיאור תכנון הנכס
-          </label>
-          <div className="flex items-center gap-2">
-            {editingField === 'propertyLayoutDescription' ? (
-              <div className="flex-1 flex items-center gap-2">
-                <textarea
-                  value={tempValue}
-                  onChange={(e) => setTempValue(e.target.value)}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-right min-h-[80px]"
-                  dir="rtl"
-                />
-                <button
-                  onClick={() => handleFieldSave('propertyLayoutDescription')}
-                  className="p-1 text-green-600 hover:bg-green-100 rounded"
-                >
-                  <Save className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={handleFieldCancel}
-                  className="p-1 text-red-600 hover:bg-red-100 rounded"
-                >
-                  <XCircle className="w-4 h-4" />
-                </button>
         </div>
-            ) : (
-              <>
-                <span className="flex-1 text-right">{extractedData.propertyLayoutDescription || 'לא נמצא'}</span>
-                <button
-                  onClick={() => handleFieldEdit('propertyLayoutDescription', extractedData.propertyLayoutDescription || '')}
-                  className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                >
-                  <Edit3 className="w-4 h-4" />
-                </button>
-              </>
       )}
-    </div>
-          <p className="text-xs text-gray-500 mt-1">נשלף מניתוח תמונות פנים</p>
-        </div>
 
-              <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-            הערכת מצב כללי
-          </label>
-          <div className="flex items-center gap-2">
-            {editingField === 'conditionAssessment' ? (
-              <div className="flex-1 flex items-center gap-2">
-                <textarea
-                  value={tempValue}
-                  onChange={(e) => setTempValue(e.target.value)}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-right min-h-[80px]"
-                  dir="rtl"
-                />
-                <button
-                  onClick={() => handleFieldSave('conditionAssessment')}
-                  className="p-1 text-green-600 hover:bg-green-100 rounded"
-                >
-                  <Save className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={handleFieldCancel}
-                  className="p-1 text-red-600 hover:bg-red-100 rounded"
-                >
-                  <XCircle className="w-4 h-4" />
-                </button>
-              </div>
-            ) : (
-              <>
-                <span className="flex-1 text-right">{extractedData.conditionAssessment || 'לא נמצא'}</span>
-                <button
-                  onClick={() => handleFieldEdit('conditionAssessment', extractedData.conditionAssessment || '')}
-                  className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                >
-                  <Edit3 className="w-4 h-4" />
-                </button>
-              </>
-            )}
-          </div>
-          <p className="text-xs text-gray-500 mt-1">נשלף מניתוח תמונות פנים</p>
-        </div>
-
-        {/* Room Analysis */}
-        {extractedData.roomAnalysis && extractedData.roomAnalysis.length > 0 && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-              ניתוח חדרים
-            </label>
-            <div className="space-y-3">
-              {extractedData.roomAnalysis.map((room, index) => (
-                <div key={index} className="bg-gray-50 rounded-lg p-4">
-                  <div className="flex justify-between items-start mb-2">
-                    <h4 className="font-medium text-gray-900">{room.room_type}</h4>
-                    <span className="text-sm text-gray-600">{room.condition}</span>
-                  </div>
-                  <div className="text-sm text-gray-700 mb-1">
-                    <strong>תכונות:</strong> {room.features}
-                  </div>
-                  <div className="text-sm text-gray-700">
-                    <strong>הערכת גודל:</strong> {room.size_estimate}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <p className="text-xs text-gray-500 mt-1">נשלף מניתוח תמונות פנים</p>
-          </div>
-        )}
-      </div>
-      </div>
-    )}
-
-    {/* Exterior Analysis Section - Only show if data has been processed */}
-    {hasExtractedData && (
-      <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">ניתוח חוץ הנכס</h3>
-      
-      <div className="grid grid-cols-1 gap-4">
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-              מצב הבניין
-            </label>
-            <div className="flex items-center gap-2">
-              {editingField === 'buildingCondition' ? (
-                <div className="flex-1 flex items-center gap-2">
-                  <select
-                    value={tempValue}
-                    onChange={(e) => setTempValue(e.target.value)}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-right"
-                    dir="rtl"
-                  >
-                    <option value="">בחר מצב בניין</option>
-                    <option value="מצוין">מצוין</option>
-                    <option value="טוב">טוב</option>
-                    <option value="בינוני">בינוני</option>
-                    <option value="גרוע">גרוע</option>
-                    <option value="דורש שיפוץ">דורש שיפוץ</option>
-                  </select>
-                  <button
-                    onClick={() => handleFieldSave('buildingCondition')}
-                    className="p-1 text-green-600 hover:bg-green-100 rounded"
-                  >
-                    <Save className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={handleFieldCancel}
-                    className="p-1 text-red-600 hover:bg-red-100 rounded"
-                  >
-                    <XCircle className="w-4 h-4" />
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <span className="flex-1 text-right">{extractedData.buildingCondition || 'לא נמצא'}</span>
-                  <button
-                    onClick={() => handleFieldEdit('buildingCondition', extractedData.buildingCondition || '')}
-                    className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                  >
-                    <Edit3 className="w-4 h-4" />
-                  </button>
-                </>
-              )}
-            </div>
-            <p className="text-xs text-gray-500 mt-1">נשלף מניתוח תמונות חוץ</p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-              סוג הבניין
-            </label>
-            <div className="flex items-center gap-2">
-              {editingField === 'buildingType' ? (
-                <div className="flex-1 flex items-center gap-2">
-                  <select
-                    value={tempValue}
-                    onChange={(e) => setTempValue(e.target.value)}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-right"
-                    dir="rtl"
-                  >
-                    <option value="">בחר סוג בניין</option>
-                    <option value="מגדל מגורים">מגדל מגורים</option>
-                    <option value="בניין מגורים נמוך">בניין מגורים נמוך</option>
-                    <option value="בית פרטי">בית פרטי</option>
-                    <option value="דופלקס">דופלקס</option>
-                    <option value="נטהאוז">נטהאוז</option>
-                    <option value="וילה">וילה</option>
-                    <option value="קוטג'">קוטג'</option>
-                  </select>
-                  <button
-                    onClick={() => handleFieldSave('buildingType')}
-                    className="p-1 text-green-600 hover:bg-green-100 rounded"
-                  >
-                    <Save className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={handleFieldCancel}
-                    className="p-1 text-red-600 hover:bg-red-100 rounded"
-                  >
-                    <XCircle className="w-4 h-4" />
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <span className="flex-1 text-right">{extractedData.buildingType || 'לא נמצא'}</span>
-                  <button
-                    onClick={() => handleFieldEdit('buildingType', extractedData.buildingType || '')}
-                    className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                  >
-                    <Edit3 className="w-4 h-4" />
-                  </button>
-                </>
-              )}
-            </div>
-            <p className="text-xs text-gray-500 mt-1">נשלף מניתוח תמונות חוץ</p>
+      {/* Comparable Sales */}
+      {hasExtractedData && (
+        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">מכירות דומות</h3>
+          <div className="grid grid-cols-1 gap-4">
+            <EditableField
+              field="averagePricePerSqm"
+              label="מחיר ממוצע למ'ר"
+              value={extractedData.averagePricePerSqm}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource={getDataSource('averagePricePerSqm')}
+              provenanceInfo={getProvenanceForField('averagePricePerSqm')}
+              onNavigateToDocument={navigateToDocument}
+            />
+            <EditableField
+              field="medianPricePerSqm"
+              label="מחיר חציוני למ'ר"
+              value={extractedData.medianPricePerSqm}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource={getDataSource('medianPricePerSqm')}
+              provenanceInfo={getProvenanceForField('medianPricePerSqm')}
+              onNavigateToDocument={navigateToDocument}
+            />
+            <EditableField
+              field="adjustmentFactor"
+              label="גורם התאמה"
+              value={extractedData.adjustmentFactor}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource={getDataSource('adjustmentFactor')}
+              provenanceInfo={getProvenanceForField('adjustmentFactor')}
+              onNavigateToDocument={navigateToDocument}
+            />
           </div>
         </div>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-              תכונות הבניין
-            </label>
-            <div className="flex items-center gap-2">
-              {editingField === 'buildingFeatures' ? (
-                <div className="flex-1 flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={tempValue}
-                    onChange={(e) => setTempValue(e.target.value)}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-right"
-                    dir="rtl"
-                  />
-                  <button
-                    onClick={() => handleFieldSave('buildingFeatures')}
-                    className="p-1 text-green-600 hover:bg-green-100 rounded"
-                  >
-                    <Save className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={handleFieldCancel}
-                    className="p-1 text-red-600 hover:bg-red-100 rounded"
-                  >
-                    <XCircle className="w-4 h-4" />
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <span className="flex-1 text-right">{extractedData.buildingFeatures || 'לא נמצא'}</span>
-                  <button
-                    onClick={() => handleFieldEdit('buildingFeatures', extractedData.buildingFeatures || '')}
-                    className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                  >
-                    <Edit3 className="w-4 h-4" />
-                  </button>
-                </>
-              )}
-            </div>
-            <p className="text-xs text-gray-500 mt-1">נשלף מניתוח תמונות חוץ</p>
-                </div>
-                
-                <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-              הערכה כללית
-            </label>
-            <div className="flex items-center gap-2">
-              {editingField === 'overallAssessment' ? (
-                <div className="flex-1 flex items-center gap-2">
-                  <textarea
-                    value={tempValue}
-                    onChange={(e) => setTempValue(e.target.value)}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-right min-h-[80px]"
-                    dir="rtl"
-                  />
-                  <button
-                    onClick={() => handleFieldSave('overallAssessment')}
-                    className="p-1 text-green-600 hover:bg-green-100 rounded"
-                  >
-                    <Save className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={handleFieldCancel}
-                    className="p-1 text-red-600 hover:bg-red-100 rounded"
-                  >
-                    <XCircle className="w-4 h-4" />
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <span className="flex-1 text-right">{extractedData.overallAssessment || 'לא נמצא'}</span>
-                  <button
-                    onClick={() => handleFieldEdit('overallAssessment', extractedData.overallAssessment || '')}
-                    className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                  >
-                    <Edit3 className="w-4 h-4" />
-                  </button>
-                </>
-              )}
-            </div>
-            <p className="text-xs text-gray-500 mt-1">נשלף מניתוח תמונות חוץ</p>
-          </div>
-        </div>
-      </div>
-      </div>
-    )}
-
-    {/* Comparable Sales Section - Only show if data has been processed */}
-    {/* {hasExtractedData && (
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">מכירות דומות</h3>
-      
-      <div className="grid grid-cols-1 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-            מחיר ממוצע למ"ר
-          </label>
-          <div className="flex items-center gap-2">
-            {editingField === 'averagePricePerSqm' ? (
-              <div className="flex-1 flex items-center gap-2">
-                  <input
-                    type="text"
-                  value={tempValue}
-                  onChange={(e) => setTempValue(e.target.value)}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-right"
-                  dir="rtl"
-                />
-                <button
-                  onClick={() => handleFieldSave('averagePricePerSqm')}
-                  className="p-1 text-green-600 hover:bg-green-100 rounded"
-                >
-                  <Save className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={handleFieldCancel}
-                  className="p-1 text-red-600 hover:bg-red-100 rounded"
-                >
-                  <XCircle className="w-4 h-4" />
-                </button>
-                </div>
-            ) : (
-              <>
-                <span className="flex-1 text-right">{extractedData.averagePricePerSqm || 'לא נמצא'}</span>
-                <button
-                  onClick={() => handleFieldEdit('averagePricePerSqm', extractedData.averagePricePerSqm || '')}
-                  className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                >
-                  <Edit3 className="w-4 h-4" />
-                </button>
-              </>
-            )}
-              </div>
-          <p className="text-xs text-gray-500 mt-1">{getDataSource('averagePricePerSqm')}</p>
-            </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-            מחיר חציוני למ"ר
-          </label>
-          <div className="flex items-center gap-2">
-            {editingField === 'medianPricePerSqm' ? (
-              <div className="flex-1 flex items-center gap-2">
-                <input
-                  type="text"
-                  value={tempValue}
-                  onChange={(e) => setTempValue(e.target.value)}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-right"
-                  dir="rtl"
-                />
-                <button
-                  onClick={() => handleFieldSave('medianPricePerSqm')}
-                  className="p-1 text-green-600 hover:bg-green-100 rounded"
-                >
-                  <Save className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={handleFieldCancel}
-                  className="p-1 text-red-600 hover:bg-red-100 rounded"
-                >
-                  <XCircle className="w-4 h-4" />
-                </button>
-          </div>
-            ) : (
-              <>
-                <span className="flex-1 text-right">{extractedData.medianPricePerSqm || 'לא נמצא'}</span>
-                <button
-                  onClick={() => handleFieldEdit('medianPricePerSqm', extractedData.medianPricePerSqm || '')}
-                  className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                >
-                  <Edit3 className="w-4 h-4" />
-                </button>
-              </>
-            )}
-          </div>
-          <p className="text-xs text-gray-500 mt-1">{getDataSource('medianPricePerSqm')}</p>
-              </div>
-              
-              <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-            גורם התאמה
-          </label>
-          <div className="flex items-center gap-2">
-            {editingField === 'adjustmentFactor' ? (
-              <div className="flex-1 flex items-center gap-2">
-                <input
-                  type="text"
-                  value={tempValue}
-                  onChange={(e) => setTempValue(e.target.value)}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-right"
-                  dir="rtl"
-                />
-                <button
-                  onClick={() => handleFieldSave('adjustmentFactor')}
-                  className="p-1 text-green-600 hover:bg-green-100 rounded"
-                >
-                  <Save className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={handleFieldCancel}
-                  className="p-1 text-red-600 hover:bg-red-100 rounded"
-                >
-                  <XCircle className="w-4 h-4" />
-                </button>
-          </div>
-            ) : (
-              <>
-                <span className="flex-1 text-right">{extractedData.adjustmentFactor || 'לא נמצא'}</span>
-                <button
-                  onClick={() => handleFieldEdit('adjustmentFactor', extractedData.adjustmentFactor || '')}
-                  className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                >
-                  <Edit3 className="w-4 h-4" />
-                </button>
-              </>
-        )}
-      </div>
-          <p className="text-xs text-gray-500 mt-1">{getDataSource('adjustmentFactor')}</p>
-        </div>
-        </div>
-      </div>
-    )} */}
-
+      )}
     </div>
   )
 }

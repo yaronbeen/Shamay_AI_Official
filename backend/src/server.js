@@ -33,7 +33,6 @@ app.use(cors({
 // Body parsing
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-
 // Compression
 app.use(compression());
 
@@ -71,6 +70,7 @@ app.use('/api/valuations', require('./routes/valuations'));
 app.use('/api/sessions', require('./routes/sessions'));
 app.use('/api/files', require('./routes/files'));
 app.use('/api/ai', require('./routes/ai'));
+app.use('/api/provenance', require('./routes/provenance'));
 app.use('/api/gis', require('./routes/gis'));
 app.use('/api/gis-screenshot', require('./routes/gis-screenshot'));
 app.use('/api/address-to-govmap', require('./routes/address-to-govmap'));

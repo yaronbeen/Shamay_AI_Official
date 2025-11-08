@@ -2,12 +2,23 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
-const pool = new Pool({
+// Use DATABASE_URL if available, otherwise use individual env vars
+const poolConfig = process.env.DATABASE_URL ? {
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL.includes('neon.tech') || process.env.DATABASE_URL.includes('sslmode=require') 
+    ? { rejectUnauthorized: false } 
+    : false
+} : {
   host: process.env.DB_HOST || 'localhost',
   port: process.env.DB_PORT || 5432,
   database: process.env.DB_NAME || 'shamay_land_registry',
   user: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASSWORD || 'postgres',
+  ssl: process.env.DB_HOST?.includes('neon.tech') ? { rejectUnauthorized: false } : false
+};
+
+const pool = new Pool({
+  ...poolConfig,
   min: parseInt(process.env.DB_POOL_MIN) || 2,
   max: parseInt(process.env.DB_POOL_MAX) || 10,
   idleTimeoutMillis: 30000,

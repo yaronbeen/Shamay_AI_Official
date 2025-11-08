@@ -16,8 +16,15 @@ export async function GET(
     
     console.log('📐 Garmushka Measurements GET - Session:', params.sessionId)
     console.log('📐 Measurement Data:', measurementData)
+    console.log('📐 Garmushka Records:', measurementData?.garmushkaRecords || [])
     
-    return NextResponse.json({ measurementData })
+    const garmushkaRecords = measurementData?.garmushkaRecords || []
+    console.log(`📊 Returning ${garmushkaRecords.length} garmushka records`)
+    
+    return NextResponse.json({ 
+      measurementData,
+      garmushkaRecords: garmushkaRecords
+    })
   } catch (error) {
     console.error('Error fetching garmushka measurements:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -70,18 +77,51 @@ export async function DELETE(
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
 
-    console.log('📐 Garmushka Measurements DELETE - Session:', params.sessionId)
+    // Check if we're deleting a single record or all records
+    const url = new URL(request.url)
+    const garmushkaId = url.searchParams.get('id')
     
-    // Delete measurements by saving empty/null data
-    const saveResult = await ShumaDB.saveGarmushkaData(params.sessionId, {})
+    console.log('📐 Garmushka Measurements DELETE - URL:', request.url)
+    console.log('📐 Garmushka Measurements DELETE - garmushkaId param:', garmushkaId)
     
-    if (!saveResult.success) {
-      return NextResponse.json({ 
-        error: saveResult.error || 'Failed to delete measurements' 
-      }, { status: 500 })
-    }
+    if (garmushkaId) {
+      // Delete a single Garmushka record
+      console.log('📐 Garmushka Measurements DELETE - Single Record:', garmushkaId, 'Session:', params.sessionId)
+      
+      const parsedId = parseInt(garmushkaId)
+      console.log('📐 Parsed ID:', parsedId, 'isNaN?', isNaN(parsedId))
+      
+      if (isNaN(parsedId)) {
+        return NextResponse.json({ 
+          error: 'Invalid garmushka ID' 
+        }, { status: 400 })
+      }
+      
+      const deleteResult = await ShumaDB.deleteGarmushkaRecord(parsedId, params.sessionId)
+      
+      console.log('📐 Delete result:', deleteResult)
+      
+      if (!deleteResult.success) {
+        return NextResponse.json({ 
+          error: deleteResult.error || 'Failed to delete record' 
+        }, { status: 500 })
+      }
 
-    return NextResponse.json({ success: true })
+      return NextResponse.json({ success: true })
+    } else {
+      // Delete all Garmushka records from garmushka table for this session
+      console.log('📐 Garmushka Measurements DELETE - All Records - Session:', params.sessionId)
+      
+      const deleteResult = await ShumaDB.deleteGarmushkaData(params.sessionId)
+      
+      if (!deleteResult.success) {
+        return NextResponse.json({ 
+          error: deleteResult.error || 'Failed to delete measurements' 
+        }, { status: 500 })
+      }
+
+      return NextResponse.json({ success: true })
+    }
   } catch (error) {
     console.error('Error deleting garmushka measurements:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

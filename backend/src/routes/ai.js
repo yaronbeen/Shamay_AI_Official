@@ -140,6 +140,53 @@ router.post('/land-registry', async (req, res) => {
     
     console.log(`📤 Sending response:`, responseData);
     
+    // ✅ AUTO-CREATE PROVENANCE RECORDS from AI extraction
+    try {
+      const { createProvenanceFromAIExtraction } = require('../models/ProvenanceHelper');
+      
+      // Find document info from fileUrl
+      const documentName = path.basename(fileUrl) || `land_registry_${sessionId}.pdf`;
+      const documentType = 'tabu';
+      
+      // Build confidence scores map from rawData
+      const confidenceScores = {};
+      if (result.extractionResults?.confidence_scores) {
+        // Map confidence scores to field paths
+        Object.entries(result.extractionResults.confidence_scores).forEach(([key, score]) => {
+          confidenceScores[key] = score;
+        });
+      }
+      
+      // Use overall confidence as default
+      const overallConfidence = result.extractionResults?.overallConfidence || 0.7;
+      
+      // Create provenance records for each extracted field
+      const provenanceResult = await createProvenanceFromAIExtraction(
+        sessionId,
+        rawData, // All extracted fields
+        {
+          documentId: `doc_${sessionId}_land_registry`,
+          documentName,
+          documentType,
+          documentUrl: fileUrl,
+          confidenceScores,
+          extractionMethod: 'ai_auto',
+          modelUsed: 'claude-opus-4-1-20250805', // Match the model used
+          defaultPage: 1 // Most Tabu documents are single-page or start on page 1
+        }
+      );
+      
+      if (provenanceResult.success) {
+        console.log(`✅ Auto-created ${provenanceResult.recordsCreated} provenance records`);
+      } else {
+        console.warn(`⚠️ Failed to create provenance records:`, provenanceResult.error);
+        // Don't fail the request - provenance is optional
+      }
+    } catch (provenanceError) {
+      console.warn(`⚠️ Error creating provenance (non-fatal):`, provenanceError.message);
+      // Continue - provenance creation failure shouldn't break extraction
+    }
+    
     // Clean up temp file
     if (tempFilePath && fs.existsSync(tempFilePath)) {
       fs.unlinkSync(tempFilePath);
@@ -268,6 +315,53 @@ router.post('/building-permit', async (req, res) => {
     
     console.log(`📤 Sending response:`, responseData);
     
+    // ✅ AUTO-CREATE PROVENANCE RECORDS from AI extraction
+    try {
+      const { createProvenanceFromAIExtraction } = require('../models/ProvenanceHelper');
+      
+      // Find document info from fileUrl
+      const documentName = path.basename(fileUrl) || `building_permit_${sessionId}.pdf`;
+      const documentType = 'permit';
+      
+      // Build confidence scores from result (extractor returns { field: { value, confidence } })
+      const confidenceScores = {};
+      const extractedFields = {};
+      
+      // Convert result format to flat fields with confidence
+      Object.entries(result).forEach(([key, fieldData]) => {
+        if (fieldData && typeof fieldData === 'object' && 'value' in fieldData) {
+          extractedFields[key] = fieldData.value;
+          confidenceScores[key] = (fieldData.confidence || 0) / 100; // Convert % to 0-1
+        } else if (fieldData !== null && fieldData !== undefined) {
+          extractedFields[key] = fieldData;
+        }
+      });
+      
+      // Create provenance records
+      const provenanceResult = await createProvenanceFromAIExtraction(
+        sessionId,
+        extractedFields,
+        {
+          documentId: `doc_${sessionId}_building_permit`,
+          documentName,
+          documentType,
+          documentUrl: fileUrl,
+          confidenceScores,
+          extractionMethod: 'ai_auto',
+          modelUsed: 'claude-sonnet-4-20250514',
+          defaultPage: 1
+        }
+      );
+      
+      if (provenanceResult.success) {
+        console.log(`✅ Auto-created ${provenanceResult.recordsCreated} provenance records`);
+      } else {
+        console.warn(`⚠️ Failed to create provenance records:`, provenanceResult.error);
+      }
+    } catch (provenanceError) {
+      console.warn(`⚠️ Error creating provenance (non-fatal):`, provenanceError.message);
+    }
+    
     // Clean up temp file
     if (tempFilePath && fs.existsSync(tempFilePath)) {
       fs.unlinkSync(tempFilePath);
@@ -379,6 +473,53 @@ router.post('/shared-building', async (req, res) => {
     };
     
     console.log(`📤 Sending response:`, responseData);
+    
+    // ✅ AUTO-CREATE PROVENANCE RECORDS from AI extraction
+    try {
+      const { createProvenanceFromAIExtraction } = require('../models/ProvenanceHelper');
+      
+      // Find document info from fileUrl
+      const documentName = path.basename(fileUrl) || `shared_building_${sessionId}.pdf`;
+      const documentType = 'condo';
+      
+      // Build confidence scores and extract fields
+      const confidenceScores = {};
+      const extractedFields = {};
+      
+      // Convert result format to flat fields
+      Object.entries(result).forEach(([key, fieldData]) => {
+        if (fieldData && typeof fieldData === 'object' && 'value' in fieldData) {
+          extractedFields[key] = fieldData.value;
+          confidenceScores[key] = (fieldData.confidence || 0) / 100;
+        } else if (fieldData !== null && fieldData !== undefined) {
+          extractedFields[key] = fieldData;
+        }
+      });
+      
+      // Create provenance records
+      const provenanceResult = await createProvenanceFromAIExtraction(
+        sessionId,
+        extractedFields,
+        {
+          documentId: `doc_${sessionId}_shared_building`,
+          documentName,
+          documentType,
+          documentUrl: fileUrl,
+          confidenceScores,
+          extractionMethod: 'ai_auto',
+          modelUsed: 'claude-sonnet-4-20250514',
+          defaultPage: 1
+        }
+      );
+      
+      if (provenanceResult.success) {
+        console.log(`✅ Auto-created ${provenanceResult.recordsCreated} provenance records`);
+      } else {
+        console.warn(`⚠️ Failed to create provenance records:`, provenanceResult.error);
+      }
+    } catch (provenanceError) {
+      console.warn(`⚠️ Error creating provenance (non-fatal):`, provenanceError.message);
+    }
     
     // Clean up temp file
     if (tempFilePath && fs.existsSync(tempFilePath)) {

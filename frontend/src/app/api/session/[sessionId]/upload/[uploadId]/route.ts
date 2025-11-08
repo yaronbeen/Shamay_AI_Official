@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { unlink } from 'fs/promises'
-import { join } from 'path'
+import { FileStorageService } from '@/lib/file-storage'
 const { ShumaDB } = require('@/lib/shumadb.js')
 
 export async function DELETE(
@@ -60,16 +59,9 @@ export async function DELETE(
     // Use setTimeout to delay physical deletion to avoid race conditions
     setTimeout(async () => {
       try {
-        if (uploadToDelete.path) {
-          // Use the stored path from the upload entry
-          const filePath = uploadToDelete.path
-          await unlink(filePath)
-          console.log(`✅ Physical file deleted: ${filePath}`)
-        } else {
-          // Fallback: construct path if stored path is not available
-          const filePath = join(process.cwd(), 'uploads', sessionId, uploadToDelete.fileName)
-          await unlink(filePath)
-          console.log(`✅ Physical file deleted (fallback): ${filePath}`)
+        const target = uploadToDelete.url || uploadToDelete.path
+        if (target) {
+          await FileStorageService.deleteFile(target)
         }
       } catch (error) {
         console.warn(`⚠️ Could not delete physical file:`, error)

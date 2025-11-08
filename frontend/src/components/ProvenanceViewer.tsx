@@ -72,7 +72,7 @@ function useProvenanceNavigation(data: ProvenanceData) {
   const [filterStatus, setFilterStatus] = useState<'all' | 'low_conf' | 'missing' | 'manual'>('all')
 
   // Calculate scale for current page
-  const currentPage = data.doc.pages.find(p => p.page === selectedPage)
+  const currentPage = data?.doc?.pages?.find(p => p.page === selectedPage) || null
   const getScale = useCallback((containerWidth: number, containerHeight: number) => {
     if (!currentPage) return 1
     
@@ -97,16 +97,16 @@ function useProvenanceNavigation(data: ProvenanceData) {
   // Navigation functions
   const selectField = useCallback((fieldId: string) => {
     setSelectedFieldId(fieldId)
-    const field = data.fields.find(f => f.id === fieldId)
+    const field = data?.fields?.find(f => f.id === fieldId)
     if (field && field.sources.length > 0) {
       const firstSource = field.sources[0]
       setSelectedPage(firstSource.page)
       setSelectedSourceIdxByField(prev => ({ ...prev, [fieldId]: 0 }))
     }
-  }, [data.fields])
+  }, [data?.fields])
 
   const cycleSource = useCallback((fieldId: string, direction: number) => {
-    const field = data.fields.find(f => f.id === fieldId)
+    const field = data?.fields?.find(f => f.id === fieldId)
     if (!field) return
 
     const currentIdx = selectedSourceIdxByField[fieldId] || 0
@@ -118,17 +118,17 @@ function useProvenanceNavigation(data: ProvenanceData) {
     if (newSource) {
       setSelectedPage(newSource.page)
     }
-  }, [selectedSourceIdxByField, data.fields])
+  }, [selectedSourceIdxByField, data?.fields])
 
   const selectHighlight = useCallback((fieldId: string, sourceIdx: number) => {
     setSelectedFieldId(fieldId)
     setSelectedSourceIdxByField(prev => ({ ...prev, [fieldId]: sourceIdx }))
     
-    const field = data.fields.find(f => f.id === fieldId)
+    const field = data?.fields?.find(f => f.id === fieldId)
     if (field && field.sources[sourceIdx]) {
       setSelectedPage(field.sources[sourceIdx].page)
     }
-  }, [data.fields])
+  }, [data?.fields])
 
   return {
     selectedFieldId,
@@ -170,8 +170,8 @@ function DocumentPane({
   const [drawEnd, setDrawEnd] = useState<{ x: number, y: number } | null>(null)
   const [manualFieldId, setManualFieldId] = useState<string | null>(null)
 
-  const currentPage = data.doc.pages.find(p => p.page === navigation.selectedPage)
-  const selectedField = data.fields.find(f => f.id === navigation.selectedFieldId)
+  const currentPage = data?.doc?.pages?.find(p => p.page === navigation.selectedPage) || null
+  const selectedField = data?.fields?.find(f => f.id === navigation.selectedFieldId) || null
   const currentSourceIdx = navigation.selectedSourceIdxByField[navigation.selectedFieldId || ''] || 0
 
   // Handle mouse events for manual source drawing
@@ -301,7 +301,7 @@ function DocumentPane({
 
       {/* Page thumbnails */}
       <div className="flex gap-2 mb-4 overflow-x-auto">
-        {data.doc.pages.map(page => (
+        {data?.doc?.pages?.map(page => (
           <button
             key={page.page}
             onClick={() => navigation.setSelectedPage(page.page)}
@@ -322,87 +322,108 @@ function DocumentPane({
 
       {/* Main document viewer */}
       <div className="flex-1 relative overflow-auto bg-gray-50 rounded-lg">
-        <div
-          ref={canvasRef}
-          className="relative inline-block"
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-        >
-          <img
-            src={currentPage.imageUrl}
-            alt={`עמוד ${currentPage.page}`}
-            className="block"
-            style={{
-              transform: `scale(${navigation.getScale(800, 600)})`,
-              transformOrigin: 'top left'
-            }}
-          />
-          
-          {/* Highlight overlays */}
+        {currentPage?.imageUrl && (
           <div
-            className="absolute top-0 left-0 pointer-events-none"
-            style={{
-              transform: `scale(${navigation.getScale(800, 600)})`,
-              transformOrigin: 'top left',
-              width: currentPage.width,
-              height: currentPage.height
-            }}
+            ref={canvasRef}
+            className="relative w-full h-full"
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
           >
-            {data.fields.map(field => {
-              const sourceIdx = navigation.selectedSourceIdxByField[field.id] || 0
-              const source = field.sources[sourceIdx]
-              
-              if (!source || source.page !== currentPage.page) return null
-              if (!navigation.showAllHighlights && field.id !== navigation.selectedFieldId) return null
-              
-              const isSelected = field.id === navigation.selectedFieldId
-              const bbox = navigation.transformBbox(source.bbox, 1)
-              
-              return (
-                <div
-                  key={`${field.id}-${sourceIdx}`}
-                  className={`absolute border-2 transition-all ${
-                    isSelected 
-                      ? 'border-blue-600 bg-blue-200 shadow-lg' 
-                      : 'border-blue-400 bg-blue-100'
-                  } ${
-                    field.status === 'low_conf' ? 'border-yellow-500 bg-yellow-100' : ''
-                  }`}
-                  style={{
-                    left: bbox.x,
-                    top: bbox.y,
-                    width: bbox.width,
-                    height: bbox.height,
-                    pointerEvents: 'auto'
-                  }}
-                  onClick={() => navigation.selectHighlight(field.id, sourceIdx)}
-                  title={`${field.label}: ${field.value} (דיוק: ${Math.round(source.conf * 100)}%)`}
-                >
-                  {isSelected && (
-                    <div className="absolute -top-6 left-0 bg-blue-600 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                      {field.label}: {field.value}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-            
-            {/* Manual drawing rectangle */}
-            {isDrawing && drawStart && drawEnd && (
-              <div
-                className="absolute border-2 border-dashed border-red-500 bg-red-100"
+            {/* Check if it's a PDF (based on URL or type) */}
+            {currentPage.imageUrl.toLowerCase().endsWith('.pdf') || 
+             currentPage.imageUrl.includes('.pdf') || 
+             currentPage.imageUrl.includes('/api/files/') ? (
+              /* PDF Document - Use iframe */
+              <iframe
+                key={`pdf-${currentPage.imageUrl}-${currentPage.page}`}
+                src={`${currentPage.imageUrl}${currentPage.imageUrl.includes('#') ? '' : '#page=' + currentPage.page}`}
+                className="w-full h-full rounded border"
+                title={`עמוד ${currentPage.page}`}
+                style={{ minHeight: '500px' }}
+              />
+            ) : (
+              /* Image - Use img tag */
+              <img
+                src={currentPage.imageUrl}
+                alt={`עמוד ${currentPage.page}`}
+                className="block"
                 style={{
-                  left: Math.min(drawStart.x, drawEnd.x),
-                  top: Math.min(drawStart.y, drawEnd.y),
-                  width: Math.abs(drawEnd.x - drawStart.x),
-                  height: Math.abs(drawEnd.y - drawStart.y)
+                  transform: `scale(${navigation.getScale(800, 600)})`,
+                  transformOrigin: 'top left'
                 }}
               />
             )}
+          
+          {/* Highlight overlays - Only for images, not PDFs (iframe doesn't support overlays easily) */}
+          {!currentPage?.imageUrl?.toLowerCase().endsWith('.pdf') && 
+           !currentPage?.imageUrl?.includes('.pdf') && 
+           !currentPage?.imageUrl?.includes('/api/files/') && (
+            <div
+              className="absolute top-0 left-0 pointer-events-none"
+              style={{
+                transform: `scale(${navigation.getScale(800, 600)})`,
+                transformOrigin: 'top left',
+                width: currentPage.width,
+                height: currentPage.height
+              }}
+            >
+              {data?.fields?.map(field => {
+                const sourceIdx = navigation.selectedSourceIdxByField[field.id] || 0
+                const source = field.sources[sourceIdx]
+                
+                if (!source || source.page !== currentPage.page) return null
+                if (!navigation.showAllHighlights && field.id !== navigation.selectedFieldId) return null
+                
+                const isSelected = field.id === navigation.selectedFieldId
+                const bbox = navigation.transformBbox(source.bbox, 1)
+                
+                return (
+                  <div
+                    key={`${field.id}-${sourceIdx}`}
+                    className={`absolute border-2 transition-all ${
+                      isSelected 
+                        ? 'border-blue-600 bg-blue-200 shadow-lg' 
+                        : 'border-blue-400 bg-blue-100'
+                    } ${
+                      field.status === 'low_conf' ? 'border-yellow-500 bg-yellow-100' : ''
+                    }`}
+                    style={{
+                      left: bbox.x,
+                      top: bbox.y,
+                      width: bbox.width,
+                      height: bbox.height,
+                      pointerEvents: 'auto'
+                    }}
+                    onClick={() => navigation.selectHighlight(field.id, sourceIdx)}
+                    title={`${field.label}: ${field.value} (דיוק: ${Math.round(source.conf * 100)}%)`}
+                  >
+                    {isSelected && (
+                      <div className="absolute -top-6 left-0 bg-blue-600 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                        {field.label}: {field.value}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+              
+              {/* Manual drawing rectangle */}
+              {isDrawing && drawStart && drawEnd && currentPage && (
+                <div
+                  className="absolute border-2 border-dashed border-red-500 bg-red-100"
+                  style={{
+                    left: Math.min(drawStart.x, drawEnd.x),
+                    top: Math.min(drawStart.y, drawEnd.y),
+                    width: Math.abs(drawEnd.x - drawStart.x),
+                    height: Math.abs(drawEnd.y - drawStart.y)
+                  }}
+                />
+              )}
+            </div>
+          )}
           </div>
-        </div>
+        )}
       </div>
 
       {/* Manual source controls */}
@@ -410,7 +431,7 @@ function DocumentPane({
         <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
           <div className="flex items-center justify-between">
             <span className="text-sm text-yellow-800">
-              לחץ וגרור כדי לצייר מקור חדש לשדה: {data.fields.find(f => f.id === manualFieldId)?.label}
+              לחץ וגרור כדי לצייר מקור חדש לשדה: {data?.fields?.find(f => f.id === manualFieldId)?.label}
             </span>
             <button
               onClick={cancelManualSource}
@@ -435,7 +456,7 @@ function FieldPane({
   navigation: ReturnType<typeof useProvenanceNavigation>
   onManualSource: (fieldId: string, source: { page: number, bbox: [number, number, number, number] }) => void
 }) {
-  const filteredFields = data.fields.filter(field => {
+  const filteredFields = (data?.fields || []).filter(field => {
     // Search filter
     if (navigation.searchTerm && !field.label.toLowerCase().includes(navigation.searchTerm.toLowerCase()) && 
         !field.value.toLowerCase().includes(navigation.searchTerm.toLowerCase())) {
@@ -609,6 +630,8 @@ export function ProvenanceViewer({
   const navigation = useProvenanceNavigation(data)
 
   const handleManualSource = useCallback((fieldId: string, source: { page: number, bbox: [number, number, number, number] }) => {
+    if (!data?.fields) return
+    
     const updatedData = {
       ...data,
       fields: data.fields.map(field => 

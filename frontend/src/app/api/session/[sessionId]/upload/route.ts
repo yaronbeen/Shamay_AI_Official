@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { FileStorageService } from '../../../../../lib/file-storage'
 import { join } from 'path'
 import { mkdir, writeFile } from 'fs/promises'
@@ -13,17 +15,21 @@ export async function POST(
     console.log(`🚀 Upload request for session: ${params.sessionId}`)
     console.log(`📍 Environment: ${FileStorageService.isProduction() ? 'PRODUCTION (Vercel Blob)' : 'DEVELOPMENT (Local FS)'}`)
     
+    // Get userId from session
+    const session = await getServerSession(authOptions)
+    const userId = session?.user?.id || 'dev-user-id'
+    
     // Load session from database
     const loadResult = await ShumaDB.loadShumaForWizard(params.sessionId)
     
     // If session doesn't exist in DB, create a minimal one
-    let session: any = {}
+    let sessionData: any = {}
     if (!loadResult.error) {
-      session = loadResult.valuationData || {}
+      sessionData = loadResult.valuationData || {}
     } else {
       // Create a minimal session if it doesn't exist
       console.log(`📝 Creating new session for upload: ${params.sessionId}`)
-      session = {
+      sessionData = {
         sessionId: params.sessionId,
         uploads: []
       }
@@ -51,7 +57,8 @@ export async function POST(
         buffer,
         params.sessionId,
         file.name,
-        file.type
+        file.type,
+        userId
       )
 
       console.log(`✅ File uploaded:`, uploadResult)
@@ -83,12 +90,12 @@ export async function POST(
       console.log(`📁 Created upload entry:`, JSON.stringify(uploadEntry, null, 2))
 
       // Update uploads array in session
-      const existingUploads = session.uploads || []
+      const existingUploads = sessionData.uploads || []
       const updatedUploads = [...existingUploads, uploadEntry]
       
       // Save to database
       const updatedSession = {
-        ...session,
+        ...sessionData,
         uploads: updatedUploads
       }
       
@@ -168,7 +175,8 @@ export async function POST(
             buffer,
             params.sessionId,
             fileName,
-            file.type
+            file.type,
+            userId
           )
 
           console.log(`✅ Image ${i + 1} uploaded:`, uploadResult)
@@ -204,11 +212,11 @@ export async function POST(
       }
 
       // Update uploads array in session
-      const existingUploads = session.uploads || []
+      const existingUploads = sessionData.uploads || []
       const updatedUploads = [...existingUploads, ...uploadEntries]
       
       // Also update interiorImages for compatibility
-      const existingInteriorImages = session.interiorImages || []
+      const existingInteriorImages = sessionData.interiorImages || []
       const newInteriorImages = uploadedImages.map(img => ({
         url: img.url,
         name: img.name,
@@ -218,7 +226,7 @@ export async function POST(
       
       // Save to database
       const updatedSession = {
-        ...session,
+        ...sessionData,
         uploads: updatedUploads,
         interiorImages: [...existingInteriorImages, ...newInteriorImages]
       }

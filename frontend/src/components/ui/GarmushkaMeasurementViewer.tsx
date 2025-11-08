@@ -202,6 +202,11 @@ export default function GarmushkaMeasurementViewer({
     color: string
   }>>([])
   
+  // Saved PNG exports viewer state
+  const [savedPngExports, setSavedPngExports] = useState<Array<{ id: string; url: string; fileName: string; createdAt: string }>>([])
+  const [isLoadingExports, setIsLoadingExports] = useState<boolean>(false)
+  const [selectedExports, setSelectedExports] = useState<Set<string>>(new Set())
+  
   const stageRef = useRef<any>(null)
   const imageSize = useRef<{ width: number; height: number }>({ width: 0, height: 0 })
   
@@ -239,6 +244,140 @@ export default function GarmushkaMeasurementViewer({
   useEffect(() => {
     setIsClient(true)
   }, [])
+
+  // Load saved PNG exports from database
+  useEffect(() => {
+    if (!sessionId || !isClient) return
+
+    const loadSavedExports = async () => {
+      setIsLoadingExports(true)
+      try {
+        const response = await fetch(`/api/session/${sessionId}/garmushka-measurements`)
+        if (response.ok) {
+          const result = await response.json()
+          const measurementData = result.measurementData || {}
+          const garmushkaRecords = result.garmushkaRecords || []
+          
+          const exports: Array<{ id: string; url: string; fileName: string; createdAt: string }> = []
+          
+          // Use garmushkaRecords if available (has real IDs from database)
+          console.log('📊 Loading saved exports - garmushkaRecords:', garmushkaRecords)
+          console.log('📊 Loading saved exports - measurementData:', measurementData)
+          
+          if (Array.isArray(garmushkaRecords) && garmushkaRecords.length > 0) {
+            console.log(`✅ Found ${garmushkaRecords.length} garmushka records with real IDs`)
+            garmushkaRecords.forEach((record: any) => {
+              if (record.url && typeof record.url === 'string' && record.url.trim().length > 0) {
+                exports.push({
+                  id: String(record.id), // Use real database ID
+                  url: record.url,
+                  fileName: record.fileName || 'תשריט',
+                  createdAt: record.createdAt || new Date().toISOString()
+                })
+                console.log(`  ✅ Added export with ID: ${record.id}, URL: ${record.url.substring(0, 50)}...`)
+              }
+            })
+          } else {
+            console.log('⚠️ No garmushkaRecords found, using fallback to pngExports')
+            // Fallback to pngExports array if garmushkaRecords not available
+            if (Array.isArray(measurementData.pngExports)) {
+              measurementData.pngExports.forEach((url: string, index: number) => {
+                if (url && typeof url === 'string' && url.trim().length > 0) {
+                  exports.push({
+                    id: `export-${index}`, // Temporary ID
+                    url: url,
+                    fileName: `תשריט ${index + 1}`,
+                    createdAt: new Date().toISOString()
+                  })
+                }
+              })
+            }
+            
+            if (measurementData.pngExport && typeof measurementData.pngExport === 'string' && measurementData.pngExport.trim().length > 0) {
+              if (!exports.some(e => e.url === measurementData.pngExport)) {
+                exports.unshift({
+                  id: 'export-latest', // Temporary ID
+                  url: measurementData.pngExport,
+                  fileName: 'תשריט אחרון',
+                  createdAt: new Date().toISOString()
+                })
+              }
+            }
+          }
+          
+          setSavedPngExports(exports)
+          // Clear selection when reloading
+          setSelectedExports(new Set())
+        }
+      } catch (error) {
+        console.error('Error loading saved PNG exports:', error)
+      } finally {
+        setIsLoadingExports(false)
+      }
+    }
+
+    loadSavedExports()
+  }, [sessionId, isClient])
+
+  // Reload exports after saving
+  const reloadSavedExports = async () => {
+    if (!sessionId) return
+    try {
+      const response = await fetch(`/api/session/${sessionId}/garmushka-measurements`)
+      if (response.ok) {
+        const result = await response.json()
+        const measurementData = result.measurementData || {}
+        const garmushkaRecords = result.garmushkaRecords || []
+        
+        const exports: Array<{ id: string; url: string; fileName: string; createdAt: string }> = []
+        
+        // Use garmushkaRecords if available (has real IDs from database)
+        if (Array.isArray(garmushkaRecords) && garmushkaRecords.length > 0) {
+          garmushkaRecords.forEach((record: any) => {
+            if (record.url && typeof record.url === 'string' && record.url.trim().length > 0) {
+              exports.push({
+                id: String(record.id), // Use real database ID
+                url: record.url,
+                fileName: record.fileName || 'תשריט',
+                createdAt: record.createdAt || new Date().toISOString()
+              })
+            }
+          })
+        } else {
+          // Fallback to pngExports array if garmushkaRecords not available
+          if (Array.isArray(measurementData.pngExports)) {
+            measurementData.pngExports.forEach((url: string, index: number) => {
+              if (url && typeof url === 'string' && url.trim().length > 0) {
+                exports.push({
+                  id: `export-${index}`, // Temporary ID
+                  url: url,
+                  fileName: `תשריט ${index + 1}`,
+                  createdAt: new Date().toISOString()
+                })
+              }
+            })
+          }
+          
+          if (measurementData.pngExport && typeof measurementData.pngExport === 'string' && measurementData.pngExport.trim().length > 0) {
+            if (!exports.some(e => e.url === measurementData.pngExport)) {
+              exports.unshift({
+                id: 'export-latest', // Temporary ID
+                url: measurementData.pngExport,
+                fileName: 'תשריט אחרון',
+                createdAt: new Date().toISOString()
+              })
+            }
+          }
+        }
+        
+        setSavedPngExports(exports)
+        // Clear selection when reloading
+        setSelectedExports(new Set())
+      }
+    } catch (error) {
+      console.error('Error reloading saved PNG exports:', error)
+    }
+  }
 
   const renderPDFPage = async (pdf: any, pageNumber: number): Promise<PDFPageInfo> => {
     const page = await pdf.getPage(pageNumber)
@@ -529,7 +668,8 @@ export default function GarmushkaMeasurementViewer({
     }
   }
 
-  const clearImage = () => {
+  const clearImage = async () => {
+    // Clear local state
     setImageUrl('')
     setError('')
     setPdfPages([])
@@ -541,12 +681,32 @@ export default function GarmushkaMeasurementViewer({
     setScale(1)
     setStagePosition({ x: 0, y: 0 })
     setSelectedShapeId(null)
+    
+    // Clear session storage
     try {
       sessionStorage.removeItem(`garmushka:${sessionId}:fileType`)
       sessionStorage.removeItem(`garmushka:${sessionId}:fileData`)
       sessionStorage.removeItem(`garmushka:${sessionId}:fileUrl`)
       sessionStorage.removeItem(`garmushka:${sessionId}:updatedAt`)
     } catch {}
+    
+    // Delete all Garmushka measurements and screenshots from database
+    if (sessionId) {
+      try {
+        const response = await fetch(`/api/session/${sessionId}/garmushka-measurements`, {
+          method: 'DELETE'
+        })
+        
+        if (response.ok) {
+          // Reload saved exports to clear them from the viewer
+          await reloadSavedExports()
+        } else {
+          console.warn('Failed to delete Garmushka measurements from database')
+        }
+      } catch (error) {
+        console.error('Error deleting Garmushka measurements:', error)
+      }
+    }
   }
 
   // Measurement utility functions
@@ -1182,6 +1342,8 @@ export default function GarmushkaMeasurementViewer({
         const result = await response.json()
         console.log('✅ Garmushka measurements saved successfully:', result)
         onMeasurementComplete(measurementData)
+        // Reload saved exports to show the new one
+        await reloadSavedExports()
         alert('✅ המדידות נשמרו בהצלחה!')
       } else {
         const errorData = await response.json()
@@ -1226,6 +1388,227 @@ export default function GarmushkaMeasurementViewer({
       {isLoading && (
         <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded mb-4 text-center">
           📁 {isPdfMode ? 'מעבד דפי PDF...' : 'טוען קובץ...'}
+        </div>
+      )}
+
+      {/* Saved PNG Exports Viewer */}
+      {savedPngExports.length > 0 && (
+        <div className="mb-6 bg-gray-50 rounded-lg p-4 border border-gray-200">
+          <div className="flex justify-between items-center mb-3">
+            <h4 className="text-md font-semibold text-gray-900">
+              תשריטים שמורים ({savedPngExports.length})
+              {selectedExports.size > 0 && (
+                <span className="mr-2 text-sm text-blue-600 font-normal">
+                  ({selectedExports.size} נבחרו)
+                </span>
+              )}
+            </h4>
+            <div className="flex gap-2">
+              {selectedExports.size > 0 ? (
+                <>
+                  <button
+                    onClick={() => setSelectedExports(new Set())}
+                    className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                  >
+                    בטל בחירה
+                  </button>
+                  <button
+                    onClick={async () => {
+                      const count = selectedExports.size
+                      if (!confirm(`האם אתה בטוח שברצונך למחוק ${count} תשריט${count > 1 ? 'ים' : ''}?`)) return
+                      
+                      try {
+                        // Separate real IDs from temporary IDs
+                        const realIds: number[] = []
+                        const tempIds: string[] = []
+                        
+                        selectedExports.forEach(id => {
+                          if (/^\d+$/.test(id)) {
+                            realIds.push(parseInt(id))
+                          } else {
+                            tempIds.push(id)
+                          }
+                        })
+                        
+                        // Delete real IDs from database
+                        if (realIds.length > 0) {
+                          const deletePromises = realIds.map(id => 
+                            fetch(`/api/session/${sessionId}/garmushka-measurements?id=${id}`, {
+                              method: 'DELETE'
+                            })
+                          )
+                          
+                          const results = await Promise.all(deletePromises)
+                          const failed = results.filter(r => !r.ok)
+                          
+                          if (failed.length > 0) {
+                            console.error('❌ Some deletions failed:', failed)
+                            alert(`❌ ${failed.length} מתוך ${realIds.length} תשריטים לא נמחקו`)
+                          }
+                        }
+                        
+                        // Remove temporary IDs from local state
+                        if (tempIds.length > 0) {
+                          setSavedPngExports(prev => prev.filter(e => !tempIds.includes(e.id)))
+                        }
+                        
+                        // Clear selection and reload
+                        setSelectedExports(new Set())
+                        await reloadSavedExports()
+                        
+                        const totalDeleted = realIds.length + tempIds.length
+                        alert(`✅ ${totalDeleted} תשריט${totalDeleted > 1 ? 'ים' : ''} נמחק${totalDeleted > 1 ? 'ו' : ''} בהצלחה`)
+                      } catch (error) {
+                        console.error('❌ Error deleting multiple Garmushka records:', error)
+                        alert(`❌ שגיאה במחיקת התשריטים: ${error instanceof Error ? error.message : 'שגיאה לא ידועה'}`)
+                      }
+                    }}
+                    className="px-3 py-1 text-sm bg-red-500 text-white rounded hover:bg-red-600"
+                  >
+                    🗑️ מחק נבחרים ({selectedExports.size})
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => {
+                    const allIds = new Set(savedPngExports.map(e => e.id))
+                    setSelectedExports(allIds)
+                  }}
+                  className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600"
+                >
+                  בחר הכל
+                </button>
+              )}
+            </div>
+          </div>
+          {isLoadingExports ? (
+            <div className="text-center py-4 text-gray-600">טוען תשריטים...</div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {savedPngExports.map((exportItem) => {
+                const isSelected = selectedExports.has(exportItem.id)
+                return (
+                  <div 
+                    key={exportItem.id} 
+                    className={`bg-white rounded-lg border-2 relative group overflow-hidden cursor-pointer transition-all ${
+                      isSelected 
+                        ? 'border-blue-500 shadow-lg' 
+                        : 'border-gray-300 hover:border-gray-400'
+                    }`}
+                    onClick={() => {
+                      setSelectedExports(prev => {
+                        const newSet = new Set(prev)
+                        if (newSet.has(exportItem.id)) {
+                          newSet.delete(exportItem.id)
+                        } else {
+                          newSet.add(exportItem.id)
+                        }
+                        return newSet
+                      })
+                    }}
+                  >
+                    <div className="aspect-square relative">
+                      {/* Checkbox overlay */}
+                      <div className="absolute top-2 right-2 z-10">
+                        <div className={`w-6 h-6 rounded border-2 flex items-center justify-center ${
+                          isSelected 
+                            ? 'bg-blue-500 border-blue-500' 
+                            : 'bg-white border-gray-300'
+                        }`}>
+                          {isSelected && (
+                            <span className="text-white text-xs">✓</span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <img
+                        src={exportItem.url}
+                        alt={exportItem.fileName}
+                        className="w-full h-full object-contain p-2"
+                        onError={(e) => {
+                          // Fallback if image fails to load
+                          const target = e.target as HTMLImageElement
+                          target.style.display = 'none'
+                          const parent = target.parentElement
+                          if (parent) {
+                            parent.innerHTML = '<div class="w-full h-full flex items-center justify-center text-xs text-gray-500 p-2">תמונה לא זמינה</div>'
+                          }
+                        }}
+                      />
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation() // Prevent selection toggle
+                          if (!confirm('האם אתה בטוח שברצונך למחוק תשריט זה?')) return
+                          
+                          try {
+                            console.log('🗑️ Delete button clicked for exportItem:', exportItem)
+                            
+                            // Check if this is a real database ID (numeric) or temporary ID
+                            const isRealId = /^\d+$/.test(exportItem.id)
+                            console.log('🔍 Is real ID?', isRealId, 'ID:', exportItem.id)
+                            
+                            if (isRealId) {
+                              // Delete from database using real ID
+                              const deleteUrl = `/api/session/${sessionId}/garmushka-measurements?id=${exportItem.id}`
+                              console.log('📤 Sending DELETE request to:', deleteUrl)
+                              
+                              const response = await fetch(deleteUrl, {
+                                method: 'DELETE'
+                              })
+                              
+                              console.log('📥 DELETE response status:', response.status, response.ok)
+                              
+                              if (response.ok) {
+                                const result = await response.json()
+                                console.log('✅ Delete successful:', result)
+                                
+                                // Remove from selection if selected
+                                setSelectedExports(prev => {
+                                  const newSet = new Set(prev)
+                                  newSet.delete(exportItem.id)
+                                  return newSet
+                                })
+                                
+                                // Reload saved exports to update the list
+                                await reloadSavedExports()
+                                alert('✅ תשריט נמחק בהצלחה')
+                              } else {
+                                const errorData = await response.json()
+                                console.error('❌ Failed to delete Garmushka record:', errorData)
+                                alert(`❌ מחיקת התשריט נכשלה: ${errorData.error || 'שגיאה לא ידועה'}`)
+                              }
+                            } else {
+                              // Temporary ID - just remove from local state
+                              console.log('⚠️ Temporary ID detected, removing from local state only')
+                              setSelectedExports(prev => {
+                                const newSet = new Set(prev)
+                                newSet.delete(exportItem.id)
+                                return newSet
+                              })
+                              setSavedPngExports(prev => prev.filter(e => e.id !== exportItem.id))
+                              alert('תשריט נמחק מהתצוגה (לא נשמר במסד נתונים)')
+                            }
+                          } catch (error) {
+                            console.error('❌ Error deleting Garmushka record:', error)
+                            alert(`❌ שגיאה במחיקת התשריט: ${error instanceof Error ? error.message : 'שגיאה לא ידועה'}`)
+                          }
+                        }}
+                        className="absolute top-1 left-1 bg-red-500 text-white p-1 rounded hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity text-xs z-10"
+                        title="מחק תשריט"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                    <div className="p-2 text-center">
+                      <div className="text-xs font-medium text-gray-700 truncate" title={exportItem.fileName}>
+                        {exportItem.fileName}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 

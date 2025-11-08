@@ -49,18 +49,10 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
     
     // פרטי שמאי
     shamayName: data.shamayName || '',
-    shamaySerialNumber: data.shamaySerialNumber || '',
-    
-    // חתימה
-    signature: data.signaturePreview || null
-
-
+    shamaySerialNumber: data.shamaySerialNumber || ''
   })
 
   console.log('Validation check:',  data )
-
-  const [signatureUploading, setSignatureUploading] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Sync local formData with incoming data prop when data changes
   useEffect(() => {
@@ -98,10 +90,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
       
       // פרטי שמאי
       shamayName: data.shamayName || '',
-      shamaySerialNumber: data.shamaySerialNumber || '',
-      
-      // חתימה
-      signature: data.signaturePreview || null
+      shamaySerialNumber: data.shamaySerialNumber || ''
     })
   }, [data])
 
@@ -115,8 +104,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                    formData.floor > 0 && 
                    formData.area > 0 && 
                    formData.shamayName.trim() !== '' && 
-                   formData.shamaySerialNumber.trim() !== '' &&
-                   formData.signature !== null
+                   formData.shamaySerialNumber.trim() !== ''
     
     console.log('Validation check:', { isValid, formData })
     return isValid
@@ -142,8 +130,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
       
       // Critical fields that should save immediately:
       // - valuationType, valuationDate (required for document generation)
-      // - signaturePreview (large base64, needs to be persisted)
-      const criticalFields = ['valuationType', 'valuationDate', 'signaturePreview']
+      const criticalFields = ['valuationType', 'valuationDate']
       const shouldSaveImmediately = criticalFields.includes(field)
       
       // Skip auto-save for text inputs - only save on step navigation or explicit save
@@ -161,50 +148,6 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
   }, [updateData])
 
 
-  const handleSignatureUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      alert('אנא בחר קובץ תמונה בלבד')
-      return
-    }
-
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      alert('גודל הקובץ חייב להיות קטן מ-5MB')
-      return
-    }
-
-    setSignatureUploading(true)
-
-    try {
-      // Convert to base64
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        const base64 = e.target?.result as string
-        // Save as signaturePreview to match DocumentContent component
-        // This will trigger immediate save because signaturePreview is a critical field
-        updateField('signaturePreview', base64)
-        setFormData(prev => ({ ...prev, signature: base64 }))
-        setSignatureUploading(false)
-      }
-      reader.readAsDataURL(file)
-    } catch (error) {
-      console.error('Error uploading signature:', error)
-      alert('שגיאה בהעלאת החתימה')
-      setSignatureUploading(false)
-    }
-  }
-
-  const removeSignature = () => {
-    updateField('signaturePreview', null)
-    setFormData(prev => ({ ...prev, signature: null }))
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
-  }
 
   return (
     <div className="max-w-4xl mx-auto p-6">
@@ -502,70 +445,11 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
           </div>
         </div>
 
-        {/* חתימת השמאי */}
-        <div className="bg-white p-6 rounded-lg border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">חתימת השמאי *</h3>
-          
-          <div className="space-y-4">
-            {formData.signature ? (
-              <div className="text-center">
-                <div className="mb-4">
-                  <img 
-                    src={formData.signature} 
-                    alt="חתימת שמאי" 
-                    className="max-w-xs mx-auto border border-gray-300 rounded-lg shadow-sm"
-                  />
-            </div>
-                <div className="flex gap-2 justify-center">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                  >
-                    החלף חתימה
-                  </button>
-                  <button
-                    type="button"
-                    onClick={removeSignature}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-                  >
-                    הסר חתימה
-                  </button>
-            </div>
-              </div>
-            ) : (
-              <div className="text-center">
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-8">
-                  <div className="text-gray-500 mb-4">
-                    <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
-                      <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  </div>
-                  <p className="text-gray-600 mb-4">העלה תמונת חתימה</p>
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={signatureUploading}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {signatureUploading ? 'מעלה...' : 'בחר קובץ'}
-                  </button>
-                </div>
-              </div>
-            )}
-            
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleSignatureUpload}
-              className="hidden"
-            />
-            
-            <p className="text-xs text-gray-500 text-center">
-              פורמטים נתמכים: JPG, PNG, GIF. גודל מקסימלי: 5MB
-            </p>
-          </div>
+        {/* Note about signature */}
+        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+          <p className="text-sm text-blue-800">
+            💡 <strong>חתימת שמאי:</strong> ניתן להעלות חתימת שמאי קבועה בהגדרות הארגון. החתימה תופיע בכל הדוחות שיוצאו.
+          </p>
         </div>
       </div>
     </div>

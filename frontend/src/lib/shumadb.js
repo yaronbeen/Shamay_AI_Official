@@ -736,8 +736,103 @@ class ShumaDBEnhanced {
         // GIS Screenshots
         gisScreenshots: typeof shuma.gis_screenshots === 'string' ? JSON.parse(shuma.gis_screenshots) : (shuma.gis_screenshots || {}),
         
-        // Garmushka Measurements
+        // Garmushka Measurements - load latest from shuma table
         garmushkaMeasurements: typeof shuma.garmushka_measurements === 'string' ? JSON.parse(shuma.garmushka_measurements) : (shuma.garmushka_measurements || {})
+      }
+      
+      // If selectedImagePreview is missing but we have uploads, extract it from building_image uploads
+      if (!valuationData.selectedImagePreview && valuationData.uploads && Array.isArray(valuationData.uploads)) {
+        const buildingImageUploads = valuationData.uploads.filter(upload => 
+          upload.type === 'building_image' && upload.status === 'completed' && (upload.preview || upload.url)
+        )
+        
+        if (buildingImageUploads.length > 0) {
+          // Find selected upload (isSelected: true) or use first one
+          const selectedUpload = buildingImageUploads.find(upload => upload.isSelected) || buildingImageUploads[0]
+          valuationData.selectedImagePreview = selectedUpload.preview || selectedUpload.url || null
+          
+          // Also update selectedImageIndex if needed
+          if (selectedUpload && valuationData.propertyImages && Array.isArray(valuationData.propertyImages)) {
+            const imageIndex = valuationData.propertyImages.findIndex(img => 
+              img.preview === selectedUpload.preview || img.preview === selectedUpload.url
+            )
+            if (imageIndex >= 0) {
+              valuationData.selectedImageIndex = imageIndex
+            }
+          }
+        }
+      }
+
+      // Load ALL garmushka records for this session to get all PNG exports (2-4 screenshots)
+      try {
+        const garmushkaResult = await db.query(`
+          SELECT id, png_export, file_name, created_at 
+          FROM garmushka 
+          WHERE session_id = $1 AND png_export IS NOT NULL AND png_export != ''
+          ORDER BY created_at ASC
+        `, [sessionId])
+        
+        if (garmushkaResult.rows.length > 0) {
+          // Collect all PNG exports from all garmushka records with their IDs
+          const allPngExports = garmushkaResult.rows
+            .map(row => row.png_export)
+            .filter(url => url && typeof url === 'string' && url.trim().length > 0)
+          
+          // Collect all garmushka records with full info (for deletion)
+          const allGarmushkaRecords = garmushkaResult.rows
+            .filter(row => row.png_export && typeof row.png_export === 'string' && row.png_export.trim().length > 0)
+            .map(row => ({
+              id: row.id,
+              url: row.png_export,
+              fileName: row.file_name || 'תשריט',
+              createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
+            }))
+          
+          console.log(`📊 Loaded ${garmushkaResult.rows.length} garmushka records, ${allGarmushkaRecords.length} with PNG exports`)
+          
+            // Always add garmushkaRecords if we have any records (even if no PNG exports)
+            // This ensures we can delete records even if they don't have PNG exports
+            // IMPORTANT: Replace garmushkaMeasurements with fresh data from garmushka table
+            // to avoid stale data from shuma.garmushka_measurements
+            // IMPORTANT: We're moving to uploaded files, so pngExport/pngExports should NOT be used
+            if (allGarmushkaRecords.length > 0) {
+              valuationData.garmushkaMeasurements = {
+                // Keep other measurement data (like measurementTable, metersPerPixel, etc.)
+                measurementTable: valuationData.garmushkaMeasurements?.measurementTable || [],
+                metersPerPixel: valuationData.garmushkaMeasurements?.metersPerPixel || 0,
+                unitMode: valuationData.garmushkaMeasurements?.unitMode || 'metric',
+                isCalibrated: valuationData.garmushkaMeasurements?.isCalibrated || false,
+                // Add fresh data from garmushka table (uploaded files, not base64)
+                garmushkaRecords: allGarmushkaRecords // Add array of all garmushka records with IDs
+                // NOTE: pngExport and pngExports are NOT added - we use garmushkaRecords with file URLs instead
+              }
+            } else {
+            // No records in garmushka table - clear pngExport and pngExports from measurements
+            // IMPORTANT: We're moving to uploaded files, so pngExport should be deleted completely
+            // but keep other measurement data
+            if (valuationData.garmushkaMeasurements) {
+              const { pngExport, pngExports, ...otherMeasurements } = valuationData.garmushkaMeasurements
+              valuationData.garmushkaMeasurements = {
+                ...otherMeasurements,
+                garmushkaRecords: []
+              }
+            }
+          }
+        } else {
+          // No records in garmushka table - clear pngExport and pngExports from measurements
+          // IMPORTANT: We're moving to uploaded files, so pngExport should be deleted completely
+          // but keep other measurement data
+          if (valuationData.garmushkaMeasurements) {
+            const { pngExport, pngExports, ...otherMeasurements } = valuationData.garmushkaMeasurements
+            valuationData.garmushkaMeasurements = {
+              ...otherMeasurements,
+              garmushkaRecords: []
+            }
+          }
+        }
+      } catch (garmushkaError) {
+        console.warn('Failed to load all garmushka PNG exports:', garmushkaError)
+        // Continue with just the latest from shuma table
       }
 
       return { valuationData, success: true }
@@ -837,6 +932,142 @@ class ShumaDBEnhanced {
       await client.query('ROLLBACK')
       console.error('Error saving Garmushka data:', error)
       return { error: error.message || 'Failed to save Garmushka data' }
+    } finally {
+      client.release()
+    }
+  }
+
+  /**
+   * Delete all Garmushka data for a session
+   * Deletes from both shuma table and garmushka table
+   */
+  static async deleteGarmushkaData(sessionId) {
+    const client = await db.client()
+    
+    try {
+      await client.query('BEGIN')
+      
+      // Get shuma ID
+      const shumaResult = await client.query('SELECT id FROM shuma WHERE session_id = $1', [sessionId])
+      if (shumaResult.rows.length === 0) {
+        throw new Error('Shuma not found for session')
+      }
+      const shumaId = shumaResult.rows[0].id
+      
+      // Delete all garmushka records for this session
+      const deleteResult = await client.query(`
+        DELETE FROM garmushka 
+        WHERE session_id = $1
+      `, [sessionId])
+      
+      console.log(`🗑️ Deleted ${deleteResult.rowCount} Garmushka record(s) for session ${sessionId}`)
+      
+      // Clear garmushka_measurements from shuma table
+      await client.query(`
+        UPDATE shuma SET
+          garmushka_measurements = '{}'::jsonb,
+          updated_at = NOW()
+        WHERE session_id = $1
+      `, [sessionId])
+      
+      await client.query('COMMIT')
+      return { success: true, deletedCount: deleteResult.rowCount }
+      
+    } catch (error) {
+      await client.query('ROLLBACK')
+      console.error('Error deleting Garmushka data:', error)
+      return { error: error.message || 'Failed to delete Garmushka data' }
+    } finally {
+      client.release()
+    }
+  }
+
+  /**
+   * Delete a single Garmushka record by ID
+   * Deletes from garmushka table and cleans up shuma.garmushka_measurements
+   */
+  static async deleteGarmushkaRecord(garmushkaId, sessionId) {
+    const client = await db.client()
+    
+    try {
+      await client.query('BEGIN')
+      
+      // Get the record to find its png_export URL before deleting
+      const recordResult = await client.query(`
+        SELECT id, png_export FROM garmushka 
+        WHERE id = $1 AND session_id = $2
+      `, [garmushkaId, sessionId])
+      
+      if (recordResult.rows.length === 0) {
+        throw new Error('Garmushka record not found or does not belong to this session')
+      }
+      
+      const deletedPngExport = recordResult.rows[0].png_export
+      
+      // Delete the garmushka record
+      const deleteResult = await client.query(`
+        DELETE FROM garmushka 
+        WHERE id = $1 AND session_id = $2
+      `, [garmushkaId, sessionId])
+      
+      console.log(`🗑️ Deleted Garmushka record ${garmushkaId} for session ${sessionId}`)
+      
+      // Get shuma ID and current garmushka_measurements
+      const shumaResult = await client.query('SELECT id, garmushka_measurements FROM shuma WHERE session_id = $1', [sessionId])
+      if (shumaResult.rows.length > 0) {
+        const shumaId = shumaResult.rows[0].id
+        const currentMeasurements = typeof shumaResult.rows[0].garmushka_measurements === 'string'
+          ? JSON.parse(shumaResult.rows[0].garmushka_measurements)
+          : (shumaResult.rows[0].garmushka_measurements || {})
+        
+        // Remove the deleted pngExport from garmushka_measurements
+        // IMPORTANT: We're moving to uploaded files, so pngExport should be deleted completely
+        let updatedMeasurements = { ...currentMeasurements }
+        
+        // Always remove pngExport (we're moving to uploaded files, not base64)
+        delete updatedMeasurements.pngExport
+        
+        // Remove from pngExports array if it exists
+        if (Array.isArray(updatedMeasurements.pngExports)) {
+          updatedMeasurements.pngExports = updatedMeasurements.pngExports.filter(url => url !== deletedPngExport)
+          // If array is empty, remove it
+          if (updatedMeasurements.pngExports.length === 0) {
+            delete updatedMeasurements.pngExports
+          }
+        }
+        
+        // Remove from garmushkaRecords array if it exists
+        if (Array.isArray(updatedMeasurements.garmushkaRecords)) {
+          updatedMeasurements.garmushkaRecords = updatedMeasurements.garmushkaRecords.filter(record => record.id !== garmushkaId)
+          // If array is empty, remove it
+          if (updatedMeasurements.garmushkaRecords.length === 0) {
+            delete updatedMeasurements.garmushkaRecords
+          }
+        }
+        
+        // If no more measurements, clear the entire field
+        if (Object.keys(updatedMeasurements).length === 0) {
+          updatedMeasurements = {}
+        }
+        
+        // Update shuma table with cleaned measurements
+        await client.query(`
+          UPDATE shuma SET
+            garmushka_measurements = $1,
+            updated_at = NOW()
+          WHERE session_id = $2
+        `, [JSON.stringify(updatedMeasurements), sessionId])
+        
+        console.log(`🧹 Cleaned up garmushka_measurements in shuma table for session ${sessionId}`)
+      }
+      
+      await client.query('COMMIT')
+      return { success: true }
+      
+    } catch (error) {
+      await client.query('ROLLBACK')
+      console.error('Error deleting Garmushka record:', error)
+      return { error: error.message || 'Failed to delete Garmushka record' }
     } finally {
       client.release()
     }
@@ -1208,7 +1439,7 @@ class ShumaDBEnhanced {
   /**
    * Get a single shuma by ID
    */
-  static async getShumaById(shumaId) {
+  static async getShumaById(shumaId, organizationId) {
     const client = await db.client()
 
     try {
@@ -1237,8 +1468,8 @@ class ShumaDBEnhanced {
           gis_screenshots,
           garmushka_measurements
         FROM shuma 
-        WHERE id = $1
-      `, [shumaId])
+        WHERE id = $1 ${organizationId ? 'AND organization_id = $2' : ''}
+      `, organizationId ? [shumaId, organizationId] : [shumaId])
 
       if (result.rows.length === 0) {
         return { success: false, error: 'Shuma not found' }
@@ -1264,6 +1495,35 @@ class ShumaDBEnhanced {
       }
     } catch (error) {
       console.error('Error getting shuma by ID:', error)
+      return { success: false, error: error.message }
+    } finally {
+      client.release()
+    }
+  }
+
+  /**
+   * Delete a shuma by ID
+   */
+  static async deleteShuma(shumaId, organizationId) {
+    const client = await db.client()
+
+    try {
+      // First verify the shuma exists and belongs to the organization
+      const checkResult = await client.query(`
+        SELECT id FROM shuma 
+        WHERE id = $1 ${organizationId ? 'AND organization_id = $2' : ''}
+      `, organizationId ? [shumaId, organizationId] : [shumaId])
+
+      if (checkResult.rows.length === 0) {
+        return { success: false, error: 'Shuma not found' }
+      }
+
+      // Delete the shuma
+      await client.query('DELETE FROM shuma WHERE id = $1', [shumaId])
+
+      return { success: true }
+    } catch (error) {
+      console.error('Error deleting shuma:', error)
       return { success: false, error: error.message }
     } finally {
       client.release()
@@ -1501,6 +1761,93 @@ class ShumaDBEnhanced {
       await client.query('ROLLBACK')
       console.error('Error restoring AI extraction:', error)
       return { success: false, error: error.message }
+    } finally {
+      client.release()
+    }
+  }
+
+  /**
+   * Get organization settings including logos and company info
+   */
+  static async getOrganizationSettings(organizationId) {
+    const client = await db.client()
+    
+    try {
+      const result = await client.query(
+        `SELECT id, name, logo_url, settings 
+         FROM organizations 
+         WHERE id = $1`,
+        [organizationId]
+      )
+      
+      if (result.rows.length === 0) {
+        return null
+      }
+      
+      const org = result.rows[0]
+      const settings = typeof org.settings === 'string' 
+        ? JSON.parse(org.settings) 
+        : (org.settings || {})
+      
+      return {
+        id: org.id,
+        name: org.name,
+        logo_url: org.logo_url,
+        settings: settings
+      }
+    } catch (error) {
+      console.error('Error fetching organization settings:', error)
+      return null
+    } finally {
+      client.release()
+    }
+  }
+
+  /**
+   * Get user settings including logos, signature, and company info
+   * @param {string} userId - User ID to search for
+   * @param {string} userEmail - Optional email to search for if user not found by ID
+   */
+  static async getUserSettings(userId, userEmail = null) {
+    const client = await db.client()
+    
+    try {
+      // First try to find user by ID
+      let result = await client.query(
+        `SELECT id, name, email, settings 
+         FROM users 
+         WHERE id = $1`,
+        [userId]
+      )
+      
+      // If not found by ID and email provided, try to find by email
+      if (result.rows.length === 0 && userEmail) {
+        result = await client.query(
+          `SELECT id, name, email, settings 
+           FROM users 
+           WHERE email = $1`,
+          [userEmail]
+        )
+      }
+      
+      if (result.rows.length === 0) {
+        return null
+      }
+      
+      const user = result.rows[0]
+      const settings = typeof user.settings === 'string' 
+        ? JSON.parse(user.settings) 
+        : (user.settings || {})
+      
+      return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        settings: settings
+      }
+    } catch (error) {
+      console.error('Error fetching user settings:', error)
+      return null
     } finally {
       client.release()
     }

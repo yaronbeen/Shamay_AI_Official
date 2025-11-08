@@ -4,6 +4,9 @@
   "description": "SHAMAY.AI Property Valuation Platform",
   "type": "module",
   "main": "index.js",
+  "engines": {
+    "node": "^18.20.2 || >=20"
+  },
   "scripts": {
     "dev": "cd frontend && npm run dev",
     "build": "cd frontend && npm run build",
