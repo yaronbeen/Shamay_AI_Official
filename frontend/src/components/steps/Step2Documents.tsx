@@ -62,7 +62,7 @@ const DOCUMENT_TYPES = {
   },
   interior_image: {
     label: 'תמונות פנים הדירה',
-    description: 'תמונות פנים הדירה (עד 3 תמונות)',
+    description: 'תמונות פנים הדירה (עד 6 תמונות)',
     icon: Image,
     color: 'blue',
     required: false
@@ -587,9 +587,9 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
     // Limit interior images to 3
     if (type === 'interior_image') {
       const currentInteriorCount = getUploadsByType('interior_image').length
-      const maxFiles = Math.min(files.length, 3 - currentInteriorCount)
+      const maxFiles = Math.min(files.length, 6 - currentInteriorCount)
       if (maxFiles <= 0) {
-        alert('ניתן להעלות עד 3 תמונות פנים בלבד')
+        alert('ניתן להעלות עד 6 תמונות פנים בלבד')
         return
       }
       // Create a new FileList with limited files
@@ -623,16 +623,6 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
           // Update data immediately for building image (first one)
           if (type === 'building_image' && i === 0) {
             updateData({ selectedImagePreview: base64 })
-          }
-          
-          // Handle interior images (up to 3)
-          if (type === 'interior_image') {
-            const currentInteriorImages = data.interiorImages || []
-            if (currentInteriorImages.length < 3) {
-              updateData({ 
-                interiorImages: [...currentInteriorImages, base64]
-              })
-            }
           }
         }
         reader.readAsDataURL(file)
@@ -761,10 +751,17 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
                        || imageData.find(img => img.type === 'building_image')
     
     console.log('Updating image data:', { imageData, selectedImage, selectedImagePreview: selectedImage?.preview })
-    
-      updateData({
+
+    const interiorPhotos = uploadsToUse
+      .filter(u => u.type === 'interior_image' && u.status === 'completed')
+      .map(u => u.preview)
+      .filter((src): src is string => typeof src === 'string' && src.trim().length > 0)
+      .slice(0, 10)
+
+    updateData({
       propertyImages: imageData,
-      selectedImagePreview: selectedImage?.preview || null
+      selectedImagePreview: selectedImage?.preview || null,
+      interiorImages: interiorPhotos
     })
   }
 

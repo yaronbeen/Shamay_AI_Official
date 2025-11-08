@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { ShumaDB } from '../../../../../../lib/shumadb'
 import { FileStorageService } from '../../../../../../lib/file-storage'
 
@@ -18,6 +20,10 @@ export async function POST(
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
+    // Get userId from session
+    const session = await getServerSession(authOptions)
+    const userId = session?.user?.id || 'dev-user-id'
+
     console.log('💾 Saving final annotated screenshot to database...')
     console.log(`📍 Environment: ${FileStorageService.isProduction() ? 'PRODUCTION (Vercel Blob)' : 'DEVELOPMENT (Local FS)'}`)
 
@@ -34,7 +40,8 @@ export async function POST(
       buffer,
       params.sessionId,
       filename,
-      file.type
+      file.type,
+      userId
     )
 
     console.log(`✅ Screenshot uploaded to storage:`, uploadResult)

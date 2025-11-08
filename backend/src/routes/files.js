@@ -24,8 +24,10 @@ const getUploadBasePath = () => {
 const storage = multer.diskStorage({
   destination: async (req, file, cb) => {
     const sessionId = req.params.sessionId || req.body.sessionId || 'default';
+    const userId = req.body.userId || req.headers['x-user-id'] || 'dev-user-id';
     const basePath = getUploadBasePath();
-    const uploadPath = path.join(basePath, sessionId);
+    // New structure: users/{userId}/{sessionId}
+    const uploadPath = path.join(basePath, 'users', userId, sessionId);
     
     // Create directory if it doesn't exist
     try {
@@ -73,7 +75,8 @@ router.post('/:sessionId/upload', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const fileUrl = `/uploads/${sessionId}/${req.file.filename}`;
+    const userId = req.body.userId || req.headers['x-user-id'] || 'dev-user-id';
+    const fileUrl = `/uploads/users/${userId}/${sessionId}/${req.file.filename}`;
     const filePath = req.file.path;
 
     // Create upload entry
@@ -285,9 +288,13 @@ router.get('/:sessionId/:filename', async (req, res) => {
     }
     
     // Local development OR fallback: Read from /frontend/uploads
+    // Try new structure first: users/{userId}/{sessionId}/{filename}
+    // Then fall back to old structure: {sessionId}/{filename}
+    const userId = req.query.userId || req.headers['x-user-id'] || 'dev-user-id';
     const projectRoot = path.resolve(__dirname, '../../..');
     const possiblePaths = [
-      path.join(projectRoot, 'frontend', 'uploads', sessionId, filename), // frontend/uploads (correct location)
+      path.join(projectRoot, 'frontend', 'uploads', 'users', userId, sessionId, filename), // New structure
+      path.join(projectRoot, 'frontend', 'uploads', sessionId, filename), // Old structure (backward compatibility)
       path.join(__dirname, '../../uploads', sessionId, filename), // backend/uploads (legacy)
       path.join(process.cwd(), 'uploads', sessionId, filename) // from CWD (fallback)
     ];

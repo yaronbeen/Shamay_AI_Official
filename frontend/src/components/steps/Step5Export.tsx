@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Download, FileText, CheckCircle, Loader2 } from 'lucide-react'
+import { Download, FileText, CheckCircle, Loader2, ExternalLink } from 'lucide-react'
 import { ValuationData } from '../ValuationWizard'
 
 interface Step5ExportProps {
@@ -102,115 +102,134 @@ export function Step5Export({ data }: Step5ExportProps) {
     }
   }
 
+
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold mb-2">ייצוא דוח סופי</h2>
-        <p className="text-gray-600">יצירת דוח PDF מקצועי להערכת השווי</p>
+      {/* Header */}
+      <div className="text-center">
+        <h2 className="text-3xl font-bold mb-2">ייצוא דוח סופי</h2>
+        <p className="text-gray-600 text-lg">יצירת דוח PDF מקצועי להערכת השווי</p>
       </div>
 
-      {/* Export Options */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* PDF Export */}
-        <div className="bg-white border-2 border-dashed border-gray-300 rounded-lg p-6">
-          <div className="text-center">
-            <FileText className="h-12 w-12 text-blue-600 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">ייצוא PDF</h3>
-            <p className="text-sm text-gray-600 mb-4">יצירת דוח PDF מקצועי</p>
-            
-            <button
-              onClick={handleExportPDF}
-              disabled={exporting}
-              className={`w-full px-4 py-2 rounded-lg font-medium ${
-                exporting
-                  ? 'bg-gray-400 text-white cursor-not-allowed'
-                  : 'bg-blue-600 text-white hover:bg-blue-700'
-              }`}
-            >
-              {exporting ? (
-                <div className="flex items-center justify-center">
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  מייצא...
-                </div>
-              ) : (
-                <div className="flex items-center justify-center">
-                  <FileText className="h-4 w-4 mr-2" />
-                  יצור PDF
-                </div>
-              )}
-            </button>
-
-            {exportStatus === 'success' && (
-              <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                <div className="flex items-center text-green-800">
-                  <CheckCircle className="h-5 w-5 mr-2" />
-                  <span className="text-sm">PDF נוצר בהצלחה!</span>
-                </div>
-                {pdfBlob && (
-                  <button
-                    onClick={handleDownloadPDF}
-                    className="mt-2 text-xs text-blue-600 hover:text-blue-800"
-                  >
-                    <Download className="h-3 w-3 inline mr-1" />
-                    הורד PDF שוב
-                  </button>
-                )}
-              </div>
-            )}
-
-            {exportStatus === 'error' && (
-              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-sm text-red-800">שגיאה ביצירת PDF</p>
-              </div>
-            )}
+      {/* Main Content - Two Column Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left Column - PDF Export */}
+        <div className="bg-white border-2 border-blue-200 rounded-xl p-8 shadow-lg">
+          <div className="text-center mb-6">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
+              <FileText className="h-8 w-8 text-blue-600" />
+            </div>
+            <h3 className="text-xl font-semibold mb-2">ייצוא PDF</h3>
+            <p className="text-sm text-gray-600">יצירת דוח PDF מקצועי עם כל המידע והנתונים</p>
           </div>
-        </div>
-
-        {/* Word Export (Mock) */}
-        <div className="bg-white border-2 border-dashed border-gray-300 rounded-lg p-6">
-          <div className="text-center">
-            <FileText className="h-12 w-12 text-green-600 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">ייצוא Word</h3>
-            <p className="text-sm text-gray-600 mb-4">יצירת מסמך Word (בפיתוח)</p>
-            
-            <button
-              disabled
-              className="w-full px-4 py-2 rounded-lg font-medium bg-gray-400 text-white cursor-not-allowed"
-            >
+          
+          <button
+            onClick={handleExportPDF}
+            disabled={exporting}
+            className={`w-full px-6 py-4 rounded-lg font-semibold text-lg transition-all ${
+              exporting
+                ? 'bg-gray-400 text-white cursor-not-allowed'
+                : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-lg transform hover:scale-105'
+            }`}
+          >
+            {exporting ? (
               <div className="flex items-center justify-center">
-                <FileText className="h-4 w-4 mr-2" />
-                בקרוב
+                <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                מייצא...
               </div>
-            </button>
+            ) : (
+              <div className="flex items-center justify-center">
+                <FileText className="h-5 w-5 mr-2" />
+                יצור PDF
+              </div>
+            )}
+          </button>
+
+          {exportStatus === 'success' && (
+            <div className="mt-6 p-4 bg-green-50 border-2 border-green-300 rounded-lg">
+              <div className="flex items-center justify-center text-green-800 mb-2">
+                <CheckCircle className="h-6 w-6 mr-2" />
+                <span className="text-base font-semibold">PDF נוצר בהצלחה!</span>
+              </div>
+              {pdfBlob && (
+                <button
+                  onClick={handleDownloadPDF}
+                  className="w-full mt-3 px-4 py-2 text-sm text-blue-700 hover:text-blue-900 hover:underline font-medium"
+                >
+                  <Download className="h-4 w-4 inline mr-2" />
+                  הורד PDF שוב
+                </button>
+              )}
+            </div>
+          )}
+
+          {exportStatus === 'error' && (
+            <div className="mt-6 p-4 bg-red-50 border-2 border-red-300 rounded-lg">
+              <p className="text-sm text-red-800 text-center font-medium">שגיאה ביצירת PDF</p>
+            </div>
+          )}
+
+          {/* Word Conversion Option */}
+          <div className="mt-6 pt-6 border-t-2 border-gray-200">
+            <p className="text-sm text-gray-700 mb-3 text-center font-medium">רוצים להמיר את ה-PDF ל-Word?</p>
+            <a
+              href="https://www.adobe.com/il_he/acrobat/online/pdf-to-word.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center w-full px-4 py-3 rounded-lg font-medium bg-green-50 text-green-700 hover:bg-green-100 border-2 border-green-300 transition-colors"
+            >
+              <FileText className="h-4 w-4 ml-2" />
+              המרת PDF ל-Word באמצעות Adobe
+              <ExternalLink className="h-4 w-4 mr-2" />
+            </a>
+            <p className="text-xs text-gray-500 mt-2 text-center">
+              כלי חינמי להמרת PDF למסמך Word ניתן לעריכה
+            </p>
           </div>
         </div>
-      </div>
 
-      {/* Summary */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <h3 className="text-lg font-semibold text-blue-900 mb-2">סיכום הערכת השווי</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <p className="text-sm text-blue-800">
-              <strong>כתובת:</strong> {data.fullAddress || 'לא מוגדר'}
-            </p>
-            <p className="text-sm text-blue-800">
-              <strong>שטח:</strong> {data.area ? `${data.area} מ"ר` : 'לא מוגדר'}
-            </p>
-            <p className="text-sm text-blue-800">
-              <strong>חדרים:</strong> {data.rooms || 'לא מוגדר'}
-            </p>
-          </div>
-          <div>
-            <p className="text-sm text-blue-800">
-              <strong>שווי נכס:</strong> ₪{data.comparableDataAnalysis?.estimatedValue ? data.comparableDataAnalysis?.estimatedValue.toLocaleString() : '0'}
-            </p>
-            <p className="text-sm text-blue-800">
-              <strong>מחיר למ"ר:</strong> ₪{data.pricePerSqm ? data.pricePerSqm.toLocaleString() : '0'}
-            </p>
-            <p className="text-sm text-blue-800">
-              <strong>תאריך:</strong> {data.valuationDate}
-            </p>
+        {/* Right Column - Summary */}
+        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-8 shadow-lg">
+          <h3 className="text-2xl font-bold text-blue-900 mb-6 text-center">סיכום הערכת השווי</h3>
+          
+          <div className="space-y-4">
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-white rounded-lg p-4 border border-blue-200">
+                <p className="text-xs text-gray-500 mb-1">שטח</p>
+                <p className="text-lg font-bold text-blue-900">
+                  {data.area ? `${data.area} מ"ר` : 'לא מוגדר'}
+                </p>
+              </div>
+              <div className="bg-white rounded-lg p-4 border border-blue-200">
+                <p className="text-xs text-gray-500 mb-1">חדרים</p>
+                <p className="text-lg font-bold text-blue-900">
+                  {data.rooms || 'לא מוגדר'}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg p-5 text-white">
+              <p className="text-sm mb-2 opacity-90">שווי הנכס</p>
+              <p className="text-3xl font-bold">
+                ₪{data.comparableDataAnalysis?.estimatedValue ? data.comparableDataAnalysis?.estimatedValue.toLocaleString() : '0'}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-white rounded-lg p-4 border border-blue-200">
+                <p className="text-xs text-gray-500 mb-1">מחיר למ"ר</p>
+                <p className="text-lg font-bold text-blue-900">
+                  ₪{data.pricePerSqm ? data.pricePerSqm.toLocaleString() : '0'}
+                </p>
+              </div>
+              <div className="bg-white rounded-lg p-4 border border-blue-200">
+                <p className="text-xs text-gray-500 mb-1">תאריך הערכה</p>
+                <p className="text-base font-semibold text-gray-900">
+                  {data.valuationDate || 'לא מוגדר'}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </div>

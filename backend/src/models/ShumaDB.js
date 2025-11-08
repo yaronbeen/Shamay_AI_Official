@@ -1358,6 +1358,51 @@ class ShumaDBEnhanced {
   }
 
   /**
+   * Delete all Garmushka data for a session
+   * Deletes from both shuma table and garmushka table
+   */
+  static async deleteGarmushkaData(sessionId) {
+    const client = await db.client()
+    
+    try {
+      await client.query('BEGIN')
+      
+      // Get shuma ID
+      const shumaResult = await client.query('SELECT id FROM shuma WHERE session_id = $1', [sessionId])
+      if (shumaResult.rows.length === 0) {
+        throw new Error('Shuma not found for session')
+      }
+      const shumaId = shumaResult.rows[0].id
+      
+      // Delete all garmushka records for this session
+      const deleteResult = await client.query(`
+        DELETE FROM garmushka 
+        WHERE session_id = $1
+      `, [sessionId])
+      
+      console.log(`🗑️ Deleted ${deleteResult.rowCount} Garmushka record(s) for session ${sessionId}`)
+      
+      // Clear garmushka_measurements from shuma table
+      await client.query(`
+        UPDATE shuma SET
+          garmushka_measurements = '{}'::jsonb,
+          updated_at = NOW()
+        WHERE session_id = $1
+      `, [sessionId])
+      
+      await client.query('COMMIT')
+      return { success: true, deletedCount: deleteResult.rowCount }
+      
+    } catch (error) {
+      await client.query('ROLLBACK')
+      console.error('Error deleting Garmushka data:', error)
+      return { error: error.message || 'Failed to delete Garmushka data' }
+    } finally {
+      client.release()
+    }
+  }
+
+  /**
    * Save building permit data to building_permit_extracts table
    */
   static async savePermitExtraction(sessionId, permitData, documentFilename) {

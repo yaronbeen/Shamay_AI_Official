@@ -16,10 +16,12 @@ const nextConfig = {
         source: '/api/sessions/:path*',
         destination: `${backendUrl}/api/sessions/:path*`,
       },
-      {
-        source: '/api/files/:path*',
-        destination: `${backendUrl}/api/files/:path*`,
-      },
+      // Note: /api/files is handled by Next.js route handler for local file serving
+      // Only proxy specific backend file routes if needed
+      // {
+      //   source: '/api/files/:path*',
+      //   destination: `${backendUrl}/api/files/:path*`,
+      // },
       {
         source: '/api/garmushka/:path*',
         destination: `${backendUrl}/api/garmushka/:path*`,
@@ -40,6 +42,45 @@ const nextConfig = {
   
   // Webpack configuration
   webpack: (config, { isServer }) => {
+    // Server-side configuration for Node.js modules
+    if (isServer) {
+      config.externals = config.externals || []
+      
+      // Externalize cheerio and undici to avoid webpack parsing issues
+      const cheerioExternal = (context, request, callback) => {
+        if (request === 'cheerio' || 
+            request.startsWith('cheerio/') ||
+            request === 'undici' ||
+            request.startsWith('undici/') ||
+            request.includes('undici')) {
+          return callback(null, 'commonjs ' + request)
+        }
+        callback()
+      }
+      
+      if (Array.isArray(config.externals)) {
+        config.externals.push(cheerioExternal)
+      } else if (config.externals) {
+        config.externals = [config.externals, cheerioExternal]
+      } else {
+        config.externals = cheerioExternal
+      }
+      
+      // Also add cheerio to resolve.alias to prevent webpack from trying to parse it
+      config.resolve.alias = config.resolve.alias || {}
+      config.resolve.alias['cheerio'] = false
+      
+      // Ensure docx and its dependencies are not bundled
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        path: false,
+        crypto: false,
+        stream: false,
+        buffer: false,
+      }
+    }
+    
     if (!isServer) {
       // Completely exclude pdfjs-dist from bundling (we load it from CDN)
       const originalExternals = config.externals || []
@@ -73,6 +114,9 @@ const nextConfig = {
       config.resolve.alias['pdfjs-dist/legacy/build/pdf'] = false
       config.resolve.alias['pdfjs-dist/build/pdf.mjs'] = false
       
+      // Prevent docx from being bundled on client side
+      config.resolve.alias['docx'] = false
+      
       // Use NormalModuleReplacementPlugin to replace pdfjs-dist imports with empty module
       const webpack = require('webpack')
       config.plugins = config.plugins || []
@@ -87,7 +131,10 @@ const nextConfig = {
             // Replace any pdfjs-dist subpath with empty module
             resource.request = require.resolve('./pdfjs-dist-stub.js')
           }
-        )
+        ),
+        new webpack.ProvidePlugin({
+          process: 'process/browser',
+        })
       )
       
       config.resolve.fallback = {
@@ -97,6 +144,7 @@ const nextConfig = {
         path: false,
         stream: false,
         crypto: false,
+        process: require.resolve('process/browser'),
       };
     }
 

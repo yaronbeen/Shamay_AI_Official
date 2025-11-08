@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 const { ShumaDB } = require('@/lib/shumadb.js')
-// import { updateValuationSchema } from '@/lib/validations' // Not needed with ShumaDB
 
 export async function GET(
   request: NextRequest,
@@ -50,6 +49,32 @@ export async function PATCH(
     return NextResponse.json({ valuation: result.shuma })
   } catch (error) {
     console.error('Error updating valuation:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.primaryOrganizationId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const result = await ShumaDB.deleteShuma(params.id, session.user.primaryOrganizationId)
+
+    if (!result.success) {
+      return NextResponse.json({ error: result.error || 'Failed to delete valuation' }, { status: 404 })
+    }
+
+    return NextResponse.json({ 
+      success: true,
+      message: 'Valuation deleted successfully' 
+    })
+  } catch (error) {
+    console.error('Error deleting valuation:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

@@ -149,6 +149,9 @@ export async function POST(
     const saveResult = await saveResponse.json()
     console.log('✅ Land registry extraction saved successfully:', saveResult)
     
+    // Note: Provenance records are automatically created by the backend AI route
+    // No need to manually create them here - the backend handles it
+    
     return NextResponse.json({
       success: true,
       extractedData: mappedData,

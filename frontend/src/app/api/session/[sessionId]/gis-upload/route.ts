@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { FileStorageService } from '../../../../../lib/file-storage'
 
 /**
@@ -15,6 +17,10 @@ export async function POST(
     if (!imageData) {
       return NextResponse.json({ error: 'No image data provided' }, { status: 400 })
     }
+
+    // Get userId from session
+    const session = await getServerSession(authOptions)
+    const userId = session?.user?.id || 'dev-user-id'
 
     console.log(`📤 Uploading GIS screenshot for session ${params.sessionId}, crop mode ${cropMode}`)
 
@@ -34,7 +40,8 @@ export async function POST(
       buffer,
       params.sessionId,
       filename,
-      'image/png'
+      'image/png',
+      userId
     )
 
     console.log(`✅ GIS screenshot uploaded: ${uploadResult.url}`)
