@@ -8,33 +8,45 @@ interface Step1InitialDataProps {
   onValidationChange: (isValid: boolean) => void
 }
 
-export function Step1InitialData({ data, updateData, onValidationChange }: Step1InitialDataProps) {
-  // Helper to convert DD.MM.YYYY to YYYY-MM-DD for date input
-  const formatDateForInput = (dateStr: string) => {
-    if (!dateStr) return ''
-    // If already in YYYY-MM-DD format, return as is
-    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr
-    // If in DD.MM.YYYY format, convert to YYYY-MM-DD
-    const match = dateStr.match(/^(\d{2})\.(\d{2})\.(\d{4})$/)
-    if (match) {
-      const [, day, month, year] = match
-      return `${year}-${month}-${day}`
-    }
-    // No fallback - return empty string
-    return ''
-  }
+const DATE_FIELDS = new Set(['valuationDate', 'valuationEffectiveDate'])
 
+const normalizeDateToISO = (dateStr: string) => {
+  if (!dateStr) return ''
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return dateStr
+  }
+  const dotMatch = dateStr.match(/^(\d{2})\.(\d{2})\.(\d{4})$/)
+  if (dotMatch) {
+    const [, day, month, year] = dotMatch
+    return `${year}-${month}-${day}`
+  }
+  const slashMatch = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  if (slashMatch) {
+    const [, day, month, year] = slashMatch
+    return `${year}-${month}-${day}`
+  }
+  return ''
+}
+
+const formatDateForDisplay = (dateStr: string) => {
+  const iso = normalizeDateToISO(dateStr)
+  if (!iso) return ''
+  const [year, month, day] = iso.split('-')
+  return `${day}/${month}/${year}`
+}
+
+export function Step1InitialData({ data, updateData, onValidationChange }: Step1InitialDataProps) {
   const [formData, setFormData] = useState({
     // סוג שומה ומועד כתיבתה
     valuationType: data.valuationType || '',
-    valuationDate: formatDateForInput(data.valuationDate) || '',
+    valuationDate: formatDateForDisplay(data.valuationDate) || '',
     
     // זהות מזמין השומה והקשר שלו לנכס
     clientName: data.clientName || '',
     clientRelation: data.clientRelation || '',
     
     // המועד הקובע לשומה
-    valuationEffectiveDate: formatDateForInput(data.valuationEffectiveDate) || '',
+    valuationEffectiveDate: formatDateForDisplay(data.valuationEffectiveDate) || '',
     
     // זיהוי הנכס
     street: data.street || '',
@@ -68,14 +80,14 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
     setFormData({
       // סוג שומה ומועד כתיבתה
       valuationType: data.valuationType || '',
-      valuationDate: formatDateForInput(data.valuationDate) || '',
+      valuationDate: formatDateForDisplay(data.valuationDate) || '',
       
       // זהות מזמין השומה והקשר שלו לנכס
       clientName: data.clientName || '',
       clientRelation: data.clientRelation || '',
       
       // המועד הקובע לשומה
-      valuationEffectiveDate: formatDateForInput(data.valuationEffectiveDate) || '',
+      valuationEffectiveDate: formatDateForDisplay(data.valuationEffectiveDate) || '',
       
       // זיהוי הנכס
       street: data.street || '',
@@ -127,6 +139,12 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
     console.log(`🔄 Step1 - Updating field: ${field} = ${value}`)
     setFormData(prev => {
       const newData = { ...prev, [field]: value }
+
+      const payload: Record<string, any> = { ...newData }
+      DATE_FIELDS.forEach((dateField) => {
+        const displayValue = typeof payload[dateField] === 'string' ? (payload[dateField] as string) : ''
+        payload[dateField] = displayValue ? normalizeDateToISO(displayValue) || '' : ''
+      })
       
       // Critical fields that should save immediately:
       // - valuationType, valuationDate (required for document generation)
@@ -135,7 +153,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
       
       // Skip auto-save for text inputs - only save on step navigation or explicit save
       // BUT save immediately for critical fields
-      updateData(newData as any, { skipAutoSave: !shouldSaveImmediately } as any)
+      updateData(payload as any, { skipAutoSave: !shouldSaveImmediately } as any)
       
       if (shouldSaveImmediately) {
         console.log(`💾 Step1 - Critical field ${field} saved immediately`)
@@ -147,6 +165,16 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
     })
   }, [updateData])
 
+  const handleDateBlur = useCallback((field: 'valuationDate' | 'valuationEffectiveDate') => {
+    setFormData(prev => {
+      const current = prev[field]
+      const normalized = current ? formatDateForDisplay(current) : ''
+      if (normalized === current) {
+        return prev
+      }
+      return { ...prev, [field]: normalized }
+    })
+  }, [])
 
 
   return (
@@ -191,11 +219,14 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 מועד כתיבת השומה *
               </label>
               <input
-                type="date"
+                type="text"
                 name="valuationDate"
                 autoComplete="off"
+                inputMode="numeric"
+                placeholder="dd/mm/yyyy"
                 value={formData.valuationDate}
                 onChange={(e) => updateField('valuationDate', e.target.value)}
+                onBlur={() => handleDateBlur('valuationDate')}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
@@ -256,11 +287,14 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
               המועד הקובע לשומה *
             </label>
             <input
-              type="date"
+              type="text"
               name="valuationEffectiveDate"
               autoComplete="off"
+              inputMode="numeric"
+              placeholder="dd/mm/yyyy"
               value={formData.valuationEffectiveDate}
               onChange={(e) => updateField('valuationEffectiveDate', e.target.value)}
+              onBlur={() => handleDateBlur('valuationEffectiveDate')}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>

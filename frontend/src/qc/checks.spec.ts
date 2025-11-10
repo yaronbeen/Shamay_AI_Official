@@ -76,8 +76,12 @@ describe('QC Validation Engine', () => {
       expect(results.some(r => r.rule.fieldRefs.includes('תיאור_סביבה'))).toBe(true)
     })
 
+    const generateWords = (count: number) =>
+      Array.from({ length: count }, (_, index) => `מילה${index + 1}`).join(' ')
+
     it('should pass when תיאור_סביבה is within limits', () => {
-      const validText = 'שכונה יפה '.repeat(20) // ~120 words
+      const validText =
+        `${generateWords(118)} השכונה נוסדה בשנת 1985 ומציעה חיי קהילה עשירים, מסחר ענף ותחבורה ציבורית תדירה.`.trim()
       const data = { תיאור_סביבה: validText }
       const results = getWarnings(data)
       expect(results.some(r => r.rule.fieldRefs.includes('תיאור_סביבה'))).toBe(false)
@@ -90,7 +94,9 @@ describe('QC Validation Engine', () => {
     })
 
     it('should pass when תיאור_סביבה mentions year', () => {
-      const data = { תיאור_סביבה: 'שכונה יפה שנוסדה בשנת 1950' }
+      const textWithYear =
+        `${generateWords(118)} השכונה נוסדה בשנת 1950 ומאז מתפתחת ומתחזקת כמוקד מרכזי לפעילות עירונית.`.trim()
+      const data = { תיאור_סביבה: textWithYear }
       const results = getWarnings(data)
       expect(results.some(r => r.rule.fieldRefs.includes('תיאור_סביבה'))).toBe(false)
     })

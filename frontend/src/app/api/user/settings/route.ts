@@ -2,101 +2,107 @@ import { NextRequest, NextResponse } from 'next/server'
 const { db, ShumaDB } = require('../../../../lib/shumadb.js') 
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { FileStorageService } from '@/lib/file-storage'
+
+const SETTINGS_PATH = (userId: string) => `users/${userId}/settings.json`
+
+const DEFAULT_SETTINGS = {
+  companyLogo: undefined,
+  footerLogo: undefined,
+  companyName: undefined,
+  companySlogan: undefined,
+  companyAddress: undefined,
+  companyPhone: undefined,
+  companyEmail: undefined,
+  companyWebsite: undefined,
+  associationMembership: 'חבר בלשכת שמאי המקרקעין בישראל',
+  services: undefined,
+  signature: undefined
+}
+
+async function loadSnapshotForIds(ids: string[]): Promise<{ settings: any; sourceId: string | null }> {
+  for (const id of ids) {
+    try {
+      const stored = await FileStorageService.loadJson(SETTINGS_PATH(id))
+      if (stored) {
+        return { settings: { ...DEFAULT_SETTINGS, ...stored }, sourceId: id }
+      }
+    } catch (error) {
+      console.warn(`⚠️ Failed to load settings snapshot for ${id}:`, error)
+    }
+  }
+  return { settings: { ...DEFAULT_SETTINGS }, sourceId: null }
+}
+
+async function persistSnapshotForIds(ids: string[], data: any) {
+  for (const id of new Set(ids)) {
+    try {
+      await FileStorageService.saveJson(SETTINGS_PATH(id), data)
+    } catch (error) {
+      console.warn(`⚠️ Failed to persist settings snapshot for ${id}:`, error)
+    }
+  }
+}
 
 /**
  * GET /api/user/settings
  * Returns current user's settings including logos, signature, and company info
  */
 export async function GET(request: NextRequest) {
-  try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const userId = session.user.id
+  const userEmail = session.user.email || 'dev@example.com'
     console.log(`📋 Fetching user settings for: ${userId}`)
 
-    // First try to find user by email (more reliable than ID)
-    const userEmail = session.user.email || 'dev@example.com'
+  const candidateIdSet = new Set<string>([userId])
+
+  try {
     let userSettings = await ShumaDB.getUserSettings(userId, userEmail)
     
-    // If user doesn't exist, create it (for dev mode)
     if (!userSettings) {
-      console.log(`📝 Creating new user: ${userId}`)
-      const client = await db.client()
-      try {
-        try {
-          await client.query(
-            `INSERT INTO users (id, email, name, settings, created_at, updated_at)
-             VALUES ($1, $2, $3, '{}'::jsonb, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-            [userId, userEmail, session.user.name || 'Development User']
-          )
-        } catch (insertError: any) {
-          // If insert fails due to conflict, fetch the existing user
-          if (insertError.code === '23505') {
-            console.log(`📝 Insert conflict, fetching existing user`)
-            const conflictResult = await client.query(
-              `SELECT id, email, name, settings FROM users WHERE email = $1 OR id = $2`,
-              [userEmail, userId]
-            )
-            if (conflictResult.rows.length > 0) {
-              const user = conflictResult.rows[0]
-              const settings = typeof user.settings === 'string' 
-                ? JSON.parse(user.settings) 
-                : (user.settings || {})
-              userSettings = {
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                settings: settings
-              }
-            } else {
-              throw insertError
-            }
-          } else {
-            throw insertError
-          }
-        }
-        
-        if (!userSettings) {
-          // Fetch the newly created user
-          userSettings = await ShumaDB.getUserSettings(userId, userEmail)
-        }
-        
-        if (!userSettings) {
-          return NextResponse.json({ error: 'Failed to create user' }, { status: 500 })
-        }
-      } finally {
-        client.release()
+      const { settings: initialFallback } = await loadSnapshotForIds(Array.from(candidateIdSet))
+      let fallbackSettings = initialFallback
+      if (Object.keys(fallbackSettings).some((key) => (fallbackSettings as any)[key] !== DEFAULT_SETTINGS[key as keyof typeof DEFAULT_SETTINGS])) {
+        console.log('📦 Loaded settings snapshot from storage fallback')
       }
+      await persistSnapshotForIds(Array.from(candidateIdSet), fallbackSettings)
+      return NextResponse.json(fallbackSettings)
     }
 
-    // Transform to CompanySettings format
-    const companySettings = {
-      companyLogo: userSettings.settings?.companyLogo || undefined,
-      footerLogo: userSettings.settings?.footerLogo || undefined,
-      companyName: userSettings.settings?.companyName || userSettings.name || undefined,
-      companySlogan: userSettings.settings?.companySlogan || undefined,
-      companyAddress: userSettings.settings?.companyAddress || undefined,
-      companyPhone: userSettings.settings?.companyPhone || undefined,
-      companyEmail: userSettings.settings?.companyEmail || userSettings.email || undefined,
-      companyWebsite: userSettings.settings?.companyWebsite || undefined,
-      associationMembership: userSettings.settings?.associationMembership || 'חבר בלשכת שמאי המקרקעין בישראל',
-      services: userSettings.settings?.services || undefined,
-      signature: userSettings.settings?.signature || undefined
+    candidateIdSet.add(userSettings.id)
+    const { settings: updatedFallback } = await loadSnapshotForIds(Array.from(candidateIdSet))
+    let fallbackSettings = updatedFallback
+    if (Object.keys(fallbackSettings).some((key) => (fallbackSettings as any)[key] !== DEFAULT_SETTINGS[key as keyof typeof DEFAULT_SETTINGS])) {
+      console.log('📦 Loaded settings snapshot from storage fallback')
     }
+
+    const companySettings = {
+      companyLogo: userSettings.settings?.companyLogo || fallbackSettings.companyLogo || undefined,
+      footerLogo: userSettings.settings?.footerLogo || fallbackSettings.footerLogo || undefined,
+      companyName: userSettings.settings?.companyName || userSettings.name || fallbackSettings.companyName || undefined,
+      companySlogan: userSettings.settings?.companySlogan || fallbackSettings.companySlogan || undefined,
+      companyAddress: userSettings.settings?.companyAddress || fallbackSettings.companyAddress || undefined,
+      companyPhone: userSettings.settings?.companyPhone || fallbackSettings.companyPhone || undefined,
+      companyEmail: userSettings.settings?.companyEmail || userSettings.email || fallbackSettings.companyEmail || undefined,
+      companyWebsite: userSettings.settings?.companyWebsite || fallbackSettings.companyWebsite || undefined,
+      associationMembership: userSettings.settings?.associationMembership || fallbackSettings.associationMembership || DEFAULT_SETTINGS.associationMembership,
+      services: userSettings.settings?.services || fallbackSettings.services || undefined,
+      signature: userSettings.settings?.signature || fallbackSettings.signature || undefined
+    }
+
+    await persistSnapshotForIds(Array.from(candidateIdSet), companySettings)
 
     console.log(`✅ User settings loaded for: ${userId}`)
-
     return NextResponse.json(companySettings)
-
   } catch (error) {
     console.error('❌ Error fetching user settings:', error)
-    return NextResponse.json({
-      error: 'Failed to fetch user settings',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 })
+    const { settings: fallbackSettings } = await loadSnapshotForIds(Array.from(candidateIdSet))
+    await persistSnapshotForIds(Array.from(candidateIdSet), fallbackSettings)
+    return NextResponse.json(fallbackSettings)
   }
 }
 
@@ -105,6 +111,7 @@ export async function GET(request: NextRequest) {
  * Updates current user's settings
  */
 export async function PUT(request: NextRequest) {
+  let snapshotSettings = { ...DEFAULT_SETTINGS }
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
@@ -119,7 +126,13 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Settings are required' }, { status: 400 })
     }
 
+    snapshotSettings = { ...DEFAULT_SETTINGS, ...settings }
+
     const client = await db.client()
+    let updatedSettings = { ...settings }
+    let actualUserId = userId
+    let dbSuccess = false
+    const candidateIdSet = new Set<string>([userId])
     
     try {
       // First try to find user by email (more reliable than ID)
@@ -137,48 +150,27 @@ export async function PUT(request: NextRequest) {
         )
       }
       
-      // If user doesn't exist, create it (for dev mode)
       if (userResult.rows.length === 0) {
-        console.log(`📝 Creating new user: ${userId}`)
-        try {
-          await client.query(
-            `INSERT INTO users (id, email, name, settings, created_at, updated_at)
-             VALUES ($1, $2, $3, '{}'::jsonb, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-            [userId, userEmail, session.user.name || 'Development User']
-          )
-          
-          // Fetch the newly created user
-          userResult = await client.query(
-            `SELECT id, email, name, settings FROM users WHERE id = $1`,
-            [userId]
-          )
-        } catch (insertError: any) {
-          // If insert fails due to conflict, fetch the existing user
-          if (insertError.code === '23505') {
-            console.log(`📝 Insert conflict, fetching existing user`)
-            userResult = await client.query(
-              `SELECT id, email, name, settings FROM users WHERE email = $1 OR id = $2`,
-              [userEmail, userId]
-            )
-          } else {
-            throw insertError
-          }
-        }
-        
-        if (userResult.rows.length === 0) {
-          return NextResponse.json({ error: 'Failed to create or find user' }, { status: 500 })
-        }
+        console.warn(`⚠️ No user record found for ${userId}; aborting update.`)
+        return NextResponse.json({
+          error: 'User record not found. Sign up first before saving settings.',
+          success: false
+        }, { status: 404 })
       }
       
       // Use the actual user ID from the database (may differ from session.user.id)
-      const actualUserId = userResult.rows[0].id
+      actualUserId = userResult.rows[0].id
       
       const currentSettings = typeof userResult.rows[0].settings === 'string'
         ? JSON.parse(userResult.rows[0].settings)
         : (userResult.rows[0].settings || {})
       
-      // Merge new settings with existing
-      const updatedSettings = { ...currentSettings, ...settings }
+      candidateIdSet.add(actualUserId)
+      const { settings: baseSettings } = await loadSnapshotForIds(Array.from(candidateIdSet))
+      
+      snapshotSettings = { ...DEFAULT_SETTINGS, ...settings }
+      updatedSettings = { ...DEFAULT_SETTINGS, ...baseSettings, ...currentSettings, ...settings }
+      snapshotSettings = updatedSettings
       
       // Update user settings using the actual user ID
       await client.query(
@@ -189,17 +181,40 @@ export async function PUT(request: NextRequest) {
         [JSON.stringify(updatedSettings), actualUserId]
       )
 
+      dbSuccess = true
       console.log(`✅ User settings updated for: ${userId}`)
-
-      return NextResponse.json({
-        success: true,
-        settings: updatedSettings
-      })
     } finally {
       client.release()
     }
+
+    await persistSnapshotForIds(Array.from(candidateIdSet), updatedSettings)
+
+    if (!dbSuccess) {
+      return NextResponse.json({
+        success: true,
+        settings: updatedSettings,
+        warning: 'DB update failed; settings stored using fallback storage.'
+      })
+    }
+
+    return NextResponse.json({
+      success: true,
+      settings: updatedSettings
+    })
   } catch (error) {
     console.error('❌ Error updating user settings:', error)
+    const session = await getServerSession(authOptions)
+    const fallbackUserId = session?.user?.id
+    if (fallbackUserId) {
+      const { settings: existingSnapshot } = await loadSnapshotForIds([fallbackUserId])
+      const fallbackSettings = { ...DEFAULT_SETTINGS, ...existingSnapshot, ...snapshotSettings }
+      await persistSnapshotForIds([fallbackUserId], fallbackSettings)
+      return NextResponse.json({
+        success: true,
+        settings: fallbackSettings,
+        warning: 'Settings saved via storage fallback due to database error.'
+      })
+    }
     return NextResponse.json({
       error: 'Failed to update user settings',
       details: error instanceof Error ? error.message : 'Unknown error'

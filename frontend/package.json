@@ -9,8 +9,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "prebuild": "pnpm test",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
+    "test": "vitest run --reporter=dot",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts"
   },
@@ -53,6 +55,7 @@
     "next-intl": "^4.3.12",
     "pdf-lib": "^1.17.1",
     "pg": "^8.16.3",
+    "pnpm": "^10.21.0",
     "postcss": "^8",
     "process": "^0.11.10",
     "react": "^18",
@@ -77,6 +80,7 @@
     "eslint": "^8",
     "eslint-config-next": "14.0.4",
     "prisma": "^6.17.1",
-    "tailwindcss-rtl": "^0.9.0"
+    "tailwindcss-rtl": "^0.9.0",
+    "vitest": "^1.6.0"
   }
 }

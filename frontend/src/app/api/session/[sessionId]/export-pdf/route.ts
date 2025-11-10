@@ -166,6 +166,7 @@ export async function POST(
 
     const convertToAbsoluteUrl = (url?: string | null): string | undefined => {
       if (!url) return undefined
+      if (url.startsWith('data:image/')) return url
 
       try {
         if (url.startsWith('http://') || url.startsWith('https://')) {
@@ -186,6 +187,45 @@ export async function POST(
       } catch {
         return encodeURI(url)
       }
+    }
+
+    const resolveImageSrc = (value?: string | null) => {
+      if (!value || typeof value !== 'string') {
+        return value || undefined
+      }
+      if (value.startsWith('data:image/')) {
+        return value
+      }
+      return convertToAbsoluteUrl(value) || value
+    }
+
+    const resolveImageList = (values?: Array<string | null>) => {
+      if (!Array.isArray(values)) {
+        return values
+      }
+      return values
+        .map((item) => resolveImageSrc(item || undefined))
+        .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    }
+
+    const resolvePropertyImages = (items?: Array<Record<string, any>>) => {
+      if (!Array.isArray(items)) {
+        return items
+      }
+      return items.map((item) => {
+        if (!item || typeof item !== 'object') {
+          return item
+        }
+        return {
+          ...item,
+          preview: resolveImageSrc(item.preview),
+          url: resolveImageSrc(item.url),
+          path: resolveImageSrc(item.path),
+          signedUrl: resolveImageSrc(item.signedUrl),
+          fileUrl: resolveImageSrc(item.fileUrl),
+          absoluteUrl: resolveImageSrc(item.absoluteUrl)
+        }
+      })
     }
 
     // Load session data from database
@@ -244,12 +284,16 @@ export async function POST(
           cropMode1: convertToAbsoluteUrl(valuationData.gisScreenshots.cropMode1) || valuationData.gisScreenshots.cropMode1
         }
       : undefined
+    const propertyImagesForHtml = resolvePropertyImages(valuationData.propertyImages)
+    const interiorImagesForHtml = resolveImageList(valuationData.interiorImages)
 
     const htmlContent = generateDocumentHTML(
       {
         ...valuationData,
         selectedImagePreview: selectedImageForHtml || null,
         gisScreenshots: gisScreenshotsForHtml || valuationData.gisScreenshots,
+        propertyImages: propertyImagesForHtml || valuationData.propertyImages,
+        interiorImages: interiorImagesForHtml || valuationData.interiorImages,
         customDocumentEdits: mergedCustomEdits
       },
       false,

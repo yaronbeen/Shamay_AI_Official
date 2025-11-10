@@ -431,6 +431,11 @@ const collectInteriorImages = (data: ValuationData): string[] => {
     add(entry.absoluteUrl)
   }
 
+  const isInteriorType = (value?: string) => {
+    const type = (value || '').toString().toLowerCase()
+    return type === 'interior_image' || type === 'interior' || type === 'room' || type === 'living_room'
+  }
+
   const interiorArrays: Array<string[] | undefined> = [
     Array.isArray((data as any).interiorImages) ? (data as any).interiorImages : undefined,
     Array.isArray((data as any).livingRoomImages) ? (data as any).livingRoomImages : undefined,
@@ -444,18 +449,12 @@ const collectInteriorImages = (data: ValuationData): string[] => {
 
   const propertyImages = Array.isArray((data as any).propertyImages) ? (data as any).propertyImages : []
   propertyImages
-    .filter((entry: any) => {
-      const type = (entry?.type || '').toString().toLowerCase()
-      return type === 'interior_image' || type === 'interior' || type === 'room' || !type
-    })
+    .filter((entry: any) => isInteriorType(entry?.type))
     .forEach(addFromEntry)
 
   const uploads = Array.isArray((data as any).uploads) ? (data as any).uploads : []
   uploads
-    .filter((entry: any) => {
-      const type = (entry?.type || '').toString().toLowerCase()
-      return type === 'interior_image' || type === 'interior' || type === 'room'
-    })
+    .filter((entry: any) => isInteriorType(entry?.type))
     .forEach(addFromEntry)
 
   return results.slice(0, 6)
@@ -530,8 +529,8 @@ const buildBaseCss = () => `
         }
         @page {
           size: A4;
-    margin: 0;
-  }
+          margin: 0;
+        }
   * {
     box-sizing: border-box;
         }
@@ -541,7 +540,7 @@ const buildBaseCss = () => `
           line-height: 1.6;
     margin: 0;
     padding: 0;
-    background: #f1f5f9;
+    background:rgb(255, 255, 255);
     color: #0f172a;
           direction: rtl;
           text-align: right;
@@ -562,13 +561,12 @@ const buildBaseCss = () => `
     background: #ffffff;
     border-radius: 20px;
     border: 1px solid rgba(148, 163, 184, 0.35);
-    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
   }
   .page.cover {
           page-break-after: always;
     padding: 52px 44px;
-    background: linear-gradient(135deg, #0f172a, #334155);
-    color: #f8fafc;
+    background: white;
+    color:rgb(0, 0, 0);
     border: none;
   }
   .page-title {
@@ -696,7 +694,7 @@ const buildBaseCss = () => `
     margin-top: 6px;
   }
   .page-note {
-    font-size: 9pt;
+          font-size: 9pt;
     color: #475569;
     padding: 12px 14px;
     border-radius: 12px;
@@ -822,11 +820,11 @@ const buildBaseCss = () => `
   img {
     border-radius: 14px;
     display: block;
-    max-width: 100%;
-    height: auto;
+          max-width: 100%;
+          height: auto;
     break-inside: avoid;
-    page-break-inside: avoid;
-  }
+          page-break-inside: avoid;
+        }
   figure {
     margin: 0;
   }
@@ -846,7 +844,7 @@ const buildBaseCss = () => `
     flex-direction: column;
     min-height: 160px;
     break-inside: avoid;
-          page-break-inside: avoid; 
+          page-break-inside: avoid;
         }
   .media-card img {
           width: 100%; 
@@ -854,6 +852,9 @@ const buildBaseCss = () => `
     object-fit: cover;
     flex: 1 1 auto;
   }
++  img[data-managed-image][data-loaded='true'] {
++    opacity: 1;
++  }
   .media-caption {
           font-size: 9pt; 
     color: #475569;
@@ -869,8 +870,8 @@ const buildBaseCss = () => `
     background: rgba(228, 233, 242, 0.45);
     border: 1px solid rgba(148, 163, 184, 0.3);
     break-inside: avoid;
-    page-break-inside: avoid;
-  }
+          page-break-inside: avoid;
+        }
   .info-grid p {
     margin: 0;
     font-weight: 500;
@@ -911,8 +912,8 @@ const buildBaseCss = () => `
     border: 1px solid rgba(14, 165, 233, 0.35);
   }
   .section-block {
-    break-inside: avoid;
-    page-break-inside: avoid;
+          break-inside: avoid; 
+          page-break-inside: avoid; 
     margin-bottom: 18px;
   }
   .page-break {
@@ -924,10 +925,10 @@ const buildBaseCss = () => `
     unicode-bidi: plaintext;
   }
   .num {
-    direction: ltr;
-    unicode-bidi: embed;
-    display: inline-block;
-  }
+          direction: ltr; 
+          unicode-bidi: embed; 
+          display: inline-block; 
+        }
         @media print {
     body {
       background: #ffffff;
@@ -952,6 +953,9 @@ const buildBaseCss = () => `
     tfoot {
       display: table-footer-group;
     }
+    .page-number::after {
+      content: 'עמוד ' counter(page) ' מתוך ' counter(pages);
+    }
   }
   .rich-text {
     white-space: pre-wrap;
@@ -959,7 +963,7 @@ const buildBaseCss = () => `
   }
   .rich-text .section-heading {
     display: block;
-    font-weight: 700;
+          font-weight: 700; 
     margin-top: 12px;
   }
   .comparables-table-block {
@@ -969,7 +973,7 @@ const buildBaseCss = () => `
     border: 1px solid rgba(148, 163, 184, 0.3);
   }
   .comparables-table .table {
-    font-size: 9pt;
+          font-size: 9pt; 
   }
   .comparables-table .table th,
   .comparables-table .table td {
@@ -989,6 +993,111 @@ const pageNumberScript = `
           target.textContent = 'עמוד ' + (index + 1) + ' מתוך ' + total
         }
       })
+    })
+  </script>
+`
+
+const autoPaginateScript = `
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      if (document.body.dataset.paginated === 'true') {
+        return;
+      }
+      document.body.dataset.paginated = 'true';
+
+      const previouslyGenerated = Array.from(document.querySelectorAll('section.page[data-generated-page=\"true\"]'));
+      previouslyGenerated.forEach((page) => page.remove());
+
+      const mmToPx = (mm) => (mm * 96) / 25.4
+      const MAX_CONTENT_HEIGHT = Math.round(mmToPx(297 - 30)) // A4 height minus ~15mm top/bottom
+
+      const createEmptyPage = (referencePage) => {
+        const newPage = document.createElement('section')
+        newPage.classList.add('page')
+        newPage.setAttribute('data-generated-page', 'true')
+        referencePage.classList.forEach((cls) => {
+          if (cls !== 'cover' && cls !== 'page') {
+            newPage.classList.add(cls)
+          }
+        })
+
+        const newBody = document.createElement('div')
+        newBody.className = 'page-body'
+        newPage.appendChild(newBody)
+
+        const pageNumberTemplate = referencePage.querySelector('.page-number[data-page-number]')
+        if (pageNumberTemplate) {
+          const clone = pageNumberTemplate.cloneNode(true)
+          clone.textContent = ''
+          newPage.appendChild(clone)
+        }
+
+        return { page: newPage, body: newBody }
+      }
+
+      const splitPage = (page) => {
+        if (page.classList.contains('cover')) {
+          return
+        }
+        const body = page.querySelector('.page-body')
+        if (!body) {
+          return
+        }
+
+        const ensurePageFits = (currentPage, currentBody, safety = 0) => {
+          if (safety > 100) {
+            console.warn('Auto pagination aborted due to safety threshold')
+            return
+          }
+          if (currentBody.scrollHeight <= MAX_CONTENT_HEIGHT) {
+            return
+          }
+
+          if (currentBody.children.length === 0) {
+            return
+          }
+
+          const { page: newPage, body: newBody } = createEmptyPage(page)
+          currentPage.parentNode.insertBefore(newPage, currentPage.nextSibling)
+
+          let guard = 0
+          while (currentBody.scrollHeight > MAX_CONTENT_HEIGHT && currentBody.children.length > 0) {
+            guard++
+            if (guard > 200) {
+              console.warn('Auto pagination inner loop guard triggered')
+              break
+            }
+            const lastChild = currentBody.lastElementChild
+            if (!lastChild) {
+              break
+            }
+            const childHeight = lastChild.getBoundingClientRect ? lastChild.getBoundingClientRect().height : lastChild.scrollHeight
+            if (childHeight && childHeight >= MAX_CONTENT_HEIGHT) {
+              console.warn('Auto pagination: element exceeds single-page height, leaving in place', lastChild)
+              break
+            }
+            newBody.insertBefore(lastChild, newBody.firstChild)
+          }
+
+          if (newBody.children.length === 0) {
+            newPage.remove()
+            return
+          }
+
+          if (currentBody.scrollHeight > MAX_CONTENT_HEIGHT && currentBody.children.length > 0) {
+            ensurePageFits(currentPage, currentBody, safety + 1)
+          }
+
+          if (newBody.scrollHeight > MAX_CONTENT_HEIGHT && newBody.children.length > 1) {
+            ensurePageFits(newPage, newBody, safety + 1)
+          }
+        }
+
+        ensurePageFits(page, body, 0)
+      }
+
+      const pages = Array.from(document.querySelectorAll('section.page'))
+      pages.forEach(splitPage)
     })
   </script>
 `
@@ -1256,14 +1365,14 @@ export function generateDocumentHTML(
         ${companySettings?.companyLogo ? `
           <div class="cover-logo">
             <img src="${companySettings.companyLogo}" alt="לוגו" style="max-height: 80px;" />
-        </div>
-          ` : ''}
+                  </div>
+                ` : ''}
         <div class="cover-title-card">
           <div class="badge">חוות דעת בעניין</div>
           <div class="title-primary">${LOCKED_HEBREW_TEXT.coverMainTitle}</div>
           <div class="title-secondary">${LOCKED_HEBREW_TEXT.coverSubtitle}</div>
           <div class="address">${address}</div>
-        </div>
+                  </div>
         ${(() => {
           const coverImages = resolveCoverImageSources(data)
           if (!coverImages.length) {
@@ -1272,22 +1381,23 @@ export function generateDocumentHTML(
             <div style="text-align: center; color: rgba(226,232,240,0.85);">
               <div style="font-size: 46px; margin-bottom: 12px;">📷</div>
               <div>תמונה חיצונית לא הועלתה</div>
-      </div>
-          </div>
+              </div>
+              </div>
         `
           }
           return `
         <div class="cover-image-frame">
-          <img src="${coverImages[0]}" alt="תמונה חיצונית" />
-        </div>
+          <img src="${coverImages[0]}" alt="תמונה חיצונית" data-managed-image="true" />
+              </div>
       `
         })()}
         ${companySettings?.footerLogo ? `
           <div class="cover-footer">
             <img src="${companySettings.footerLogo}" alt="פרטי קשר" style="max-height: 90px; max-width: 520px;" />
-                  </div>
+            </div>
                 ` : ''}
-                  </div>
+          </div>
+        <div class="page-number" data-page-number=""></div>
     </section>
   `
 
@@ -1298,26 +1408,26 @@ export function generateDocumentHTML(
         ${companySettings?.companyLogo ? `
           <div class="page-header-brand">
             <img src="${companySettings.companyLogo}" alt="לוגו" style="max-height: 54px;" />
-              </div>
+            </div>
         ` : ''}
         <div class="section-block">
           <div class="sub-title">${LOCKED_HEBREW_TEXT.coverSubtitle}</div>
           <p>${address}</p>
-            </div>
+                    </div>
         <p class="section-block">${LOCKED_HEBREW_TEXT.openingIntro}</p>
         <div class="section-block">
           <div class="sub-title">${LOCKED_HEBREW_TEXT.purposeTitle}</div>
           <p>${LOCKED_HEBREW_TEXT.purposeText}</p>
           <p>${LOCKED_HEBREW_TEXT.limitationText}</p>
-          </div>
+                </div>
         <div class="section-block">
           <div class="sub-title">מזמין חוות הדעת:</div>
           <p>${normalizeText(data.clientName)}</p>
-        </div>
+                </div>
         <div class="info-grid section-block">
           <p><strong>מועד הביקור בנכס:</strong> ${formatDateHebrew(visitDate)}, על ידי ${normalizeText(data.shamayName, 'שמאי מקרקעין מוסמך')}.</p>
           <p><strong>תאריך קובע לשומה:</strong> ${formatDateHebrew(valuationDate)}, מועד הביקור בנכס.</p>
-            </div>
+          </div>
         <div class="section-block">
           <div class="sub-title">פרטי הנכס:</div>
           <table class="table details-table">
@@ -1325,12 +1435,13 @@ export function generateDocumentHTML(
               ${createDetailsTable(data)}
             </tbody>
           </table>
-                    </div>
+        </div>
         <p class="page-note">
           <sup>1</sup> בהתאם לנסח רישום מקרקעין מיום ${formatDateNumeric((data as any).land_registry?.extractDate || data.extractDate)}.<br/>
           ${data.buildingPermitNumber ? `<sup>2</sup> עפ"י מדידה מתוך תכנית היתר בניה מס' ${data.buildingPermitNumber} מיום ${formatDateNumeric(data.buildingPermitDate || undefined)}.` : ''}
-            </p>
-          </div>
+                </p>
+      </div>
+        <div class="page-number" data-page-number=""></div>
     </section>
   `
 
@@ -1343,7 +1454,7 @@ export function generateDocumentHTML(
         <div>
           <div class="sub-title">1.1 תיאור השכונה, גבולותיה, מאפייניה וסביבתה</div>
           <p>${environmentParagraph}</p>
-      </div>
+              </div>
         ${(data.gisScreenshots?.cropMode0 || data.gisScreenshots?.cropMode1) ? `
           <div class="media-gallery section-block">
             ${data.gisScreenshots?.cropMode0 ? `
@@ -1358,12 +1469,12 @@ export function generateDocumentHTML(
                 <figcaption class="media-caption">מקור: GovMap</figcaption>
               </figure>
             ` : ''}
-              </div>
-            ` : ''}
+                </div>
+              ` : ''}
         <div class="section-block">
           <div class="sub-title">1.2 תיאור החלקה</div>
           <p>${plotParagraph}</p>
-          </div>
+                </div>
         ${(data as any).parcelBoundaries ? `
           <div class="section-block">
             <div class="sub-title">גבולות החלקה</div>
@@ -1372,7 +1483,7 @@ export function generateDocumentHTML(
               ${(data as any).parcelBoundaries.south ? `<p><strong>דרום:</strong> ${(data as any).parcelBoundaries.south}</p>` : ''}
               ${(data as any).parcelBoundaries.east ? `<p><strong>מזרח:</strong> ${(data as any).parcelBoundaries.east}</p>` : ''}
               ${(data as any).parcelBoundaries.west ? `<p><strong>מערב:</strong> ${(data as any).parcelBoundaries.west}</p>` : ''}
-                </div>
+            </div>
                 </div>
               ` : ''}
         <div class="section-block">
@@ -1401,7 +1512,7 @@ export function generateDocumentHTML(
               <ul class="bullet-list">
                 ${sharedBuildingEntries.map((entry: string) => `<li>${entry}</li>`).join('')}
               </ul>
-            ` : ''}
+              ` : ''}
             ${sharedBuildingAddresses.length > 0 ? `<p class="muted">כתובות: ${sharedBuildingAddresses.join(' • ')}</p>` : ''}
             ${sharedBuildingNotes ? `<p class="muted">${sharedBuildingNotes}</p>` : ''}
             </div>
@@ -1424,13 +1535,18 @@ export function generateDocumentHTML(
             <div class="media-gallery">
               ${interiorGallery.map((img: string, idx: number) => `
                 <figure class="media-card">
-                  <img src="${img}" alt="תמונה פנימית ${idx + 1}" />
+                  <img
+                    src="${img}"
+                    alt="תמונה פנימית ${idx + 1}"
+                    data-managed-image="true"
+                  />
                 </figure>
                   `).join('')}
                 </div>
                 </div>
               ` : ''}
       </div>
+        <div class="page-number" data-page-number=""></div>
     </section>
   `
 
@@ -1633,6 +1749,7 @@ export function generateDocumentHTML(
           </table>
         ` : ''}
           </div>
+        <div class="page-number" data-page-number=""></div>
       </section>
   `
 
@@ -1716,6 +1833,7 @@ export function generateDocumentHTML(
         <div class="sub-title">3.4 זיהום קרקע</div>
         <p>${LOCKED_HEBREW_TEXT.contaminationDefault}</p>
                 </div>
+        <div class="page-number" data-page-number=""></div>
     </section>
   `
 
@@ -1757,6 +1875,7 @@ export function generateDocumentHTML(
               </ul>
             </div>
           </div>
+        <div class="page-number" data-page-number=""></div>
       </section>
   `
 
@@ -1779,7 +1898,7 @@ export function generateDocumentHTML(
               ${createComparablesTable(data)}
               <p class="muted">* מוצגות ${includedComps.length} עסקאות כלולות מתוך ${comparablesList.length} שנבדקו</p>
             </div>
-          </div>
+            </div>
         ` : `
           <p style="color: #dc2626; font-weight: 600;">⚠️ נדרשות מינימום 3 עסקאות השוואה לחישוב שווי</p>
         `}
@@ -1820,6 +1939,7 @@ export function generateDocumentHTML(
               </tbody>
             </table>
         </div>
+        <div class="page-number" data-page-number=""></div>
       </section>
   `
 
@@ -1865,6 +1985,10 @@ export function generateDocumentHTML(
   `
 
   const css = buildBaseCss()
+  const runtimeScripts = isPreview
+    ? [pageNumberScript, autoPaginateScript].join('\n')
+    : ''
+
   const bodyContent = `
     <div class="document">
       ${headerBlock}
@@ -1875,8 +1999,8 @@ export function generateDocumentHTML(
       ${considerationsSection}
       ${valuationSection}
       ${summarySection}
-      </div>
-    ${pageNumberScript}
+    </div>
+    ${runtimeScripts}
     ${(() => {
       if (!customEdits || Object.keys(customEdits).length === 0) {
         return ''

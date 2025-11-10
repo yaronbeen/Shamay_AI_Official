@@ -14,7 +14,9 @@ interface DocumentUpload {
   error?: string
   preview?: string
   url?: string
+  path?: string
   isSelected?: boolean
+  previewReady?: boolean
 }
 
 interface Step2DocumentsProps {
@@ -73,6 +75,8 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
   const [uploads, setUploads] = useState<DocumentUpload[]>([])
   const [dragOver, setDragOver] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [processingProgress, setProcessingProgress] = useState(0)
+  const [processingStage, setProcessingStage] = useState<string | null>(null)
   const [extractedData, setExtractedData] = useState<any>({})
   const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({})
   
@@ -206,6 +210,8 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
     if (!sessionId) return
     
     setIsProcessing(true)
+    setProcessingProgress(8)
+    setProcessingStage('מכין את המסמכים לעיבוד')
     setShowReprocessConfirm(false)
     
     try {
@@ -225,41 +231,62 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
       console.log('🔄 Reprocessing selection:', shouldProcess)
       
       // Only call APIs for selected document types
-      const apiCalls: Promise<any>[] = []
-      const apiTypes: string[] = []
+      type ProcessingTask = {
+        type: 'tabu' | 'permit' | 'condo' | 'images'
+        label: string
+        run: () => Promise<any>
+      }
+
+      const tasks: ProcessingTask[] = []
       
       if (uploadedTypes.has('tabu') && shouldProcess.tabu) {
-        console.log('🏛️ Calling land registry analysis API')
-        apiCalls.push(extractLandRegistryData())
-        apiTypes.push('tabu')
+        console.log('🏛️ Enqueue land registry analysis task')
+        tasks.push({
+          type: 'tabu',
+          label: 'חילוץ נתוני טאבו',
+          run: extractLandRegistryData
+        })
       }
       
       if (uploadedTypes.has('permit') && shouldProcess.permit) {
-        console.log('🏗️ Calling building permit analysis API')
-        apiCalls.push(extractBuildingPermitData())
-        apiTypes.push('permit')
+        console.log('🏗️ Enqueue building permit analysis task')
+        tasks.push({
+          type: 'permit',
+          label: 'חילוץ נתוני היתר בנייה',
+          run: extractBuildingPermitData
+        })
       }
       
       if (uploadedTypes.has('condo') && shouldProcess.condo) {
-        console.log('🏢 Calling shared building analysis API')
-        apiCalls.push(extractSharedBuildingData())
-        apiTypes.push('condo')
+        console.log('🏢 Enqueue shared building analysis task')
+        tasks.push({
+          type: 'condo',
+          label: 'חילוץ נתוני צו בית משותף',
+          run: extractSharedBuildingData
+        })
       }
       
       if ((uploadedTypes.has('building_image') || uploadedTypes.has('interior_image')) && shouldProcess.images) {
-        console.log('📸 Calling image analysis API')
-        apiCalls.push(extractImageAnalysisData())
-        apiTypes.push('images')
+        console.log('📸 Enqueue image analysis task')
+        tasks.push({
+          type: 'images',
+          label: 'ניתוח חזית ותמונות פנים',
+          run: extractImageAnalysisData
+        })
       }
       
       // If no relevant documents selected for processing, show message
-      if (apiCalls.length === 0) {
+      if (tasks.length === 0) {
         console.log('⚠️ No documents selected for AI analysis')
         setIsProcessing(false)
+        setProcessingProgress(0)
+        setProcessingStage(null)
         return
       }
       
-      console.log(`🚀 Processing ${apiCalls.length} document types with AI...`)
+      console.log(`🚀 Processing ${tasks.length} document types with AI...`)
+      setProcessingStage('שולח מסמכים לניתוח AI')
+      setProcessingProgress(12)
       
       // If reprocessing selectively, fetch latest data from database first
       let baseData = {}
@@ -278,8 +305,34 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
         }
       }
       
-      // Call only the relevant APIs
-      const results = await Promise.allSettled(apiCalls)
+      // Execute tasks sequentially to provide granular progress feedback
+      const results: Array<{
+        type: ProcessingTask['type']
+        status: 'fulfilled' | 'rejected'
+        value?: any
+        reason?: any
+      }> = []
+
+      const totalTasks = tasks.length
+      let completedTasks = 0
+      const progressAllocation = totalTasks > 0 ? 60 / totalTasks : 0
+
+      for (const task of tasks) {
+        setProcessingStage(task.label)
+        try {
+          const value = await task.run()
+          results.push({ type: task.type, status: 'fulfilled', value })
+          console.log(`✅ Task ${task.type} completed successfully`)
+        } catch (error) {
+          console.error(`❌ Task ${task.type} failed:`, error)
+          results.push({ type: task.type, status: 'rejected', reason: error })
+        }
+        completedTasks += 1
+        setProcessingProgress(prev => {
+          const next = 15 + completedTasks * progressAllocation
+          return next > prev ? Math.min(80, Math.round(next)) : prev
+        })
+      }
       
       // Start with base data (from DB if selective, empty if full reprocess)
       const combinedData: any = { ...baseData }
@@ -287,12 +340,15 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
       console.log('🔄 Starting with base data:', reprocessSelection ? 'FROM DATABASE (selective)' : 'EMPTY (full process)')
       console.log('🔄 Base data keys:', Object.keys(combinedData))
       
-      results.forEach((result, index) => {
+      setProcessingStage('מאחד תוצאות מהמקורות השונים')
+      setProcessingProgress(prev => Math.max(prev, 82))
+      
+      results.forEach((result) => {
         if (result.status === 'fulfilled' && result.value) {
-          console.log(`📦 Merging result ${index} (${apiTypes[index]}):`, result.value)
+          console.log(`📦 Merging result for ${result.type}:`, result.value)
           Object.assign(combinedData, result.value)
         } else if (result.status === 'rejected') {
-          console.error(`❌ API call ${index} (${apiTypes[index]}) failed:`, result.reason)
+          console.error(`❌ Task ${result.type} failed:`, result.reason)
         }
       })
       
@@ -308,6 +364,9 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
       })
       console.log('📊 Updated parent data with extracted data')
       console.log('📊 Extracted data keys in combinedData:', Object.keys(combinedData))
+
+      setProcessingStage('שומר נתונים לסשן')
+      setProcessingProgress(prev => Math.max(prev, 90))
       
       // Save extracted data to session AND save original AI extractions separately
       if (sessionId) {
@@ -354,11 +413,19 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
           console.error('❌ Error saving extracted data to session:', error)
         }
       }
+
+      setProcessingStage('העיבוד הושלם בהצלחה')
+      setProcessingProgress(100)
       
     } catch (error) {
       console.error('Error processing documents:', error)
+      setProcessingStage('אירעה שגיאה במהלך עיבוד המסמכים')
     } finally {
       setIsProcessing(false)
+      setTimeout(() => {
+        setProcessingProgress(0)
+        setProcessingStage(null)
+      }, 800)
       
       // Add a small delay to ensure extracted data is saved before uploads useEffect runs
       setTimeout(() => {
@@ -608,7 +675,8 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
         file,
         type: type as 'tabu' | 'permit' | 'condo' | 'planning' | 'building_image' | 'interior_image',
         status: 'uploading' as const,
-        progress: 0
+        progress: 0,
+        previewReady: false
       }
 
       // Create preview for images immediately
@@ -616,14 +684,18 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
         const reader = new FileReader()
         reader.onload = (e) => {
           const base64 = e.target?.result as string
-          setUploads(prev => prev.map(u => 
-            u.id === uploadId ? { ...u, preview: base64 } : u
-          ))
-          
-          // Update data immediately for building image (first one)
-          if (type === 'building_image' && i === 0) {
-            updateData({ selectedImagePreview: base64 })
-          }
+          setUploads(prev => {
+            const updated = prev.map(u => 
+              u.id === uploadId
+                ? { ...u, preview: base64, previewReady: true }
+                : u
+            )
+            const processed = updateImageData(updated)
+            if (type === 'building_image' && i === 0) {
+              updateData({ selectedImagePreview: base64 })
+            }
+            return processed || updated
+          })
         }
         reader.readAsDataURL(file)
       }
@@ -702,7 +774,10 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
         
         // Update image data after completion
         if (upload.type === 'building_image' || upload.type === 'interior_image') {
-          updateImageData(updated)
+          const processedUploads = updateImageData(updated)
+          if (processedUploads) {
+            return processedUploads
+          }
         }
         
         return updated
@@ -720,49 +795,91 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
     }
   }
 
-  const updateImageData = (currentUploads?: DocumentUpload[]) => {
+  const updateImageData = (currentUploads?: DocumentUpload[]): DocumentUpload[] | undefined => {
     const uploadsToUse = currentUploads || uploads
-    const imageUploads = uploadsToUse.filter(u => (u.type === 'building_image' || u.type === 'interior_image') && u.status === 'completed')
-    
-    if (imageUploads.length === 0) return
-    
-    const imageData = imageUploads.map(u => ({
-      name: u.file.name,
-      preview: u.preview,
-      isSelected: u.isSelected || false,
-      type: u.type
-    }))
-    
-    // Set first image as selected if none is selected
-    const hasSelected = imageData.some(img => img.isSelected)
-    if (!hasSelected && imageData.length > 0) {
-      imageData[0].isSelected = true
-      
-      // Update uploads state to mark first BUILDING image as selected (not interior)
-      setUploads(prev => prev.map(u => 
-        u.type === 'building_image' && u.status === 'completed' && u.id === imageUploads[0].id
-          ? { ...u, isSelected: true }
-          : { ...u, isSelected: false }
-      ))
-    }
-    
-    // Find selected image - prioritize building_image type only
-    const selectedImage = imageData.find(img => img.isSelected && img.type === 'building_image') 
-                       || imageData.find(img => img.type === 'building_image')
-    
-    console.log('Updating image data:', { imageData, selectedImage, selectedImagePreview: selectedImage?.preview })
+    const completedImages = uploadsToUse.filter(
+      (u) => (u.type === 'building_image' || u.type === 'interior_image') && u.previewReady
+    )
 
-    const interiorPhotos = uploadsToUse
-      .filter(u => u.type === 'interior_image' && u.status === 'completed')
-      .map(u => u.preview)
-      .filter((src): src is string => typeof src === 'string' && src.trim().length > 0)
-      .slice(0, 10)
+    if (completedImages.length === 0) {
+      updateData({ propertyImages: [], selectedImagePreview: null, interiorImages: [] })
+      return currentUploads
+    }
+
+    const validUploads = completedImages.filter(
+      (u) => typeof u.preview === 'string' && u.preview.trim().length > 0
+    )
+
+    if (validUploads.length === 0) {
+      return currentUploads
+    }
+
+    const nextUploads = currentUploads
+      ? currentUploads.map((upload) => ({ ...upload }))
+      : undefined
+
+    let imageData = validUploads.map((u) => ({
+      name: u.file.name,
+      preview: (u.preview as string).trim(),
+      isSelected: u.isSelected || false,
+      type: u.type,
+      url: u.url,
+      path: u.path
+    }))
+
+    const hasSelectedBuilding = imageData.some(
+      (img) => img.type === 'building_image' && img.isSelected
+    )
+
+    let primaryUpload = validUploads.find(
+      (u) => u.type === 'building_image' && u.isSelected
+    )
+
+    if (!primaryUpload) {
+      primaryUpload = validUploads.find((u) => u.type === 'building_image')
+    }
+
+    if (primaryUpload && primaryUpload.type === 'building_image' && !hasSelectedBuilding) {
+      const primaryPreview = (primaryUpload.preview as string).trim()
+      imageData = imageData.map((img) =>
+        img.type === 'building_image'
+          ? { ...img, isSelected: img.preview === primaryPreview }
+          : img
+      )
+
+      if (nextUploads) {
+        for (let i = 0; i < nextUploads.length; i += 1) {
+          const upload = nextUploads[i]
+          if (upload.type === 'building_image' && upload.status === 'completed') {
+            nextUploads[i] = {
+              ...upload,
+              isSelected: upload.id === primaryUpload.id
+            }
+          }
+        }
+      }
+    }
+
+    const selectedBuilding = imageData.find(
+      (img) => img.type === 'building_image' && img.isSelected
+    )
+
+    const fallbackBuilding = selectedBuilding || imageData.find((img) => img.type === 'building_image')
+    const selectedPreview = fallbackBuilding?.preview?.trim()
+
+    const interiorPhotos = validUploads
+      .filter((u) => u.type === 'interior_image')
+      .map((u) => (u.preview as string).trim())
+      .filter(Boolean)
+      .slice(0, 6)
 
     updateData({
       propertyImages: imageData,
-      selectedImagePreview: selectedImage?.preview || null,
+      selectedImagePreview: selectedPreview || null,
       interiorImages: interiorPhotos
     })
+
+    return nextUploads || currentUploads
   }
 
   const handleRemoveUpload = async (uploadId: string) => {
@@ -778,14 +895,22 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
       
       // Handle image types
       if (upload.type === 'building_image' || upload.type === 'interior_image') {
-        const remainingImages = remaining.filter(u => (u.type === 'building_image' || u.type === 'interior_image') && u.status === 'completed')
+        const remainingImages = remaining.filter(
+          (u) =>
+            (u.type === 'building_image' || u.type === 'interior_image') &&
+            u.previewReady &&
+            typeof u.preview === 'string' &&
+            u.preview.trim().length > 0
+        )
+        const validRemainingImages = remainingImages.filter(u => typeof u.preview === 'string' && u.preview.trim().length > 0)
         
         // Handle interior images - remove from interiorImages array
         if (upload.type === 'interior_image') {
           const remainingInteriorImages = remaining
-            .filter(u => u.type === 'interior_image' && u.status === 'completed')
-            .map(u => u.preview)
-            .filter(Boolean)
+            .filter(u => u.type === 'interior_image' && u.previewReady)
+            .map(u => (typeof u.preview === 'string' ? u.preview.trim() : ''))
+            .filter((src): src is string => !!src)
+            .slice(0, 6)
           
           console.log('🖼️ Updating interior images:', {
             removed: upload.preview,
@@ -794,15 +919,18 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
           
           updateData({ 
             interiorImages: remainingInteriorImages,
-            propertyImages: remainingImages.map(u => ({
+            propertyImages: validRemainingImages.map(u => ({
               name: u.file.name,
-              preview: u.preview,
-              isSelected: u.isSelected || false
+              preview: (u.preview as string).trim(),
+              isSelected: u.isSelected || false,
+              type: u.type,
+              url: u.url,
+              path: u.path
             }))
           })
         } else if (upload.type === 'building_image') {
           // Handle building images - update selectedImagePreview
-          const buildingImages = remainingImages.filter(u => u.type === 'building_image')
+          const buildingImages = validRemainingImages.filter(u => u.type === 'building_image')
           const selectedBuildingImage = buildingImages.find(u => u.isSelected) || buildingImages[0]
           
           console.log('🏢 Updating building images:', {
@@ -812,12 +940,15 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
           })
           
           updateData({ 
-            propertyImages: remainingImages.map(u => ({
+            propertyImages: validRemainingImages.map(u => ({
               name: u.file.name,
-              preview: u.preview,
-              isSelected: u.isSelected || false
+              preview: (u.preview as string).trim(),
+              isSelected: u.isSelected || false,
+              type: u.type,
+              url: u.url,
+              path: u.path
             })),
-            selectedImagePreview: selectedBuildingImage?.preview || null
+            selectedImagePreview: selectedBuildingImage?.preview?.trim() || null
           })
         }
       }
@@ -852,8 +983,14 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
       }))
       
       // Update data immediately - but only use building_image for document preview
-      const imageUploads = updated.filter(u => (u.type === 'building_image' || u.type === 'interior_image') && u.status === 'completed')
-      const buildingImages = updated.filter(u => u.type === 'building_image' && u.status === 'completed')
+      const imageUploads = updated.filter(
+        (u) =>
+          (u.type === 'building_image' || u.type === 'interior_image') &&
+          u.status === 'completed' &&
+          typeof u.preview === 'string' &&
+          u.preview.trim().length > 0
+      )
+      const buildingImages = imageUploads.filter((u) => u.type === 'building_image')
       const selectedBuildingImage = buildingImages.find(u => u.isSelected) || buildingImages[0]
       
       console.log('Selecting image:', { uploadId, selectedBuildingImage, preview: selectedBuildingImage?.preview })
@@ -861,10 +998,13 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
       updateData({ 
         propertyImages: imageUploads.map(u => ({
           name: u.file.name,
-          preview: u.preview,
-          isSelected: u.isSelected || false
+          preview: (u.preview as string).trim(),
+          isSelected: u.isSelected || false,
+          type: u.type,
+          url: u.url,
+          path: u.path
         })),
-        selectedImagePreview: selectedBuildingImage?.preview || null
+        selectedImagePreview: selectedBuildingImage?.preview?.trim() || null
       })
       
       return updated
@@ -1299,7 +1439,16 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
               <div className="text-center">
                 <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-blue-900 mb-2">מעבד מסמכים...</h3>
-                <p className="text-blue-700 text-sm">מנתח מסמכים ומחלץ נתונים באמצעות AI</p>
+                <p className="text-blue-700 text-sm">
+                  {processingStage || 'מנתח מסמכים ומחלץ נתונים באמצעות AI'}
+                </p>
+                <div className="w-full bg-blue-100 h-2 rounded-full overflow-hidden mt-4">
+                  <div
+                    className="h-full bg-blue-500 transition-all duration-500"
+                    style={{ width: `${Math.min(100, Math.max(0, processingProgress))}%` }}
+                  />
+                </div>
+                <p className="text-xs text-blue-600 mt-2">{Math.min(100, Math.max(0, processingProgress))}%</p>
                 <div className="mt-4 text-sm text-blue-600">
                   <p>⏱️ זה עשוי לקחת מספר דקות</p>
                   <p>💰 עלות: ~$0.50-2.00 למסמך</p>
