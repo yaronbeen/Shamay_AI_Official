@@ -76,8 +76,18 @@ describe('QC Validation Engine', () => {
       expect(results.some(r => r.rule.fieldRefs.includes('תיאור_סביבה'))).toBe(true)
     })
 
+    const buildEnvironmentText = (repetitions: number, suffix = '') =>
+      `${Array.from({ length: repetitions })
+        .map(
+          () =>
+            'השכונה מתאפיינת במרחבים ירוקים, מוסדות חינוך, מרכזי תרבות ושירותי תחבורה ציבורית יעילה'
+        )
+        .join(' ')}${suffix}`.trim()
+
     it('should pass when תיאור_סביבה is within limits', () => {
-      const validText = 'שכונה יפה '.repeat(20) // ~120 words
+      const validText =
+        buildEnvironmentText(11) +
+        ' שכונה פעילה עם חיי קהילה עשירים, מרכזי תרבות, מסחר, פארקים נרחבים וחיבורים נוחים לכל חלקי העיר.'
       const data = { תיאור_סביבה: validText }
       const results = getWarnings(data)
       expect(results.some(r => r.rule.fieldRefs.includes('תיאור_סביבה'))).toBe(false)
@@ -90,7 +100,11 @@ describe('QC Validation Engine', () => {
     })
 
     it('should pass when תיאור_סביבה mentions year', () => {
-      const data = { תיאור_סביבה: 'שכונה יפה שנוסדה בשנת 1950' }
+      const textWithYear = buildEnvironmentText(
+        11,
+        ' השכונה נוסדה בשנת 1950 ומאז עברה תהליכי התחדשות משמעותיים תוך שילוב מוקדי תעסוקה וחיי קהילה עשירים.'
+      )
+      const data = { תיאור_סביבה: textWithYear }
       const results = getWarnings(data)
       expect(results.some(r => r.rule.fieldRefs.includes('תיאור_סביבה'))).toBe(false)
     })
