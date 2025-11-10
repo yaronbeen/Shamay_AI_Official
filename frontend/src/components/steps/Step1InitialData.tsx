@@ -140,9 +140,9 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
     setFormData(prev => {
       const newData = { ...prev, [field]: value }
 
-      const payload = { ...newData }
+      const payload: Record<string, any> = { ...newData }
       DATE_FIELDS.forEach((dateField) => {
-        const displayValue = payload[dateField] as string
+        const displayValue = typeof payload[dateField] === 'string' ? (payload[dateField] as string) : ''
         payload[dateField] = displayValue ? normalizeDateToISO(displayValue) || '' : ''
       })
       

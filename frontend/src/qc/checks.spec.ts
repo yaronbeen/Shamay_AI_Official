@@ -76,18 +76,12 @@ describe('QC Validation Engine', () => {
       expect(results.some(r => r.rule.fieldRefs.includes('תיאור_סביבה'))).toBe(true)
     })
 
-    const buildEnvironmentText = (repetitions: number, suffix = '') =>
-      `${Array.from({ length: repetitions })
-        .map(
-          () =>
-            'השכונה מתאפיינת במרחבים ירוקים, מוסדות חינוך, מרכזי תרבות ושירותי תחבורה ציבורית יעילה'
-        )
-        .join(' ')}${suffix}`.trim()
+    const generateWords = (count: number) =>
+      Array.from({ length: count }, (_, index) => `מילה${index + 1}`).join(' ')
 
     it('should pass when תיאור_סביבה is within limits', () => {
       const validText =
-        buildEnvironmentText(11) +
-        ' שכונה פעילה עם חיי קהילה עשירים, מרכזי תרבות, מסחר, פארקים נרחבים וחיבורים נוחים לכל חלקי העיר.'
+        `${generateWords(118)} השכונה נוסדה בשנת 1985 ומציעה חיי קהילה עשירים, מסחר ענף ותחבורה ציבורית תדירה.`.trim()
       const data = { תיאור_סביבה: validText }
       const results = getWarnings(data)
       expect(results.some(r => r.rule.fieldRefs.includes('תיאור_סביבה'))).toBe(false)
@@ -100,10 +94,8 @@ describe('QC Validation Engine', () => {
     })
 
     it('should pass when תיאור_סביבה mentions year', () => {
-      const textWithYear = buildEnvironmentText(
-        11,
-        ' השכונה נוסדה בשנת 1950 ומאז עברה תהליכי התחדשות משמעותיים תוך שילוב מוקדי תעסוקה וחיי קהילה עשירים.'
-      )
+      const textWithYear =
+        `${generateWords(118)} השכונה נוסדה בשנת 1950 ומאז מתפתחת ומתחזקת כמוקד מרכזי לפעילות עירונית.`.trim()
       const data = { תיאור_סביבה: textWithYear }
       const results = getWarnings(data)
       expect(results.some(r => r.rule.fieldRefs.includes('תיאור_סביבה'))).toBe(false)
