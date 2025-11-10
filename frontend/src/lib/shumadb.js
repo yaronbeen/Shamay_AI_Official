@@ -7,6 +7,8 @@
  * Uses Neon serverless driver for Vercel deployment
  */
 
+const crypto = require('crypto')
+
 // Import based on environment
 let Pool, neonConfig
 try {
@@ -539,35 +541,93 @@ class ShumaDBEnhanced {
    * Save Garmushka measurements to garmushka table + shuma
    */
   static async _saveGarmushkaData(client, shumaId, sessionId, garmushkaData) {
-    if (!garmushkaData.measurementTable || garmushkaData.measurementTable.length === 0) {
+    if (!garmushkaData || !Array.isArray(garmushkaData.measurementTable) || garmushkaData.measurementTable.length === 0) {
       return
     }
 
-    // Save to garmushka table
-    const result = await client.query(`
-      INSERT INTO garmushka (
-        file_name,
-        measurement_table,
-        meters_per_pixel,
-        unit_mode,
-        is_calibrated,
-        png_export,
-        shuma_id,
-        session_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      RETURNING id
-    `, [
-      this._truncateString(garmushkaData.fileName || 'measurement.pdf', 255),
-      JSON.stringify(garmushkaData.measurementTable || []),
-      garmushkaData.metersPerPixel || null,
-      this._truncateString(garmushkaData.unitMode || 'metric', 20),
-      garmushkaData.isCalibrated || false,
-      garmushkaData.pngExport || null, // TEXT field for base64
-      shumaId,
-      sessionId
-    ])
+    const pngExport = typeof garmushkaData.pngExport === 'string' ? garmushkaData.pngExport.trim() : null
+    const pngHash = pngExport ? crypto.createHash('md5').update(pngExport).digest('hex') : null
 
-    const garmushkaId = result.rows[0].id
+    const existingRows = await client.query(`
+      SELECT id, md5(COALESCE(png_export, '')) AS png_hash
+      FROM garmushka
+      WHERE session_id = $1
+      ORDER BY id DESC
+    `, [sessionId])
+
+    const duplicatesToDelete = []
+    const seenHashes = new Set()
+    let matchedRowId = null
+
+    for (const row of existingRows.rows) {
+      const rowHash = row.png_hash || null
+
+      if (rowHash) {
+        if (seenHashes.has(rowHash)) {
+          duplicatesToDelete.push(row.id)
+          continue
+        }
+        seenHashes.add(rowHash)
+        if (!matchedRowId && pngHash && rowHash === pngHash) {
+          matchedRowId = row.id
+        }
+      }
+    }
+
+    if (duplicatesToDelete.length > 0) {
+      await client.query(
+        `DELETE FROM garmushka WHERE id = ANY($1::int[])`,
+        [duplicatesToDelete]
+      )
+    }
+
+    let garmushkaId = matchedRowId || null
+
+    if (garmushkaId) {
+      await client.query(`
+        UPDATE garmushka SET
+          file_name = $1,
+          measurement_table = $2,
+          meters_per_pixel = $3,
+          unit_mode = $4,
+          is_calibrated = $5,
+          png_export = $6
+        WHERE id = $7
+      `, [
+        this._truncateString(garmushkaData.fileName || 'measurement.pdf', 255),
+        JSON.stringify(garmushkaData.measurementTable || []),
+        garmushkaData.metersPerPixel || null,
+        this._truncateString(garmushkaData.unitMode || 'metric', 20),
+        garmushkaData.isCalibrated || false,
+        pngExport,
+        garmushkaId
+      ])
+    } else {
+      const insertResult = await client.query(`
+        INSERT INTO garmushka (
+          file_name,
+          measurement_table,
+          meters_per_pixel,
+          unit_mode,
+          is_calibrated,
+          png_export,
+          shuma_id,
+          session_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING id
+      `, [
+        this._truncateString(garmushkaData.fileName || 'measurement.pdf', 255),
+        JSON.stringify(garmushkaData.measurementTable || []),
+        garmushkaData.metersPerPixel || null,
+        this._truncateString(garmushkaData.unitMode || 'metric', 20),
+        garmushkaData.isCalibrated || false,
+        pngExport,
+        shumaId,
+        sessionId
+      ])
+
+      garmushkaId = insertResult.rows[0].id
+    }
 
     // Update shuma with reference to garmushka record
     await client.query(`
@@ -914,13 +974,21 @@ class ShumaDBEnhanced {
       }
       const shumaId = shumaResult.rows[0].id
       
+      const sanitizedGarmushkaData = garmushkaData ? { ...garmushkaData } : {}
+      if (sanitizedGarmushkaData) {
+        delete sanitizedGarmushkaData.garmushkaRecords
+        if (Array.isArray(sanitizedGarmushkaData.pngExports) && sanitizedGarmushkaData.pngExports.length === 0) {
+          delete sanitizedGarmushkaData.pngExports
+        }
+      }
+
       // Update shuma table
       await client.query(`
         UPDATE shuma SET
           garmushka_measurements = $1,
           updated_at = NOW()
         WHERE session_id = $2
-      `, [JSON.stringify(garmushkaData), sessionId])
+      `, [JSON.stringify(sanitizedGarmushkaData || {}), sessionId])
       
       // Save to garmushka table
       await this._saveGarmushkaData(client, shumaId, sessionId, garmushkaData)

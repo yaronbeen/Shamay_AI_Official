@@ -188,7 +188,56 @@ export class FileStorageService {
       return this.deleteFromLocal(urlOrPath)
     }
   }
-  
+
+  static async saveJson(relativePath: string, data: any): Promise<{ url: string; path: string }> {
+    const jsonBuffer = Buffer.from(JSON.stringify(data ?? {}, null, 2), 'utf-8')
+    if (this.isProduction()) {
+      const blob = await put(relativePath, jsonBuffer, {
+        access: 'public',
+        addRandomSuffix: false,
+        contentType: 'application/json'
+      })
+      return { url: blob.url, path: blob.pathname }
+    }
+
+    const absolutePath = path.join(this.UPLOADS_DIR, relativePath)
+    await fs.mkdir(path.dirname(absolutePath), { recursive: true })
+    await fs.writeFile(absolutePath, jsonBuffer)
+    const apiPath = `/api/files/${this.encodePath(relativePath)}`
+    return { url: apiPath, path: relativePath }
+  }
+
+  static async loadJson<T = any>(relativePath: string): Promise<T | null> {
+    try {
+      if (this.isProduction()) {
+        const { blobs } = await list({ prefix: relativePath })
+        const exactMatch = blobs.find((blob) => blob.pathname === relativePath)
+        if (!exactMatch) {
+          return null
+        }
+        const response = await fetch(exactMatch.url, { cache: 'no-store' })
+        if (!response.ok) {
+          return null
+        }
+        return (await response.json()) as T
+      }
+
+      const absolutePath = path.join(this.UPLOADS_DIR, relativePath)
+      const exists = await fs
+        .stat(absolutePath)
+        .then(() => true)
+        .catch(() => false)
+      if (!exists) {
+        return null
+      }
+      const raw = await fs.readFile(absolutePath, 'utf-8')
+      return JSON.parse(raw) as T
+    } catch (error) {
+      console.warn('⚠️ [FileStorage] Failed to load JSON at', relativePath, error)
+      return null
+    }
+  }
+ 
   /**
    * Delete from Vercel Blob
    */

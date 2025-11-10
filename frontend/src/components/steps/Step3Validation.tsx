@@ -34,6 +34,49 @@ type ExtractedData = ValuationData['extractedData'] & {
   [key: string]: any
 }
 
+export type Step3DocumentFile = {
+  type?: string
+  name?: string
+  url?: string
+  file?: { type?: string }
+}
+
+export const filterPdfFiles = (files: Step3DocumentFile[]): Step3DocumentFile[] => {
+  return files.filter((f) => {
+    const name = (f.name || '').toLowerCase()
+    const url = (f.url || '').toLowerCase()
+    const rawType = (f.type || f.file?.type || '').toLowerCase()
+
+    const isPdf =
+      rawType === 'application/pdf' ||
+      name.endsWith('.pdf') ||
+      url.endsWith('.pdf') ||
+      ['tabu', 'permit', 'building_permit', 'condo', 'planning'].includes(rawType)
+
+    const isGarmushka = url.includes('garmushka') || name.includes('garmushka') || rawType.includes('garmushka')
+    const isFromUploads =
+      url.includes('/uploads/') ||
+      url.includes('/api/files/') ||
+      url.includes('vercel-storage')
+
+    return isPdf && isFromUploads && !isGarmushka
+  })
+}
+
+export const getStep3FileTypeLabel = (type: string): string => {
+  const normalizedType = (type || '').toLowerCase()
+  const labels: Record<string, string> = {
+    tabu: 'נסח טאבו',
+    permit: 'היתר בניה',
+    building_permit: 'היתר בניה',
+    condo: 'צו בית משותף',
+    condominium_order: 'צו בית משותף',
+    planning: 'מידע תכנוני',
+    planning_sheet: 'מידע תכנוני'
+  }
+  return labels[normalizedType] || type
+}
+
 // Reusable Field Editor Component with Provenance Tooltip
 function EditableField({
   field,
@@ -416,32 +459,10 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
   }
 
   // Filter PDF files
-  const pdfFiles = useMemo(() => {
-    return allFiles.filter((f) => {
-      const name = (f.name || '').toLowerCase()
-      const url = (f.url || '').toLowerCase()
-      const type = (f.type || f.file?.type || '').toLowerCase()
-      const isPdf = type === 'application/pdf' || name.endsWith('.pdf') || url.endsWith('.pdf')
-      const isGarmushka = url.includes('garmushka') || name.includes('garmushka')
-      const isFromUploads = url.includes('/uploads/') || 
-                           url.includes('/api/files/') || 
-                           url.includes('vercel-storage')
-      return isPdf && isFromUploads && !isGarmushka
-    })
-  }, [allFiles])
+  const pdfFiles = useMemo(() => filterPdfFiles(allFiles), [allFiles])
 
   const currentFile = pdfFiles[currentFileIndex]
 
-  const getFileTypeLabel = (type: string) => {
-    const labels: Record<string, string> = {
-      'tabu': 'תעודת בעלות',
-      'building_permit': 'היתר בנייה',
-      'permit': 'היתר בנייה',
-      'condominium_order': 'צו בית משותף',
-      'planning_sheet': 'תכנית בניין עיר'
-    }
-    return labels[type] || type
-  }
 
   const handleFieldEdit = (field: string, currentValue: string) => {
     setEditingField(field)
@@ -653,7 +674,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
-                    {getFileTypeLabel(file.type)}
+                    {getStep3FileTypeLabel(file.type || '')}
                   </button>
                 ))}
               </div>
@@ -1134,57 +1155,6 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
                 type="textarea"
               />
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Comparable Sales */}
-      {hasExtractedData && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">מכירות דומות</h3>
-          <div className="grid grid-cols-1 gap-4">
-            <EditableField
-              field="averagePricePerSqm"
-              label="מחיר ממוצע למ'ר"
-              value={extractedData.averagePricePerSqm}
-              editingField={editingField}
-              tempValue={tempValue}
-              onEdit={handleFieldEdit}
-              onSave={handleFieldSave}
-              onCancel={handleFieldCancel}
-              onValueChange={setTempValue}
-              dataSource={getDataSource('averagePricePerSqm')}
-              provenanceInfo={getProvenanceForField('averagePricePerSqm')}
-              onNavigateToDocument={navigateToDocument}
-            />
-            <EditableField
-              field="medianPricePerSqm"
-              label="מחיר חציוני למ'ר"
-              value={extractedData.medianPricePerSqm}
-              editingField={editingField}
-              tempValue={tempValue}
-              onEdit={handleFieldEdit}
-              onSave={handleFieldSave}
-              onCancel={handleFieldCancel}
-              onValueChange={setTempValue}
-              dataSource={getDataSource('medianPricePerSqm')}
-              provenanceInfo={getProvenanceForField('medianPricePerSqm')}
-              onNavigateToDocument={navigateToDocument}
-            />
-            <EditableField
-              field="adjustmentFactor"
-              label="גורם התאמה"
-              value={extractedData.adjustmentFactor}
-              editingField={editingField}
-              tempValue={tempValue}
-              onEdit={handleFieldEdit}
-              onSave={handleFieldSave}
-              onCancel={handleFieldCancel}
-              onValueChange={setTempValue}
-              dataSource={getDataSource('adjustmentFactor')}
-              provenanceInfo={getProvenanceForField('adjustmentFactor')}
-              onNavigateToDocument={navigateToDocument}
-            />
           </div>
         </div>
       )}

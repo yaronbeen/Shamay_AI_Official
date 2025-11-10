@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, useCallback } from 'react'
 
 interface GISMapViewerProps {
   sessionId?: string
@@ -8,6 +8,12 @@ interface GISMapViewerProps {
   initialScreenshots?: { cropMode0?: string, cropMode1?: string }
   onScreenshotsUpdated?: (screenshots: { cropMode0?: string, cropMode1?: string }) => void
 }
+
+const MIN_LEFT_WIDTH = 260
+const MAX_LEFT_WIDTH = 520
+const MIN_RIGHT_WIDTH = 240
+const MAX_RIGHT_WIDTH = 480
+const MIN_MAP_WIDTH = 520
 
 export default function GISMapViewer({ sessionId, data, initialScreenshots, onScreenshotsUpdated }: GISMapViewerProps = {}) {
   // State - exactly matching HTML logic
@@ -33,6 +39,7 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
   const startXYRef = useRef<{ x: number, y: number } | null>(null)
   const fileInputRef0 = useRef<HTMLInputElement>(null)
   const fileInputRef1 = useRef<HTMLInputElement>(null)
+  const layoutRef = useRef<HTMLDivElement>(null)
 
   // Message helper
   const showMessage = (text: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -41,6 +48,124 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
       setTimeout(() => setSearchMessage(''), 3000)
     }
   }
+
+  const [leftPanelWidth, setLeftPanelWidth] = useState(320)
+  const [rightPanelWidth, setRightPanelWidth] = useState(300)
+  const [leftCollapsed, setLeftCollapsed] = useState(false)
+  const [rightCollapsed, setRightCollapsed] = useState(false)
+  const [draggingPanel, setDraggingPanel] = useState<'left' | 'right' | null>(null)
+  const leftWidthRef = useRef(leftPanelWidth)
+  const rightWidthRef = useRef(rightPanelWidth)
+  const [isDesktop, setIsDesktop] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const update = () => setIsDesktop(window.innerWidth >= 1024)
+    update()
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
+  }, [])
+
+  useEffect(() => {
+    leftWidthRef.current = leftPanelWidth
+  }, [leftPanelWidth])
+
+  useEffect(() => {
+    rightWidthRef.current = rightPanelWidth
+  }, [rightPanelWidth])
+
+  const startDraggingLeft = useCallback(() => {
+    if (!isDesktop) return
+    setLeftCollapsed(false)
+    setDraggingPanel('left')
+  }, [isDesktop])
+
+  const startDraggingRight = useCallback(() => {
+    if (!isDesktop) return
+    setRightCollapsed(false)
+    setDraggingPanel('right')
+  }, [isDesktop])
+
+  const toggleLeftPanel = useCallback(() => {
+    if (leftCollapsed) {
+      const restored = Math.max(
+        MIN_LEFT_WIDTH,
+        Math.min(leftWidthRef.current || MIN_LEFT_WIDTH, MAX_LEFT_WIDTH)
+      )
+      setLeftPanelWidth(restored)
+      setLeftCollapsed(false)
+    } else {
+      leftWidthRef.current = leftPanelWidth
+      setLeftCollapsed(true)
+    }
+  }, [leftCollapsed, leftPanelWidth])
+
+  const toggleRightPanel = useCallback(() => {
+    if (rightCollapsed) {
+      const restored = Math.max(
+        MIN_RIGHT_WIDTH,
+        Math.min(rightWidthRef.current || MIN_RIGHT_WIDTH, MAX_RIGHT_WIDTH)
+      )
+      setRightPanelWidth(restored)
+      setRightCollapsed(false)
+    } else {
+      rightWidthRef.current = rightPanelWidth
+      setRightCollapsed(true)
+    }
+  }, [rightCollapsed, rightPanelWidth])
+
+  useEffect(() => {
+    if (!draggingPanel || !isDesktop) return
+    const handleMouseMove = (event: MouseEvent) => {
+      if (!layoutRef.current) return
+      const rect = layoutRef.current.getBoundingClientRect()
+      const totalWidth = rect.width
+      const effectiveLeft = leftCollapsed ? 0 : leftWidthRef.current
+      const effectiveRight = rightCollapsed ? 0 : rightWidthRef.current
+
+      if (draggingPanel === 'left') {
+        const availableForLeft = totalWidth - MIN_MAP_WIDTH - effectiveRight
+        if (availableForLeft <= MIN_LEFT_WIDTH) {
+          const compressedWidth = Math.max(0, availableForLeft)
+          leftWidthRef.current = compressedWidth
+          setLeftPanelWidth(compressedWidth)
+          setLeftCollapsed(compressedWidth < MIN_LEFT_WIDTH * 0.6)
+          return
+        }
+        const maxLeft = Math.min(MAX_LEFT_WIDTH, availableForLeft)
+        let newWidth = event.clientX - rect.left
+        newWidth = Math.max(MIN_LEFT_WIDTH, Math.min(newWidth, maxLeft))
+        leftWidthRef.current = newWidth
+        setLeftPanelWidth(newWidth)
+        setLeftCollapsed(false)
+      } else if (draggingPanel === 'right') {
+        const availableForRight = totalWidth - MIN_MAP_WIDTH - (leftCollapsed ? 0 : leftWidthRef.current)
+        if (availableForRight <= MIN_RIGHT_WIDTH) {
+          const compressedWidth = Math.max(0, availableForRight)
+          rightWidthRef.current = compressedWidth
+          setRightPanelWidth(compressedWidth)
+          setRightCollapsed(compressedWidth < MIN_RIGHT_WIDTH * 0.6)
+          return
+        }
+        const maxRight = Math.min(MAX_RIGHT_WIDTH, availableForRight)
+        let newWidth = rect.right - event.clientX
+        newWidth = Math.max(MIN_RIGHT_WIDTH, Math.min(newWidth, maxRight))
+        rightWidthRef.current = newWidth
+        setRightPanelWidth(newWidth)
+        setRightCollapsed(false)
+      }
+    }
+
+    const stopDragging = () => setDraggingPanel(null)
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', stopDragging)
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', stopDragging)
+    }
+  }, [draggingPanel, isDesktop, leftCollapsed, rightCollapsed])
 
   // Initialize - load saved maps and initial screenshots
   useEffect(() => {
@@ -1080,11 +1205,32 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
           <p className="text-gray-600">חפשו כתובת, הוסיפו סימונים על המפה ושמרו לעיון מאוחר</p>
         </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5" style={{ height: 'calc(100vh - 160px)' }}>
+        <div
+          ref={layoutRef}
+          className="flex flex-col gap-5 lg:flex-row lg:gap-0"
+          style={{ height: 'calc(100vh - 160px)' }}
+        >
           {/* Left Sidebar */}
-          <div className="lg:col-span-3 bg-white rounded-lg p-5 shadow-sm border border-gray-200 overflow-y-auto">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-300">חיפוש כתובת</h2>
-
+          <div
+            className={`bg-white rounded-lg p-5 shadow-sm border border-gray-200 overflow-y-auto w-full transition-all duration-200 ease-out ${leftCollapsed ? 'lg:opacity-0 lg:pointer-events-none' : 'lg:opacity-100'}`}
+            style={isDesktop ? {
+              width: leftCollapsed ? 0 : Math.min(Math.max(leftPanelWidth, MIN_LEFT_WIDTH), MAX_LEFT_WIDTH),
+              minWidth: leftCollapsed ? 0 : MIN_LEFT_WIDTH,
+              maxWidth: MAX_LEFT_WIDTH
+            } : undefined}
+          >
+            <div className="flex items-center justify-between mb-4 pb-2 border-b border-gray-300">
+              <h2 className="text-lg font-semibold text-gray-900">חיפוש כתובת</h2>
+              {isDesktop && (
+                <button
+                  type="button"
+                  onClick={toggleLeftPanel}
+                  className="hidden lg:inline-flex items-center text-xs text-gray-500 hover:text-gray-700"
+                >
+                  {leftCollapsed ? 'הצג' : 'הסתר'}
+                </button>
+              )}
+            </div>
             <div className="mb-6">
               <div className="mb-4">
                 <label className="block text-sm font-semibold text-gray-700 mb-2">רחוב</label>
@@ -1268,9 +1414,42 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
               🗑️ נקה הכל
               </button>
             </div>
-            
+
+          {isDesktop && (
+            <div className="hidden lg:flex items-stretch" onDoubleClick={toggleLeftPanel}>
+              <div
+                className="w-1.5 cursor-col-resize bg-transparent hover:bg-indigo-200 active:bg-indigo-300 transition-colors"
+                onMouseDown={(event) => {
+                  event.preventDefault()
+                  startDraggingLeft()
+                }}
+              />
+            </div>
+          )}
+
           {/* Center: Map Canvas */}
-          <div className="lg:col-span-6 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+          <div
+            className="flex-1 min-w-0 flex flex-col bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden relative"
+            style={isDesktop ? { minWidth: MIN_MAP_WIDTH } : undefined}
+          >
+            {isDesktop && leftCollapsed && (
+              <button
+                type="button"
+                onClick={toggleLeftPanel}
+                className="hidden lg:flex absolute top-3 left-3 z-30 bg-white/90 border border-gray-300 rounded px-3 py-1 text-xs font-medium text-gray-700 shadow-sm hover:bg-white"
+              >
+                הצג פאנל הגדרות
+              </button>
+            )}
+            {isDesktop && rightCollapsed && (
+              <button
+                type="button"
+                onClick={toggleRightPanel}
+                className="hidden lg:flex absolute top-3 right-3 z-30 bg-white/90 border border-gray-300 rounded px-3 py-1 text-xs font-medium text-gray-700 shadow-sm hover:bg-white"
+              >
+                הצג מפות שמורות
+              </button>
+            )}
             <div className="bg-gray-50 p-3 border-b border-gray-200">
               <div className="flex items-center gap-2 flex-wrap">
                 {/* Map Mode Toggle */}
@@ -1388,10 +1567,40 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
             </div>
             )}
             </div>
-              
+
+          {isDesktop && (
+            <div className="hidden lg:flex items-stretch" onDoubleClick={toggleRightPanel}>
+              <div
+                className="w-1.5 cursor-col-resize bg-transparent hover:bg-indigo-200 active:bg-indigo-300 transition-colors"
+                onMouseDown={(event) => {
+                  event.preventDefault()
+                  startDraggingRight()
+                }}
+              />
+            </div>
+          )}
+
           {/* Right Sidebar: Saved Maps */}
-          <div className="lg:col-span-3 bg-white rounded-lg p-5 shadow-sm border border-gray-200 overflow-y-auto">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-300">מפות שמורות</h2>
+          <div
+            className={`bg-white rounded-lg p-5 shadow-sm border border-gray-200 overflow-y-auto w-full transition-all duration-200 ease-out ${rightCollapsed ? 'lg:opacity-0 lg:pointer-events-none' : 'lg:opacity-100'}`}
+            style={isDesktop ? {
+              width: rightCollapsed ? 0 : Math.min(Math.max(rightPanelWidth, MIN_RIGHT_WIDTH), MAX_RIGHT_WIDTH),
+              minWidth: rightCollapsed ? 0 : MIN_RIGHT_WIDTH,
+              maxWidth: MAX_RIGHT_WIDTH
+            } : undefined}
+          >
+            <div className="flex items-center justify-between mb-4 pb-2 border-b border-gray-300">
+              <h2 className="text-lg font-semibold text-gray-900">מפות שמורות</h2>
+              {isDesktop && (
+                <button
+                  type="button"
+                  onClick={toggleRightPanel}
+                  className="hidden lg:inline-flex items-center text-xs text-gray-500 hover:text-gray-700"
+                >
+                  {rightCollapsed ? 'הצג' : 'הסתר'}
+                </button>
+              )}
+            </div>
             {savedMaps.length === 0 ? (
               <div className="text-center text-gray-500 py-8">אין מפות שמורות</div>
             ) : (
@@ -1426,8 +1635,8 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
               </ul>
             )}
             </div>
-            </div>
-            </div>
+        </div>
+      </div>
     </div>
   )
 }
