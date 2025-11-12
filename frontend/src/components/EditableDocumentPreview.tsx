@@ -143,6 +143,47 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
     []
   )
 
+  const applyOverridesToDocument = useCallback(() => {
+    const doc = getFrameDocument()
+    if (!doc) {
+      return
+    }
+
+    const mergedEdits = {
+      ...((data as any).customDocumentEdits || (data as any).propertyAnalysis?.__customDocumentEdits || {}),
+      ...customHtmlOverrides
+    }
+
+    Object.entries(mergedEdits).forEach(([selector, html]) => {
+      if (typeof selector !== 'string' || typeof html !== 'string') {
+        return
+      }
+      try {
+        const elements = doc.querySelectorAll(selector)
+        if (!elements.length) {
+          return
+        }
+        elements.forEach((element) => {
+          element.innerHTML = html
+        })
+      } catch (error) {
+        console.warn('Failed to apply custom edit selector:', selector, error)
+      }
+    })
+
+    const frameWindow = doc.defaultView as any
+    if (frameWindow?.__applyAutoPagination) {
+      frameWindow.__applyAutoPagination(true)
+    }
+    if (frameWindow?.__applyPageNumbers) {
+      frameWindow.__applyPageNumbers(true)
+    }
+  }, [customHtmlOverrides, data, getFrameDocument])
+
+  useEffect(() => {
+    applyOverridesToDocument()
+  }, [applyOverridesToDocument])
+
   const showToolbarForElement = useCallback((element: HTMLElement, mode: ToolbarMode) => {
     const selector = element.getAttribute('data-edit-selector')
     if (!selector) {
@@ -398,7 +439,10 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
 
   useEffect(() => {
     if (!isEditMode) {
-      const existing = (data as any).customDocumentEdits || {}
+      const existing =
+        (data as any).customDocumentEdits ||
+        (data as any).propertyAnalysis?.__customDocumentEdits ||
+        {}
       setCustomHtmlOverrides(existing)
       setDebouncedOverrides(existing)
     }
@@ -570,7 +614,7 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
       if (target.closest('img') && target.closest('[data-edit-selector]')) {
         return
       }
-      if (!target.closest('[data-edit-selector]')) {
+    if (!target.closest('[data-edit-selector]')) {
       clearToolbarTarget()
       }
   },
@@ -645,7 +689,11 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
       // Merge custom edits with existing data
       const updatedData = {
         ...data,
-        customDocumentEdits: customHtmlOverrides
+        customDocumentEdits: customHtmlOverrides,
+        propertyAnalysis: {
+          ...(data as any).propertyAnalysis,
+          __customDocumentEdits: customHtmlOverrides
+        }
       }
       
       const response = await fetch(`/api/session/${sessionId}`, {
@@ -683,7 +731,7 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
     setIsExporting(true)
     try {
       const mergedEdits = {
-        ...((data as any).customDocumentEdits || {}),
+        ...((data as any).customDocumentEdits || (data as any).propertyAnalysis?.__customDocumentEdits || {}),
         ...customHtmlOverrides
       }
 
@@ -778,6 +826,11 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
     },
     []
   )
+
+  const handleIframeLoad = useCallback(() => {
+    updateIframeHeight(previewFrameRef.current)
+    applyOverridesToDocument()
+  }, [applyOverridesToDocument, updateIframeHeight])
 
   return (
     <div className="bg-white shadow-lg rounded-lg overflow-hidden">
@@ -891,7 +944,7 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
           className="w-full border border-gray-200 rounded shadow-sm bg-white"
           style={{ minHeight: '1122px', width: '100%' }}
           title="Document preview"
-          onLoad={() => updateIframeHeight(previewFrameRef.current)}
+          onLoad={handleIframeLoad}
         />
         {isEditMode && toolbarState.visible && (
           <div

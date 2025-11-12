@@ -239,7 +239,9 @@ export async function POST(
     const valuationData = loadResult.valuationData
 
     const mergedCustomEdits = {
-      ...(valuationData.customDocumentEdits || {}),
+      ...(valuationData.customDocumentEdits ||
+        valuationData.propertyAnalysis?.__customDocumentEdits ||
+        {}),
       ...clientCustomEdits
     }
 

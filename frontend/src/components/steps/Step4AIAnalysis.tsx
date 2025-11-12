@@ -98,7 +98,7 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
     },
     {
       id: 'gis_mapping',
-      title: 'מפה GIS',
+      title: 'מפת GOVMAP',
       description: 'העלה מפה או הורד מפה ממשרד הממשלה לשרטוט על הנכס',
       icon: Map,
       active: true
