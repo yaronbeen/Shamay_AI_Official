@@ -563,11 +563,14 @@ const buildBaseCss = () => `
     border: 1px solid rgba(148, 163, 184, 0.35);
   }
   .page.cover {
+    position: relative;
           page-break-after: always;
     padding: 52px 44px;
     background: white;
     color:rgb(0, 0, 0);
     border: none;
+    min-height: ${PAGE_MIN_HEIGHT_MM}mm;
+    overflow: hidden;
   }
   .page-title {
     font-size: 18pt;
@@ -685,6 +688,26 @@ const buildBaseCss = () => `
     display: flex;
     flex-direction: column;
     gap: 18px;
+    padding-bottom: 90px;
+  }
+  .page-footer {
+    position: absolute;
+    bottom: 12px;
+    left: 36px;
+    right: 36px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding-top: 8px;
+    border-top: 1px solid rgba(148, 163, 184, 0.15);
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .page-footer img {
+    max-height: 50px;
+    max-width: 100%;
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
   p {
     margin: 0;
@@ -734,6 +757,8 @@ const buildBaseCss = () => `
     gap: 32px;
     align-items: center;
     text-align: center;
+    padding-bottom: 120px;
+    min-height: calc(100% - 120px);
   }
   .cover .title-primary {
     font-size: 26pt;
@@ -768,9 +793,40 @@ const buildBaseCss = () => `
     max-height: 60px;
   }
   .cover-footer {
+    position: absolute;
+    bottom: 32px;
+    left: 44px;
+    right: 44px;
     display: flex;
     justify-content: center;
     align-items: center;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .cover-footer img {
+    max-height: 90px;
+    max-width: 520px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .page-footer {
+    position: absolute;
+    bottom: 12px;
+    left: 36px;
+    right: 36px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding-top: 12px;
+    border-top: 1px solid rgba(148, 163, 184, 0.2);
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .page-footer img {
+    max-height: 60px;
+    max-width: 100%;
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
   .key-value {
     display: flex;
@@ -946,6 +1002,19 @@ const buildBaseCss = () => `
     .page.cover {
       border: none;
       padding: 20mm 22mm;
+      min-height: 297mm;
+    }
+    .cover-footer {
+      position: absolute;
+      bottom: 20mm;
+      left: 22mm;
+      right: 22mm;
+    }
+    .page-footer {
+      position: absolute;
+      bottom: 10mm;
+      left: 18mm;
+      right: 18mm;
     }
     thead {
       display: table-header-group;
@@ -1304,6 +1373,20 @@ export function generateDocumentHTML(
     : 'המידע על היתרי הבניה יעודכן לאחר עיון בתיק הבניין.'
 
   const buildingPermit: Record<string, any> = (data as any).building_permit || {}
+  
+  // Page header and footer components for regular pages
+  const pageHeader = companySettings?.companyLogo ? `
+    <div class="page-header-brand">
+      <img src="${companySettings.companyLogo}" alt="לוגו" style="max-height: 54px;" />
+    </div>
+  ` : ''
+  
+  const pageFooter = companySettings?.footerLogo ? `
+    <div class="page-footer">
+      <img src="${companySettings.footerLogo}" alt="פרטי קשר" />
+    </div>
+  ` : ''
+
   const buildingPermitRows: Array<{ label: string; value: string }> = [
     {
       label: 'מספר היתר',
@@ -1391,12 +1474,12 @@ export function generateDocumentHTML(
               </div>
       `
         })()}
+      </div>
         ${companySettings?.footerLogo ? `
           <div class="cover-footer">
-            <img src="${companySettings.footerLogo}" alt="פרטי קשר" style="max-height: 90px; max-width: 520px;" />
+          <img src="${companySettings.footerLogo}" alt="פרטי קשר" />
             </div>
                 ` : ''}
-          </div>
         <div class="page-number" data-page-number=""></div>
     </section>
   `
@@ -1405,11 +1488,7 @@ export function generateDocumentHTML(
   const introductionPage = `
     <section class="page">
       <div class="page-body">
-        ${companySettings?.companyLogo ? `
-          <div class="page-header-brand">
-            <img src="${companySettings.companyLogo}" alt="לוגו" style="max-height: 54px;" />
-            </div>
-        ` : ''}
+        ${pageHeader}
         <div class="section-block">
           <div class="sub-title">${LOCKED_HEBREW_TEXT.coverSubtitle}</div>
           <p>${address}</p>
@@ -1441,6 +1520,7 @@ export function generateDocumentHTML(
           ${data.buildingPermitNumber ? `<sup>2</sup> עפ"י מדידה מתוך תכנית היתר בניה מס' ${data.buildingPermitNumber} מיום ${formatDateNumeric(data.buildingPermitDate || undefined)}.` : ''}
                 </p>
       </div>
+      ${pageFooter}
         <div class="page-number" data-page-number=""></div>
     </section>
   `
@@ -1450,6 +1530,7 @@ export function generateDocumentHTML(
   const sectionOne = `
     <section class="page">
       <div class="page-body">
+        ${pageHeader}
         <div class="chapter-title">${LOCKED_HEBREW_TEXT.chapter1Title}</div>
         <div>
           <div class="sub-title">1.1 תיאור השכונה, גבולותיה, מאפייניה וסביבתה</div>
@@ -1546,6 +1627,7 @@ export function generateDocumentHTML(
                 </div>
               ` : ''}
       </div>
+      ${pageFooter}
         <div class="page-number" data-page-number=""></div>
     </section>
   `
@@ -1643,6 +1725,7 @@ export function generateDocumentHTML(
   const sectionTwo = `
     <section class="page">
       <div class="page-body">
+        ${pageHeader}
         <div class="chapter-title">${LOCKED_HEBREW_TEXT.chapter2Title}</div>
         <p class="muted">להלן סקירה תמציתית של המצב המשפטי החל על המקרקעין נשוא חוות הדעת, אשר אינה מהווה תחליף לעיון מקיף במסמכים המשפטיים.</p>
         <div class="section-block">
@@ -1749,6 +1832,7 @@ export function generateDocumentHTML(
           </table>
         ` : ''}
           </div>
+      ${pageFooter}
         <div class="page-number" data-page-number=""></div>
       </section>
   `
@@ -1757,6 +1841,7 @@ export function generateDocumentHTML(
   const planningSection = `
     <section class="page">
       <div class="page-body">
+        ${pageHeader}
         <div class="chapter-title">${LOCKED_HEBREW_TEXT.chapter3Title}</div>
         
         <div class="sub-title">3.1 ריכוז תכניות בניין עיר רלוונטיות</div>
@@ -1833,6 +1918,7 @@ export function generateDocumentHTML(
         <div class="sub-title">3.4 זיהום קרקע</div>
         <p>${LOCKED_HEBREW_TEXT.contaminationDefault}</p>
                 </div>
+      ${pageFooter}
         <div class="page-number" data-page-number=""></div>
     </section>
   `
@@ -1841,6 +1927,7 @@ export function generateDocumentHTML(
   const considerationsSection = `
     <section class="page">
       <div class="page-body">
+        ${pageHeader}
         <div class="chapter-title">${LOCKED_HEBREW_TEXT.chapter4Title}</div>
         <p>${LOCKED_HEBREW_TEXT.considerationsIntro}</p>
         <div class="section-block">
@@ -1875,6 +1962,7 @@ export function generateDocumentHTML(
               </ul>
             </div>
           </div>
+      ${pageFooter}
         <div class="page-number" data-page-number=""></div>
       </section>
   `
@@ -1887,6 +1975,7 @@ export function generateDocumentHTML(
   const valuationSection = `
     <section class="page">
       <div class="page-body">
+        ${pageHeader}
         <div class="chapter-title">${LOCKED_HEBREW_TEXT.chapter5Title}</div>
         
         <div class="sub-title">5.1 נתוני השוואה</div>
@@ -1939,6 +2028,8 @@ export function generateDocumentHTML(
               </tbody>
             </table>
         </div>
+      </div>
+      ${pageFooter}
         <div class="page-number" data-page-number=""></div>
       </section>
   `
@@ -1949,6 +2040,7 @@ export function generateDocumentHTML(
   const summarySection = `
     <section class="page">
       <div class="page-body">
+        ${pageHeader}
         <div class="chapter-title">${LOCKED_HEBREW_TEXT.chapter6Title}</div>
         
         <div class="valuation-summary section-block">
@@ -1981,11 +2073,15 @@ export function generateDocumentHTML(
           `}
         </div>
       </div>
+      ${pageFooter}
+      <div class="page-number" data-page-number=""></div>
     </section>
   `
 
   const css = buildBaseCss()
-  const runtimeScripts = isPreview
+  
+  // Runtime scripts for preview mode
+  const previewScripts = isPreview
     ? [pageNumberScript, autoPaginateScript].join('\n')
     : ''
 
@@ -2000,7 +2096,7 @@ export function generateDocumentHTML(
       ${valuationSection}
       ${summarySection}
     </div>
-    ${runtimeScripts}
+    ${previewScripts}
     ${(() => {
       if (!customEdits || Object.keys(customEdits).length === 0) {
         return ''
@@ -2041,7 +2137,147 @@ export function generateDocumentHTML(
     })()}
   `
 
-  let fullHtml = `
+  // PDF export CSS - clean structure for Puppeteer's header/footer system
+  const pdfExportCss = !isPreview ? `
+    /* PDF export uses Puppeteer's displayHeaderFooter system in export.js */
+    /* This CSS just ensures clean HTML structure for extraction */
+    
+    @page { 
+      size: A4; 
+      margin: 0; 
+    }
+    
+    body {
+      margin: 0;
+      padding: 0;
+    }
+    
+    /* Cover page: standalone, rendered separately */
+    .cover {
+      position: relative;
+      background: white;
+    }
+    
+    /* Content pages: extracted and rendered with Puppeteer header/footer */
+    .pages {
+      position: relative;
+    }
+    
+    /* Flatten page wrappers for natural content flow */
+    .pages main .page {
+      padding: 0 !important;
+      margin: 0 !important;
+      border: none !important;
+      background: transparent !important;
+    }
+    
+    .pages main .page-body {
+      padding: 0 16px !important;
+    }
+    
+    /* Hide inline header/footer elements (not needed with Puppeteer system) */
+    .pages main .page-header-brand,
+    .pages main .page-footer,
+    .pages main .page-number {
+      display: none !important;
+    }
+  ` : ''
+  
+  // For PDF export, restructure HTML into two sections
+  const customEditsScript = (() => {
+    if (!customEdits || Object.keys(customEdits).length === 0) {
+      return ''
+    }
+    const editsJson = JSON.stringify(customEdits)
+    return `
+      <script>
+        (function() {
+          const applyEdits = () => {
+            try {
+              const edits = ${editsJson};
+              Object.entries(edits).forEach(([selector, html]) => {
+                try {
+                  const elements = document.querySelectorAll(selector);
+                  if (!elements.length) {
+                    return;
+                  }
+                  elements.forEach((element) => {
+                    element.innerHTML = html;
+                  });
+                } catch (selectorError) {
+                  console.warn('Failed to apply custom edit for selector:', selector, selectorError);
+                }
+              });
+            } catch (error) {
+              console.error('Error applying custom document edits:', error);
+            }
+          };
+          
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', applyEdits);
+          } else {
+            applyEdits();
+          }
+        })();
+      </script>
+    `
+  })()
+  
+  let fullHtml = ''
+  if (!isPreview) {
+    // PDF export: Cover + print-break + Pages section with fixed header/footer
+    const pdfHeaderFooter = `
+      ${companySettings?.companyLogo ? `<header><img src="${companySettings.companyLogo}" alt="Company Logo" /></header>` : ''}
+      ${companySettings?.footerLogo ? `<footer><img src="${companySettings.footerLogo}" alt="Footer Logo" /></footer>` : ''}
+    `
+    
+    fullHtml = `
+      <!DOCTYPE html>
+      <html dir="rtl" lang="he">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <style>${css}${pdfExportCss}</style>
+        </head>
+        <body>
+          <!--
+            STRUCTURE MATCHES 6216.6.25.pdf REFERENCE:
+            
+            1. Cover page: standalone, uses its own artwork/logos
+               - No injected header/footer (hidden via CSS)
+               - .page.cover has page-break-after: always
+            
+            2. All following pages: fixed header + footer on every page
+               - Header: fixed at top (60px height)
+               - Footer: fixed at bottom (60px height)
+               - Content: flows in <main> with 80px top/bottom margins
+          -->
+          
+          <!-- COVER PAGE (uses its own artwork/logos only) -->
+          <section class="cover">
+            ${headerBlock}
+          </section>
+          
+          <!-- ALL SUBSEQUENT PAGES (with fixed header/footer) -->
+          <section class="pages">
+            ${pdfHeaderFooter}
+            <main>
+              ${introductionPage}
+              ${sectionOne}
+              ${sectionTwo}
+              ${planningSection}
+              ${considerationsSection}
+              ${valuationSection}
+              ${summarySection}
+            </main>
+          </section>
+          ${customEditsScript}
+      </body>
+      </html>
+    `
+  } else {
+    // Preview mode: Keep existing structure
+    fullHtml = `
     <!DOCTYPE html>
     <html dir="rtl" lang="he">
       <head>
@@ -2054,6 +2290,7 @@ export function generateDocumentHTML(
     </body>
     </html>
   `
+  }
   
   // Apply custom edits from user
   Object.entries(customEdits).forEach(([selector, content]) => {
