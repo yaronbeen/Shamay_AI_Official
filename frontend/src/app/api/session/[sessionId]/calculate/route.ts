@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { spawn } from 'child_process'
 
+// Force this route to be dynamic (runtime-only) to avoid build-time issues
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 // In-memory storage for sessions (use Redis in production)
 const sessions = new Map()
 
