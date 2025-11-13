@@ -463,8 +463,12 @@ router.post('/pdf', async (req, res) => {
       throw new Error('Could not extract cover or content sections from HTML');
     }
     
+    // Extract custom edits script and remove it from content
     const customEditsScriptMatch = contentMatch[1].match(/(<script>[\s\S]*?window\.__customEditsApplied[\s\S]*?<\/script>)/);
     const customEditsScript = customEditsScriptMatch ? customEditsScriptMatch[1] : '';
+    
+    // Remove custom edits script from content to avoid it being in the table
+    const cleanContent = contentMatch[1].replace(/(<script>[\s\S]*?window\.__customEditsApplied[\s\S]*?<\/script>)/, '');
     
     const coverHtml = `
       <!DOCTYPE html>
@@ -562,12 +566,18 @@ router.post('/pdf', async (req, res) => {
             ${css}
             @page { 
               size: A4; 
-              margin: 15mm;
+              margin: 15mm 15mm 20mm 15mm;
+              @bottom-left {
+                content: "עמוד " counter(page) " מתוך " counter(pages);
+                font-size: 9pt;
+                color: #4b5563;
+                font-family: "Noto Sans Hebrew", "Rubik", "Arial Hebrew", Arial, sans-serif;
+              }
             }
             body { 
               margin: 0; 
               padding: 0; 
-              direction: rtl; 
+              direction: rtl;
             }
             /* Table-based layout for headers/footers */
             .page-table {
@@ -613,10 +623,24 @@ router.post('/pdf', async (req, res) => {
               page-break-inside: auto !important; 
             }
             .page-body { 
-              padding: 0 8px !important; 
+              padding: 0 8px !important;
+              margin: 0 !important;
             }
             .page-header-brand, .page-footer, .page-number { 
-              display: none !important; 
+              display: none !important;
+              height: 0 !important;
+              margin: 0 !important;
+              padding: 0 !important;
+            }
+            /* Ensure no empty pages from .page sections */
+            .page:empty,
+            .page-body:empty {
+              display: none !important;
+            }
+            /* Remove any min-height from page sections */
+            .page {
+              min-height: 0 !important;
+              height: auto !important;
             }
             /* CRITICAL: Ensure content breaks to new pages, never gets cut */
             * {
@@ -896,12 +920,13 @@ router.post('/pdf', async (req, res) => {
               <tr>
                 <td>
                   <div class="content-wrapper">
-                    ${contentMatch[1]}
+                    ${cleanContent}
                   </div>
                 </td>
               </tr>
             </tbody>
           </table>
+          ${customEditsScript}
         </body>
       </html>
     `;
