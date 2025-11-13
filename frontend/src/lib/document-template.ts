@@ -819,8 +819,8 @@ const buildBaseCss = () => `
     gap: 32px;
     align-items: center;
     text-align: center;
-    padding-bottom: 120px;
-    min-height: calc(100% - 120px);
+    padding-bottom: 150px;
+    min-height: calc(100% - 150px);
   }
   .cover .title-primary {
     font-size: 26pt;
@@ -856,7 +856,7 @@ const buildBaseCss = () => `
   }
   .cover-footer {
     position: absolute;
-    bottom: 32px;
+    bottom: 24px;
     left: 44px;
     right: 44px;
     display: flex;
@@ -1068,7 +1068,7 @@ const buildBaseCss = () => `
     }
     .cover-footer {
       position: absolute;
-      bottom: 20mm;
+      bottom: 15mm;
       left: 22mm;
       right: 22mm;
     }
@@ -1543,7 +1543,6 @@ export function generateDocumentHTML(
           <img src="${companySettings.footerLogo}" alt="פרטי קשר" />
             </div>
                 ` : ''}
-        <div class="page-number" data-page-number=""></div>
     </section>
   `
 
