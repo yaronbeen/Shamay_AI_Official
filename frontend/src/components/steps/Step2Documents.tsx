@@ -145,9 +145,12 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
                   writable: false
                 })
                 
-                // For images, set preview and previewReady if we have a valid URL
+                // CRITICAL FIX: For images, set preview and previewReady from URL
+                // This ensures images show up after page refresh
                 const isImageType = upload.type === 'building_image' || upload.type === 'interior_image'
                 const hasValidUrl = uploadUrl && uploadUrl.trim().length > 0 && uploadUrl !== 'data:,'
+                
+                console.log(`📁 Loading upload ${upload.id}: type=${upload.type}, hasValidUrl=${hasValidUrl}, url=${uploadUrl?.substring(0, 50)}...`)
                 
                 return {
                   id: upload.id,
@@ -156,6 +159,7 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
                   status: upload.status || 'completed' as const, // Use status from DB, fallback to 'completed'
                   progress: upload.status === 'processing' ? 50 : (upload.status === 'uploading' ? 25 : 100),
                   url: uploadUrl,
+                  // CRITICAL: Set preview and previewReady for images so they display after refresh
                   preview: isImageType && hasValidUrl ? uploadUrl : undefined,
                   previewReady: isImageType && hasValidUrl ? true : false,
                   extractedData: upload.extractedData || {},
@@ -171,11 +175,21 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
                 }
               }))
               
+              console.log(`📁 Loaded ${sessionUploads.length} uploads from session`)
+              console.log(`📁 Image uploads:`, sessionUploads.filter(u => u.type === 'building_image' || u.type === 'interior_image').map(u => ({
+                id: u.id,
+                type: u.type,
+                hasPreview: !!u.preview,
+                previewReady: u.previewReady,
+                url: u.url?.substring(0, 50)
+              })))
+              
               setUploads(sessionUploads)
               
-              // Update image data after loading from session to ensure proper initialization
-              // Use a setTimeout to ensure state is updated before calling updateImageData
+              // CRITICAL: Initialize image data after loading from session
+              // Use setTimeout to ensure state is updated before calling updateImageData
               setTimeout(() => {
+                console.log('📁 Initializing image data from session uploads...')
                 updateImageData(sessionUploads)
               }, 100)
             } else {
@@ -766,27 +780,49 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
       
       // Mark as completed with all metadata from API - no need to generate URL ourselves
       setUploads(prev => {
-        const updated = prev.map(u => 
-          u.id === upload.id ? { 
-            ...u, 
-            status: uploadEntry.status || 'completed' as const,
-            url: uploadEntry.url, // Always use the URL from API response
-            // Add all metadata from the API response
-            name: uploadEntry.name || u.file.name,
-            fileName: uploadEntry.fileName || u.file.name,
-            path: uploadEntry.path || '',
-            size: uploadEntry.size || u.file.size,
-            mimeType: uploadEntry.mimeType || u.file.type,
-            uploadedAt: uploadEntry.uploadedAt || new Date().toISOString(),
-            extractedData: uploadEntry.extractedData || result.extractedData || { extracted: true }
-          } : u
-        )
+        const updated = prev.map(u => {
+          if (u.id === upload.id) {
+            const actualUrl = uploadEntry.url
+            const isImageType = upload.type === 'building_image' || upload.type === 'interior_image'
+            
+            console.log(`✅ Marking upload as completed:`, {
+              id: u.id,
+              type: upload.type,
+              isImageType,
+              uploadEntryUrl: uploadEntry.url,
+              actualUrl,
+              previousPreview: u.preview?.substring(0, 50)
+            })
+            
+            return {
+              ...u, 
+              status: uploadEntry.status || 'completed' as const,
+              url: actualUrl,
+              // CRITICAL: For images, update preview to use the real URL (not base64)
+              preview: isImageType ? actualUrl : u.preview,
+              previewReady: isImageType ? true : u.previewReady,
+              // Add all metadata from the API response
+              name: uploadEntry.name || u.file.name,
+              fileName: uploadEntry.fileName || u.file.name,
+              path: uploadEntry.path || '',
+              size: uploadEntry.size || u.file.size,
+              mimeType: uploadEntry.mimeType || u.file.type,
+              uploadedAt: uploadEntry.uploadedAt || new Date().toISOString(),
+              extractedData: uploadEntry.extractedData || result.extractedData || { extracted: true }
+            }
+          }
+          return u
+        })
         
         // Update image data after completion
         if (upload.type === 'building_image' || upload.type === 'interior_image') {
+          console.log('🖼️ Calling updateImageData after upload completion')
           const processedUploads = updateImageData(updated)
           if (processedUploads) {
+            console.log('🖼️ updateImageData returned processed uploads')
             return processedUploads
+          } else {
+            console.log('🖼️ updateImageData returned nothing, using updated')
           }
         }
         
@@ -808,7 +844,19 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
   const updateImageData = (currentUploads?: DocumentUpload[]): DocumentUpload[] | undefined => {
     const uploadsToUse = currentUploads || uploads
     
-    // STRICT FILTER: Only include images with valid previews AND status
+    console.log('🖼️ updateImageData called with', uploadsToUse.length, 'uploads')
+    const imageUploads = uploadsToUse.filter(u => u.type === 'building_image' || u.type === 'interior_image')
+    console.log('🖼️ Found', imageUploads.length, 'image uploads:', imageUploads.map(u => ({
+      id: u.id,
+      type: u.type,
+      status: u.status,
+      previewReady: u.previewReady,
+      hasPreview: !!u.preview,
+      previewIsData: u.preview?.startsWith('data:'),
+      previewStart: u.preview?.substring(0, 50)
+    })))
+    
+    // STRICT FILTER: Only include images with valid previews AND completed status
     const completedImages = uploadsToUse.filter((u) => {
       const isImageType = u.type === 'building_image' || u.type === 'interior_image'
       const hasPreviewReady = u.previewReady === true
@@ -817,18 +865,24 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
       
       return isImageType && hasPreviewReady && hasValidPreview && isCompleted
     })
+    
+    console.log('🖼️ After filter:', completedImages.length, 'completed images')
 
     if (completedImages.length === 0) {
+      console.log('🖼️ No completed images, clearing image data')
       updateData({ propertyImages: [], selectedImagePreview: null, interiorImages: [] })
       return currentUploads
     }
 
-    // Double-check: filter again to ensure no empty strings slip through
+    // Double-check: filter again to ensure no empty strings or base64-only slip through
     const validUploads = completedImages.filter(
       (u) => typeof u.preview === 'string' && u.preview.trim().length > 0 && u.preview !== 'data:,'
     )
+    
+    console.log('🖼️ After validation:', validUploads.length, 'valid uploads')
 
     if (validUploads.length === 0) {
+      console.log('🖼️ No valid uploads after validation')
       updateData({ propertyImages: [], selectedImagePreview: null, interiorImages: [] })
       return currentUploads
     }
@@ -1130,20 +1184,42 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
       console.log('💾 Saving uploads to session:', uploads.length, 'uploads')
       
       // Filter out UI-only fields before saving to database
-      const uploadsForDB = uploads.map(upload => ({
-        id: upload.id,
-        type: upload.type,
-        name: upload.file?.name || (upload as any).name,
-        fileName: (upload as any).fileName || upload.file?.name,
-        path: (upload as any).path || '',
-        size: (upload as any).size || upload.file?.size || 0,
-        mimeType: (upload as any).mimeType || upload.file?.type,
-        status: upload.status,
-        error: upload.error, // Include error message if any
-        url: (upload as any).url || upload.preview,
-        uploadedAt: (upload as any).uploadedAt || new Date().toISOString(),
-        extractedData: upload.extractedData
-      }))
+      const uploadsForDB = uploads.map(upload => {
+        // CRITICAL: Get the real URL, not base64 preview
+        const uploadUrl = (upload as any).url
+        const uploadPreview = upload.preview
+        
+        // NEVER save base64 previews to database - they're huge and temporary
+        let finalUrl = uploadUrl
+        if (!finalUrl && uploadPreview && !uploadPreview.startsWith('data:')) {
+          // Only use preview if it's a real URL, not a base64 string
+          finalUrl = uploadPreview
+        }
+        
+        console.log(`💾 Saving upload ${upload.id}:`, {
+          type: upload.type,
+          hasUrl: !!uploadUrl,
+          hasPreview: !!uploadPreview,
+          previewIsBase64: uploadPreview?.startsWith('data:'),
+          finalUrl: finalUrl?.substring(0, 80)
+        })
+        
+        return {
+          id: upload.id,
+          type: upload.type,
+          name: upload.file?.name || (upload as any).name,
+          fileName: (upload as any).fileName || upload.file?.name,
+          path: (upload as any).path || '',
+          size: (upload as any).size || upload.file?.size || 0,
+          mimeType: (upload as any).mimeType || upload.file?.type,
+          status: upload.status,
+          error: upload.error,
+          url: finalUrl, // CRITICAL: Only save real URLs, never base64
+          uploadedAt: (upload as any).uploadedAt || new Date().toISOString(),
+          extractedData: upload.extractedData,
+          isSelected: upload.isSelected || false
+        }
+      })
       
       // Only update uploads, preserve other data like extractedData
       console.log('💾 Updating parent data with uploads only, preserving extractedData')
