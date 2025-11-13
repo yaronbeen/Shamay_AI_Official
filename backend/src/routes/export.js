@@ -76,34 +76,25 @@ const FileStorageHelper = {
  */
 async function fetchImageViaHttp(imageUrl) {
   return new Promise((resolve, reject) => {
-    console.log(`🌐 [HTTP FETCH] Starting fetch for image source`);
     const client = imageUrl.startsWith('https://') ? https : http;
-    const timeout = 30000; // 30 second timeout (increased for large images)
+    const timeout = 30000;
     
     const request = client.get(imageUrl, (response) => {
-      console.log(`🌐 [HTTP FETCH] Response status: ${response.statusCode}`);
-      console.log(`🌐 [HTTP FETCH] Content-Type: ${response.headers['content-type']}`);
-      console.log(`🌐 [HTTP FETCH] Content-Length: ${response.headers['content-length'] || 'unknown'}`);
-      
       if (response.statusCode !== 200) {
         reject(new Error(`Failed to fetch image: ${response.statusCode} ${response.statusMessage}`));
         return;
       }
 
       const chunks = [];
-      let totalSize = 0;
       response.on('data', (chunk) => {
         chunks.push(chunk);
-        totalSize += chunk.length;
       });
       
       response.on('end', () => {
         const buffer = Buffer.concat(chunks);
         const base64 = buffer.toString('base64');
         const contentType = response.headers['content-type'] || 'image/png';
-        console.log(`✅ [HTTP FETCH] Successfully fetched: ${Math.round(buffer.length / 1024)}KB, type: ${contentType}`);
         const dataUrl = `data:${contentType};base64,${base64}`;
-        console.log(`✅ [HTTP FETCH] Base64 data URL length: ${Math.round(dataUrl.length / 1024)}KB`);
         resolve(dataUrl);
       });
       
@@ -113,12 +104,10 @@ async function fetchImageViaHttp(imageUrl) {
     });
 
     request.on('error', (err) => {
-      console.error(`❌ [HTTP FETCH] Request error:`, err.message);
       reject(new Error(`HTTP request failed: ${err.message}`));
     });
 
     request.setTimeout(timeout, () => {
-      console.error(`❌ [HTTP FETCH] Request timeout after ${timeout}ms`);
       request.destroy();
       reject(new Error(`HTTP request timed out after ${timeout}ms`));
     });
@@ -161,7 +150,6 @@ function buildAbsoluteUrl(originalUrl) {
     parsed.pathname = encodePathSegments(parsed.pathname);
     return parsed.toString();
   } catch (error) {
-    console.warn(`⚠️ [CONVERT] Failed to build absolute URL for ${originalUrl}:`, error.message);
     return encodeURI(originalUrl);
   }
 }
@@ -170,9 +158,7 @@ const base64Cache = new Map();
 
 async function convertUrlToBase64(imageUrl, sessionId, userId = 'dev-user-id') {
   try {
-    // If it's already a base64 data URL, return as-is
     if (imageUrl.startsWith('data:image/')) {
-      console.log(`✅ Image already in base64 format`);
       return imageUrl;
     }
 
@@ -181,9 +167,14 @@ async function convertUrlToBase64(imageUrl, sessionId, userId = 'dev-user-id') {
     }
 
     if (/^https?:\/\/.+\.blob\.vercel-storage\.com\//.test(imageUrl)) {
-      console.log(`✅ Blob storage image detected, leaving URL as-is`);
-      base64Cache.set(imageUrl, imageUrl);
-      return imageUrl;
+      try {
+        const base64Image = await fetchImageViaHttp(imageUrl);
+        base64Cache.set(imageUrl, base64Image);
+        return base64Image;
+      } catch (error) {
+        base64Cache.set(imageUrl, imageUrl);
+        return imageUrl;
+      }
     }
 
     let workingUrl = imageUrl;
@@ -191,91 +182,73 @@ async function convertUrlToBase64(imageUrl, sessionId, userId = 'dev-user-id') {
       try {
         const parsed = new URL(imageUrl);
         const pathIncludesFiles = parsed.pathname.includes('/api/files/');
-        if (!pathIncludesFiles) {
+        
+        if (!pathIncludesFiles && !parsed.hostname.includes('localhost') && !parsed.hostname.includes('127.0.0.1')) {
+          try {
+            const base64Image = await fetchImageViaHttp(imageUrl);
+            base64Cache.set(imageUrl, base64Image);
+            return base64Image;
+          } catch (error) {
+            base64Cache.set(imageUrl, imageUrl);
+            return imageUrl;
+          }
+        }
+        
+        workingUrl = `${parsed.pathname}${parsed.search || ''}`;
+      } catch (parseError) {
+        try {
+          const base64Image = await fetchImageViaHttp(imageUrl);
+          base64Cache.set(imageUrl, base64Image);
+          return base64Image;
+        } catch (error) {
           base64Cache.set(imageUrl, imageUrl);
           return imageUrl;
         }
-        workingUrl = `${parsed.pathname}${parsed.search || ''}`;
-        console.log(`🌐 [CONVERT] Normalized absolute URL to relative API path: ${workingUrl}`);
-      } catch (parseError) {
-        console.warn(`⚠️ [CONVERT] Failed to parse absolute URL "${imageUrl}", leaving as-is`);
-        base64Cache.set(imageUrl, imageUrl);
-        return imageUrl;
       }
     }
-
-    console.log(`🔄 Converting image source to base64`);
 
     let filename = null;
     
-    // Handle API route URLs (e.g., /api/files/sessionId/filename or /api/files/users/userId/logos/filename)
     if (workingUrl.includes('/api/files/')) {
-      // Remove query string and hash if present
       const cleanUrl = workingUrl.split('?')[0].split('#')[0];
       const urlParts = cleanUrl.split('/api/files/')[1].split('/');
       
-      console.log(`📋 [CONVERT] URL parts:`, urlParts);
-      
       if (urlParts.length > 1) {
-        // Check if this is a logo path FIRST (users/userId/logos/filename)
         if (urlParts[0] === 'users' && urlParts.length >= 4 && urlParts[2] === 'logos') {
-          // This is a logo: users/userId/logos/filename
-          // The filename is everything after /logos/ (may contain spaces, encoded as %20)
-          filename = urlParts.slice(3).join('/'); // Join all parts after /logos/ in case filename has spaces
-          console.log(`📋 [CONVERT] Logo detected from URL parts: filename="${filename}"`);
+          filename = urlParts.slice(3).join('/');
         } else {
-          // Regular file: sessionId/filename or users/userId/sessionId/filename
         filename = urlParts[urlParts.length - 1];
-          console.log(`📋 [CONVERT] Regular file detected: filename="${filename}"`);
         }
       } else {
         filename = urlParts[0];
-        console.log(`📋 [CONVERT] Single part URL: filename="${filename}"`);
       }
       
-      // Decode URL-encoded filename (handle spaces, special chars)
       if (filename) {
         filename = decodeURIComponent(filename.replace(/\+/g, ' '));
-        console.log(`📋 [CONVERT] Decoded filename: "${filename}"`);
       }
     }
-    // Handle local file paths (e.g., /uploads/session/file.png or ./uploads/...)
     else if (workingUrl.includes('/uploads/') || workingUrl.includes('uploads/')) {
       const urlParts = workingUrl.split('/');
       filename = urlParts[urlParts.length - 1];
       
-      // Handle query strings or hash fragments
       if (filename.includes('?')) {
         filename = filename.split('?')[0];
       }
       if (filename.includes('#')) {
         filename = filename.split('#')[0];
       }
-      
-      console.log(`📋 Extracted filename from uploads path: ${filename}`);
     }
-    // Handle relative URLs or other formats
     else {
-      // Try to extract filename from any URL
       const urlParts = workingUrl.split('/');
       filename = urlParts[urlParts.length - 1];
       if (filename.includes('?')) filename = filename.split('?')[0];
       if (filename.includes('#')) filename = filename.split('#')[0];
-      console.log(`📋 Attempting to use filename: ${filename}`);
     }
 
     if (!filename) {
       throw new Error('Could not extract filename from URL');
     }
 
-    // Check if this is a logo/signature URL (users/userId/logos/filename)
-    // Handle both /api/files/users/userId/logos/filename and direct blob URLs
-    console.log(`🔍 [CONVERT] Checking if image source is a logo`);
-    
-    // Try to match logo URL pattern
-    // URL format: /api/files/users/{userId}/logos/{filename}
-    // filename may contain spaces, encoded as %20, and special chars
-    // We need to capture everything after /logos/ until the end (or query string)
     const logoMatch = imageUrl.match(/\/api\/files\/users\/([^\/]+)\/logos\/(.+?)(?:\?|$|#)/);
     let possiblePaths = [];
     let isLogoFile = false;
@@ -283,52 +256,33 @@ async function convertUrlToBase64(imageUrl, sessionId, userId = 'dev-user-id') {
     let effectiveFilename = filename;
     
     if (logoMatch) {
-      // This is a logo/signature file - look in users/{userId}/logos/ directory
       isLogoFile = true;
       const userIdFromUrl = logoMatch[1];
       let logoFilename = logoMatch[2];
       
-      // Decode URL-encoded filename (handle spaces, special chars)
-      // Spaces in URLs are encoded as %20 or +, so we decode both
       logoFilename = decodeURIComponent(logoFilename.replace(/\+/g, ' '));
       
-      // Use userId from URL or fallback to provided userId parameter
       effectiveUserId = userIdFromUrl || userId;
       effectiveFilename = logoFilename;
       
-      console.log(`📋 [CONVERT] Logo/signature detected: userId=${effectiveUserId}, filename="${logoFilename}"`);
-      
-      // THE EXACT PATH WHERE FILES ARE STORED:
-      // /Users/shalom.m/Documents/Code/Shamay-slow/frontend/uploads/users/dev-user-id/logos/{filename}
       const exactPath = `/Users/shalom.m/Documents/Code/Shamay-slow/frontend/uploads/users/${effectiveUserId}/logos/${logoFilename}`;
       
-      // Build paths - START WITH THE EXACT PATH FIRST
       possiblePaths = [
-        // PRIMARY: The exact path where files are stored
         exactPath,
-        // Fallbacks for different execution contexts
         path.join(process.cwd(), 'frontend', 'uploads', 'users', effectiveUserId, 'logos', logoFilename),
         path.join(process.cwd(), 'uploads', 'users', effectiveUserId, 'logos', logoFilename),
         path.join(__dirname, '../../../frontend/uploads', 'users', effectiveUserId, 'logos', logoFilename),
         path.join(__dirname, '../../frontend/uploads', 'users', effectiveUserId, 'logos', logoFilename),
       ];
       
-      console.log(`📋 [CONVERT] Logo paths to check: ${possiblePaths.length} paths`);
-      possiblePaths.forEach((p, i) => console.log(`   ${i + 1}. ${p}`));
-      
-      // Also try to find logo files by type prefix (company-, footer-, signature-)
-      // in case the filename doesn't match exactly (e.g., spaces or special chars)
       const logoType = logoFilename.startsWith('company-') ? 'company' : 
                        logoFilename.startsWith('footer-') ? 'footer' : 
                        logoFilename.startsWith('signature-') ? 'signature' : null;
       
       if (logoType) {
-        // THE EXACT BASE DIRECTORY WHERE LOGOS ARE STORED:
         const exactBaseDir = `/Users/shalom.m/Documents/Code/Shamay-slow/frontend/uploads/users/${effectiveUserId}/logos`;
         const baseDirs = [
-          // PRIMARY: The exact directory
           exactBaseDir,
-          // Fallbacks
           path.join(process.cwd(), 'frontend', 'uploads', 'users', effectiveUserId, 'logos'),
           path.join(process.cwd(), 'uploads', 'users', effectiveUserId, 'logos'),
           path.join(__dirname, '../../../frontend/uploads', 'users', effectiveUserId, 'logos'),
@@ -340,7 +294,6 @@ async function convertUrlToBase64(imageUrl, sessionId, userId = 'dev-user-id') {
               const files = await fs.readdir(baseDir);
               const matchingFiles = files.filter(f => f.startsWith(`${logoType}-`));
               if (matchingFiles.length > 0) {
-                // Use the most recent logo file of this type
                 const sortedFiles = matchingFiles.sort((a, b) => {
                   const aTime = a.match(/\d+/)?.[0] || '0';
                   const bTime = b.match(/\d+/)?.[0] || '0';
@@ -348,24 +301,16 @@ async function convertUrlToBase64(imageUrl, sessionId, userId = 'dev-user-id') {
                 });
                 const latestFile = sortedFiles[0];
                 const latestPath = path.join(baseDir, latestFile);
-                possiblePaths.unshift(latestPath); // Add to beginning for priority
-                console.log(`📋 [CONVERT] Found latest ${logoType} logo: ${latestFile} at ${baseDir}`);
+                possiblePaths.unshift(latestPath);
               }
             }
           } catch (err) {
-            // Ignore - continue to next path
+            // Ignore
           }
         }
       }
     } else {
-      // Regular file - look in sessionId directory
-      console.log(`📋 [CONVERT] Regular file detected: sessionId=${sessionId}, filename="${filename}"`);
-      
-      // Use unified FileStorageHelper to get all possible paths
       possiblePaths = FileStorageHelper.getPossiblePaths(sessionId, filename, userId);
-      
-      console.log(`📋 [CONVERT] File paths to check: ${possiblePaths.length} paths`);
-      possiblePaths.forEach((p, i) => console.log(`   ${i + 1}. ${p}`));
     }
 
     let filePath = null;
@@ -373,27 +318,19 @@ async function convertUrlToBase64(imageUrl, sessionId, userId = 'dev-user-id') {
       try {
         await fs.access(testPath);
         filePath = testPath;
-        console.log(`✅ [CONVERT] Found file at: ${filePath}`);
         break;
       } catch (err) {
         // Continue to next path
-        console.log(`  ❌ [CONVERT] Not found: ${testPath}`);
       }
     }
 
     if (!filePath) {
-      console.warn(`⚠️ [CONVERT] File not found locally for image source`);
-      console.warn(`📁 [CONVERT] Searched ${possiblePaths.length} paths:`);
-      possiblePaths.forEach((p, i) => console.warn(`   ${i + 1}. ${p}`));
-
       const absoluteUrl = buildAbsoluteUrl(imageUrl);
       base64Cache.set(imageUrl, absoluteUrl);
       return absoluteUrl;
     }
 
-    console.log(`📁 [CONVERT] Reading file from: ${filePath}`);
     const fileBuffer = await fs.readFile(filePath);
-    const fileSizeKb = Math.round(fileBuffer.length / 1024);
 
     const ext = path.extname(effectiveFilename || filename).toLowerCase();
     let mimeType = 'image/png';
@@ -402,14 +339,10 @@ async function convertUrlToBase64(imageUrl, sessionId, userId = 'dev-user-id') {
     else if (ext === '.webp') mimeType = 'image/webp';
 
     const dataUrl = `data:${mimeType};base64,${fileBuffer.toString('base64')}`;
-    console.log(`✅ [CONVERT] Inlined ${isLogoFile ? 'logo' : 'non-logo'} image as base64 (${Math.round(dataUrl.length / 1024)}KB)`);
     base64Cache.set(imageUrl, dataUrl);
     return dataUrl;
   } catch (error) {
-    console.error(`❌ Failed to convert image source to base64`, error.message);
-    console.error(`   Error stack:`, error.stack);
-    // Return original URL as fallback - but log warning
-    console.warn(`⚠️ Returning original URL - image may not appear in PDF`);
+    console.error(`Failed to convert image to base64:`, error.message);
     base64Cache.set(imageUrl, imageUrl);
     return imageUrl;
   }
@@ -419,23 +352,18 @@ async function convertUrlToBase64(imageUrl, sessionId, userId = 'dev-user-id') {
  * Convert all image URLs in HTML to base64
  */
 async function convertImageUrlsToBase64(htmlContent, sessionId, userId = 'dev-user-id') {
-  // Find all img tags with src attributes that are not base64
   const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
   const matches = [...htmlContent.matchAll(imgRegex)];
   
   if (matches.length === 0) {
-    console.log(`📸 No image tags found in HTML`);
     return htmlContent;
   }
-
-  console.log(`🔄 Found ${matches.length} image tag(s) to process`);
 
   const replacementTasks = matches.map(async (match) => {
     const fullTag = match[0];
     const imageUrl = match[1];
 
     if (imageUrl.startsWith('data:image/')) {
-      console.log(`  ✅ Already base64, skipping`);
       return null;
     }
 
@@ -443,7 +371,6 @@ async function convertImageUrlsToBase64(htmlContent, sessionId, userId = 'dev-us
       const convertedSource = await convertUrlToBase64(imageUrl, sessionId, userId);
 
       if (convertedSource === imageUrl) {
-        console.log(`  ⏭️  Conversion returned original URL - leaving src unchanged`);
         return null;
       }
 
@@ -454,31 +381,22 @@ async function convertImageUrlsToBase64(htmlContent, sessionId, userId = 'dev-us
       );
 
       if (updatedTag !== fullTag) {
-        const conversionNote = convertedSource.startsWith('data:image/') ? 'converted to base64' : 'normalized URL';
-        console.log(`  ✅ Successfully replaced image src (${conversionNote})`);
         return { fullTag, updatedTag };
       }
 
-      console.warn(`  ⚠️ Tag replacement failed - URLs might not match exactly`);
       return null;
     } catch (error) {
-      console.error(`  ❌ Error converting image: ${error.message}`);
       return null;
     }
   });
 
   const replacements = await Promise.all(replacementTasks);
-
   const successfulReplacements = replacements.filter((entry) => entry !== null);
 
   let updatedHtml = htmlContent;
   successfulReplacements.forEach(({ fullTag, updatedTag }) => {
     updatedHtml = updatedHtml.replace(fullTag, updatedTag);
   });
-
-  console.log(`\n📊 Conversion summary:`);
-  console.log(`   ✅ Converted: ${successfulReplacements.length}`);
-  console.log(`   ⏭️  Skipped (already base64 or unchanged): ${matches.length - successfulReplacements.length}`);
 
   return updatedHtml;
 }
@@ -491,7 +409,7 @@ router.post('/pdf', async (req, res) => {
   let browser = null;
   
   try {
-    const { sessionId, htmlContent } = req.body;
+    const { sessionId, htmlContent, userId: requestUserId } = req.body;
 
     if (!sessionId || !htmlContent) {
       return res.status(400).json({
@@ -500,26 +418,15 @@ router.post('/pdf', async (req, res) => {
       });
     }
 
-    console.log(`📄 Generating PDF for session: ${sessionId}`);
-    console.log(`👤 User ID: ${req.body.userId || 'dev-user-id'}`);
-    console.log(`📝 HTML content length: ${htmlContent.length} characters`);
+    const userId = requestUserId || 'dev-user-id';
+    console.log(`Generating PDF for session: ${sessionId}`);
     
-    // Check if HTML contains logo images
-    const logoMatches = htmlContent.match(/<img[^>]+src=["']([^"']*logo[^"']*)["'][^>]*>/gi);
-    const shouldInlineImages = process.env.PDF_INLINE_IMAGES === 'true';
-    let optimizedHtml = htmlContent;
-
-    if (shouldInlineImages) {
-      const userId = req.body.userId || 'dev-user-id';
-      optimizedHtml = await convertImageUrlsToBase64(htmlContent, sessionId, userId);
-    }
+    let optimizedHtml = await convertImageUrlsToBase64(htmlContent, sessionId, userId);
 
     // Detect environment and use appropriate Puppeteer setup
     const isVercel = !!process.env.VERCEL || !!process.env.VERCEL_ENV;
     
     if (isVercel) {
-      // Vercel: Use puppeteer-core with @sparticuz/chromium
-      console.log(`🚀 Using serverless Chromium for PDF generation...`);
       const puppeteerCore = require('puppeteer-core');
       const chromium = require('@sparticuz/chromium');
       
@@ -530,8 +437,6 @@ router.post('/pdf', async (req, res) => {
         headless: chromium.headless,
       });
     } else {
-      // Local: Use regular puppeteer
-      console.log(`🚀 Using local Puppeteer for PDF generation...`);
       const puppeteer = require('puppeteer');
       
       browser = await puppeteer.launch({
@@ -543,30 +448,14 @@ router.post('/pdf', async (req, res) => {
     const renderTimeout = parseInt(process.env.PDF_RENDER_TIMEOUT_MS || '120000', 10);
     
     // ===== STRATEGY: Render cover and content separately, then merge =====
-    // 1. Extract cover HTML and content HTML
-    // 2. Render cover as standalone PDF (no header/footer)
-    // 3. Render content with Puppeteer's displayHeaderFooter (proper margins)
-    // 4. Merge PDFs using pdf-lib
-    
-    console.log('📄 Step 1: Extracting cover and content sections...');
-    
-    // Extract cover section
-    const coverMatch = optimizedHtml.match(/<section class="cover">([\s\S]*?)<\/section>/);
-    
-    // Extract header/footer logos
+    const coverMatch = optimizedHtml.match(/<section[^>]*class="[^"]*cover[^"]*"[^>]*>([\s\S]*?)<\/section>/);
     const headerLogoMatch = optimizedHtml.match(/<section class="pages">[\s\S]*?<header><img src="([^"]+)"[^>]*>/);
     const footerLogoMatch = optimizedHtml.match(/<section class="pages">[\s\S]*?<footer><img src="([^"]+)"[^>]*>/);
     
     const headerLogoSrc = headerLogoMatch ? headerLogoMatch[1] : '';
     const footerLogoSrc = footerLogoMatch ? footerLogoMatch[1] : '';
     
-    console.log(`   Header logo: ${headerLogoSrc ? 'Found' : 'None'}`);
-    console.log(`   Footer logo: ${footerLogoSrc ? 'Found' : 'None'}`);
-    
-    // Extract content from .pages main
     const contentMatch = optimizedHtml.match(/<section class="pages">[\s\S]*?<main>([\s\S]*?)<\/main>/);
-    
-    // Extract CSS
     const cssMatch = optimizedHtml.match(/<style>([\s\S]*?)<\/style>/);
     const css = cssMatch ? cssMatch[1] : '';
     
@@ -574,8 +463,8 @@ router.post('/pdf', async (req, res) => {
       throw new Error('Could not extract cover or content sections from HTML');
     }
     
-    // ===== STEP 2: Render cover page =====
-    console.log('📄 Step 2: Rendering cover page...');
+    const customEditsScriptMatch = contentMatch[1].match(/(<script>[\s\S]*?window\.__customEditsApplied[\s\S]*?<\/script>)/);
+    const customEditsScript = customEditsScriptMatch ? customEditsScriptMatch[1] : '';
     
     const coverHtml = `
       <!DOCTYPE html>
@@ -592,6 +481,7 @@ router.post('/pdf', async (req, res) => {
           <section class="cover">
             ${coverMatch[1]}
           </section>
+          ${customEditsScript}
         </body>
       </html>
     `;
@@ -606,6 +496,26 @@ router.post('/pdf', async (req, res) => {
     });
     
     await coverPage.evaluateHandle('document.fonts.ready');
+    
+    if (customEditsScript) {
+      await coverPage.evaluate(() => {
+        return new Promise((resolve) => {
+          if (window.__customEditsApplied) {
+            resolve();
+            return;
+          }
+          
+          const startTime = Date.now();
+          const checkInterval = setInterval(() => {
+            if (window.__customEditsApplied || (Date.now() - startTime > 2000)) {
+              clearInterval(checkInterval);
+              resolve();
+            }
+          }, 50);
+        });
+      });
+    }
+    
     await new Promise((resolve) => setTimeout(resolve, 300));
     
     await coverPage.emulateMediaType('print');
@@ -617,10 +527,6 @@ router.post('/pdf', async (req, res) => {
     });
     
     await coverPage.close();
-    console.log(`   ✅ Cover PDF: ${Math.round(coverPdf.length / 1024)}KB`);
-    
-    // ===== STEP 3: Render content pages with header/footer =====
-    console.log('📄 Step 3: Rendering content pages with header/footer...');
     
     // Use TABLE-BASED layout for reliable header/footer on every page
     const headerHtml = headerLogoSrc ? `
@@ -1010,6 +916,24 @@ router.post('/pdf', async (req, res) => {
     });
     
     await contentPage.evaluateHandle('document.fonts.ready');
+    
+    await contentPage.evaluate(() => {
+      return new Promise((resolve) => {
+        if (window.__customEditsApplied) {
+          resolve();
+          return;
+        }
+        
+        const startTime = Date.now();
+        const checkInterval = setInterval(() => {
+          if (window.__customEditsApplied || (Date.now() - startTime > 2000)) {
+            clearInterval(checkInterval);
+            resolve();
+          }
+        }, 50);
+      });
+    });
+    
     await new Promise((resolve) => setTimeout(resolve, 300));
     
     // Ensure all images are loaded
@@ -1044,10 +968,6 @@ router.post('/pdf', async (req, res) => {
     });
     
     await contentPage.close();
-    console.log(`   ✅ Content PDF: ${Math.round(contentPdf.length / 1024)}KB`);
-    
-    // ===== STEP 4: Merge PDFs =====
-    console.log('📄 Step 4: Merging PDFs...');
     
     const { PDFDocument } = require('pdf-lib');
     

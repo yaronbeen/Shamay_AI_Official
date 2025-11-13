@@ -889,89 +889,90 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
     
     console.log(`🗑️ Removing upload ${uploadId} (${upload.type})`)
     
-    // Update local state first
-    setUploads(prev => {
-      const remaining = prev.filter(u => u.id !== uploadId)
+    // Call the API to delete from DB, blob storage, and images table in parallel
+    try {
+      const response = await fetch(`/api/session/${sessionId}/upload/${uploadId}`, {
+        method: 'DELETE'
+      })
       
-      // Handle image types
-      if (upload.type === 'building_image' || upload.type === 'interior_image') {
-        const remainingImages = remaining.filter(
-          (u) =>
-            (u.type === 'building_image' || u.type === 'interior_image') &&
-            u.previewReady &&
-            typeof u.preview === 'string' &&
-            u.preview.trim().length > 0
-        )
-        const validRemainingImages = remainingImages.filter(u => typeof u.preview === 'string' && u.preview.trim().length > 0)
-        
-        // Handle interior images - remove from interiorImages array
-        if (upload.type === 'interior_image') {
-          const remainingInteriorImages = remaining
-            .filter(u => u.type === 'interior_image' && u.previewReady)
-            .map(u => (typeof u.preview === 'string' ? u.preview.trim() : ''))
-            .filter((src): src is string => !!src)
-            .slice(0, 6)
-          
-          console.log('🖼️ Updating interior images:', {
-            removed: upload.preview,
-            remaining: remainingInteriorImages.length
-          })
-          
-          updateData({ 
-            interiorImages: remainingInteriorImages,
-            propertyImages: validRemainingImages.map(u => ({
-              name: u.file.name,
-              preview: (u.preview as string).trim(),
-              isSelected: u.isSelected || false,
-              type: u.type,
-              url: u.url,
-              path: u.path
-            }))
-          })
-        } else if (upload.type === 'building_image') {
-          // Handle building images - update selectedImagePreview
-          const buildingImages = validRemainingImages.filter(u => u.type === 'building_image')
-          const selectedBuildingImage = buildingImages.find(u => u.isSelected) || buildingImages[0]
-          
-          console.log('🏢 Updating building images:', {
-            removed: upload.preview,
-            remaining: buildingImages.length,
-            newSelected: selectedBuildingImage?.preview
-          })
-          
-          updateData({ 
-            propertyImages: validRemainingImages.map(u => ({
-              name: u.file.name,
-              preview: (u.preview as string).trim(),
-              isSelected: u.isSelected || false,
-              type: u.type,
-              url: u.url,
-              path: u.path
-            })),
-            selectedImagePreview: selectedBuildingImage?.preview?.trim() || null
-          })
-        }
+      if (!response.ok) {
+        const errorData = await response.json()
+        console.error(`❌ Failed to delete upload:`, errorData)
+        throw new Error(errorData.error || 'Failed to delete upload')
       }
       
-      return remaining
-    })
-    
-    // Delete from blob storage if it has a URL
-    if (upload.url) {
-      try {
-        console.log(`🗑️ Deleting file from blob storage: ${upload.url}`)
-        const response = await fetch(upload.url, {
-          method: 'DELETE'
-        })
+      const result = await response.json()
+      console.log(`✅ Upload deleted successfully:`, result)
+      
+      // Update local state after successful deletion
+      setUploads(prev => {
+        const remaining = prev.filter(u => u.id !== uploadId)
         
-        if (response.ok) {
-          console.log(`✅ File deleted from blob storage`)
-        } else {
-          console.warn(`⚠️ Could not delete file from blob storage (status: ${response.status})`)
+        // Handle image types
+        if (upload.type === 'building_image' || upload.type === 'interior_image') {
+          const remainingImages = remaining.filter(
+            (u) =>
+              (u.type === 'building_image' || u.type === 'interior_image') &&
+              u.previewReady &&
+              typeof u.preview === 'string' &&
+              u.preview.trim().length > 0
+          )
+          const validRemainingImages = remainingImages.filter(u => typeof u.preview === 'string' && u.preview.trim().length > 0)
+          
+          // Handle interior images - remove from interiorImages array
+          if (upload.type === 'interior_image') {
+            const remainingInteriorImages = remaining
+              .filter(u => u.type === 'interior_image' && u.previewReady)
+              .map(u => (typeof u.preview === 'string' ? u.preview.trim() : ''))
+              .filter((src): src is string => !!src)
+              .slice(0, 6)
+            
+            console.log('🖼️ Updating interior images:', {
+              removed: upload.preview,
+              remaining: remainingInteriorImages.length
+            })
+            
+            updateData({ 
+              interiorImages: remainingInteriorImages,
+              propertyImages: validRemainingImages.map(u => ({
+                name: u.file.name,
+                preview: (u.preview as string).trim(),
+                isSelected: u.isSelected || false,
+                type: u.type,
+                url: u.url,
+                path: u.path
+              }))
+            })
+          } else if (upload.type === 'building_image') {
+            // Handle building images - update selectedImagePreview
+            const buildingImages = validRemainingImages.filter(u => u.type === 'building_image')
+            const selectedBuildingImage = buildingImages.find(u => u.isSelected) || buildingImages[0]
+            
+            console.log('🏢 Updating building images:', {
+              removed: upload.preview,
+              remaining: buildingImages.length,
+              newSelected: selectedBuildingImage?.preview
+            })
+            
+            updateData({ 
+              propertyImages: validRemainingImages.map(u => ({
+                name: u.file.name,
+                preview: (u.preview as string).trim(),
+                isSelected: u.isSelected || false,
+                type: u.type,
+                url: u.url,
+                path: u.path
+              })),
+              selectedImagePreview: selectedBuildingImage?.preview?.trim() || null
+            })
+          }
         }
-      } catch (error) {
-        console.error(`❌ Error deleting file from blob storage:`, error)
-      }
+        
+        return remaining
+      })
+    } catch (error) {
+      console.error(`❌ Error deleting upload:`, error)
+      alert(`שגיאה במחיקת הקובץ: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 

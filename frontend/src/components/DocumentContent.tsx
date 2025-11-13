@@ -247,7 +247,7 @@ export function DocumentContent({ data, isPreview = true }: DocumentContentProps
             <strong>לכבוד מזמין השומה:</strong> {getClientName()}
           </div>
           <div style={{ marginBottom: '10px' }}>
-            <strong>מועד הביקור בנכס:</strong> {formatDate(data.visitDate || new Date().toISOString())}
+            <strong>מועד הביקור בנכס:</strong> {formatDate(data.valuationEffectiveDate || new Date().toISOString())}
           </div>
           <div>
             <strong>המועד הקובע לשומה:</strong> {formatDate(data.valuationDate || new Date().toISOString())}

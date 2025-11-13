@@ -39,14 +39,14 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
   const [formData, setFormData] = useState({
     // סוג שומה ומועד כתיבתה
     valuationType: data.valuationType || '',
-    valuationDate: formatDateForDisplay(data.valuationDate) || '',
+    valuationDate: normalizeDateToISO(data.valuationDate) || '',
     
     // זהות מזמין השומה והקשר שלו לנכס
     clientName: data.clientName || '',
     clientRelation: data.clientRelation || '',
     
     // המועד הקובע לשומה
-    valuationEffectiveDate: formatDateForDisplay(data.valuationEffectiveDate) || '',
+    valuationEffectiveDate: normalizeDateToISO(data.valuationEffectiveDate) || '',
     
     // זיהוי הנכס
     street: data.street || '',
@@ -80,14 +80,14 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
     setFormData({
       // סוג שומה ומועד כתיבתה
       valuationType: data.valuationType || '',
-      valuationDate: formatDateForDisplay(data.valuationDate) || '',
+      valuationDate: normalizeDateToISO(data.valuationDate) || '',
       
       // זהות מזמין השומה והקשר שלו לנכס
       clientName: data.clientName || '',
       clientRelation: data.clientRelation || '',
       
       // המועד הקובע לשומה
-      valuationEffectiveDate: formatDateForDisplay(data.valuationEffectiveDate) || '',
+      valuationEffectiveDate: normalizeDateToISO(data.valuationEffectiveDate) || '',
       
       // זיהוי הנכס
       street: data.street || '',
@@ -141,10 +141,8 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
       const newData = { ...prev, [field]: value }
 
       const payload: Record<string, any> = { ...newData }
-      DATE_FIELDS.forEach((dateField) => {
-        const displayValue = typeof payload[dateField] === 'string' ? (payload[dateField] as string) : ''
-        payload[dateField] = displayValue ? normalizeDateToISO(displayValue) || '' : ''
-      })
+      // For date fields, the value is already in ISO format from the date input
+      // No need to normalize again
       
       // Critical fields that should save immediately:
       // - valuationType, valuationDate (required for document generation)
@@ -164,17 +162,6 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
       return newData
     })
   }, [updateData])
-
-  const handleDateBlur = useCallback((field: 'valuationDate' | 'valuationEffectiveDate') => {
-    setFormData(prev => {
-      const current = prev[field]
-      const normalized = current ? formatDateForDisplay(current) : ''
-      if (normalized === current) {
-        return prev
-      }
-      return { ...prev, [field]: normalized }
-    })
-  }, [])
 
 
   return (
@@ -219,14 +206,11 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 מועד כתיבת השומה *
               </label>
               <input
-                type="text"
+                type="date"
                 name="valuationDate"
                 autoComplete="off"
-                inputMode="numeric"
-                placeholder="dd/mm/yyyy"
                 value={formData.valuationDate}
                 onChange={(e) => updateField('valuationDate', e.target.value)}
-                onBlur={() => handleDateBlur('valuationDate')}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
@@ -287,14 +271,11 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
               המועד הקובע לשומה *
             </label>
             <input
-              type="text"
+              type="date"
               name="valuationEffectiveDate"
               autoComplete="off"
-              inputMode="numeric"
-              placeholder="dd/mm/yyyy"
               value={formData.valuationEffectiveDate}
               onChange={(e) => updateField('valuationEffectiveDate', e.target.value)}
-              onBlur={() => handleDateBlur('valuationEffectiveDate')}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>

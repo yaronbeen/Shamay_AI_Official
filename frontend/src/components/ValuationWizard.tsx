@@ -26,8 +26,9 @@ export interface ValuationData {
   
   // ✅ NEW: Cover Page Fields
   clientName: string
-  visitDate: string
+  clientRelation?: string
   valuationDate: string
+  valuationEffectiveDate: string
   referenceNumber?: string
   shamayName: string
   shamaySerialNumber: string
@@ -366,8 +367,9 @@ export function ValuationWizard() {
     area: 0,
     propertyEssence: '',
     clientName: '',
-    visitDate: new Date().toLocaleDateString('he-IL'),
-    valuationDate: new Date().toLocaleDateString('he-IL'),
+    clientRelation: '',
+    valuationDate: '',
+    valuationEffectiveDate: '',
     referenceNumber: '',
     shamayName: '',
     shamaySerialNumber: '',
