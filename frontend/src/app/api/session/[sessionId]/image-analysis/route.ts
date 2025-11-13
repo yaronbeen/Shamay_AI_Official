@@ -5,6 +5,10 @@ import path from 'path'
 import fs from 'fs'
 import dotenv from 'dotenv'
 
+// Force this route to be dynamic (runtime-only) to avoid build-time issues
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 // Load environment variables
 dotenv.config()
 

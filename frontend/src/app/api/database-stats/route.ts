@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server'
 import { spawn } from 'child_process'
 import { join } from 'path'
 
+// Force this route to be dynamic (runtime-only) to avoid build-time issues
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 export async function GET() {
   // Skip during build time
   if (process.env.NEXT_PHASE === 'phase-production-build') {

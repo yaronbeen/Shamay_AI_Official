@@ -81,6 +81,8 @@ export async function GET(
     console.log(`📁 [FILES] Request: ${request.url}`)
     console.log(`📁 [FILES] sessionId: ${sessionId}, path: ${decodedPath.join('/')}`)
     console.log(`📁 [FILES] Full path: ${fullPath.join('/')}`)
+    console.log(`📁 [FILES] Checking ${possiblePaths.length} possible paths:`)
+    possiblePaths.forEach((p, i) => console.log(`  ${i + 1}. ${p}`))
     
     let filePath: string | null = null
     for (const possiblePath of possiblePaths) {
@@ -94,11 +96,21 @@ export async function GET(
     
     if (!filePath) {
       console.error(`❌ [FILES] File not found in any location`)
-      console.error(`   Tried paths:`, possiblePaths)
+      console.error(`   Request URL: ${request.url}`)
+      console.error(`   sessionId: ${sessionId}`)
+      console.error(`   path: ${decodedPath.join('/')}`)
+      console.error(`   filename: ${decodedFilename}`)
+      console.error(`   Tried ${possiblePaths.length} paths:`)
+      possiblePaths.forEach((p, i) => {
+        console.error(`   ${i + 1}. ${p} (exists: ${existsSync(p)})`)
+      })
+      
       return NextResponse.json({ 
         error: 'File not found',
         message: `Could not find file: ${decodedFilename}`,
-        triedPaths: possiblePaths
+        sessionId,
+        requestedPath: decodedPath.join('/'),
+        triedPaths: possiblePaths.map(p => p.replace(process.cwd(), '[CWD]'))
       }, { status: 404 })
     }
     
@@ -158,7 +170,10 @@ export async function GET(
       headers: {
         'Content-Type': contentType,
         'Content-Length': stats.size.toString(),
-        'Cache-Control': 'public, max-age=3600', // Cache for 1 hour
+        // Use ETag for cache validation instead of max-age
+        'Cache-Control': 'public, must-revalidate, max-age=0',
+        'ETag': `"${stats.mtime.getTime()}-${stats.size}"`, // ETag based on modification time and size
+        'Last-Modified': stats.mtime.toUTCString(),
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET',
         'Access-Control-Allow-Headers': 'Content-Type',

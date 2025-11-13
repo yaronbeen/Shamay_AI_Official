@@ -114,11 +114,12 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
                 const uploadName = upload.name || fileName
                 const uploadPath = upload.path || upload.extractedData?.filePath || ''
                 const uploadDate = upload.uploadedAt || new Date().toISOString()
+                const uploadUrl = upload.url || upload.preview || ''
                 
                 // If file size is not in database, try to get it from the file
-                if (fileSize === 0 && uploadPath) {
+                if (fileSize === 0 && uploadUrl) {
                   try {
-                    const response = await fetch(upload.url)
+                    const response = await fetch(uploadUrl, { method: 'HEAD' })
                     if (response.ok) {
                       const contentLength = response.headers.get('content-length')
                       if (contentLength) {
@@ -144,15 +145,22 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
                   writable: false
                 })
                 
+                // For images, set preview and previewReady if we have a valid URL
+                const isImageType = upload.type === 'building_image' || upload.type === 'interior_image'
+                const hasValidUrl = uploadUrl && uploadUrl.trim().length > 0 && uploadUrl !== 'data:,'
+                
                 return {
                   id: upload.id,
                   file: file,
                   type: upload.type as any,
                   status: upload.status || 'completed' as const, // Use status from DB, fallback to 'completed'
                   progress: upload.status === 'processing' ? 50 : (upload.status === 'uploading' ? 25 : 100),
-                  url: upload.url,
+                  url: uploadUrl,
+                  preview: isImageType && hasValidUrl ? uploadUrl : undefined,
+                  previewReady: isImageType && hasValidUrl ? true : false,
                   extractedData: upload.extractedData || {},
                   error: upload.error,
+                  isSelected: upload.isSelected || false,
                   // Preserve original upload data (with fallbacks)
                   name: uploadName,
                   fileName: fileName,
@@ -164,7 +172,12 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
               }))
               
               setUploads(sessionUploads)
-              updateData({ uploads: sessionUploads })
+              
+              // Update image data after loading from session to ensure proper initialization
+              // Use a setTimeout to ensure state is updated before calling updateImageData
+              setTimeout(() => {
+                updateImageData(sessionUploads)
+              }, 100)
             } else {
               console.log('📁 No uploads found in session data')
             }
@@ -747,20 +760,17 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
       
       const result = await response.json()
       console.log(`✅ Upload successful:`, result)
-
-      // Generate file URL for document viewer
-      const fileUrl = `/api/files/${sessionId}/${result.file?.fileName || upload.file.name}`
       
-      // Use the complete upload entry from the API response if available
+      // Use the complete upload entry from the API response (it has the correct URL)
       const uploadEntry = result.uploadEntry || {}
       
-      // Mark as completed with file URL and all metadata from API
+      // Mark as completed with all metadata from API - no need to generate URL ourselves
       setUploads(prev => {
         const updated = prev.map(u => 
           u.id === upload.id ? { 
             ...u, 
             status: uploadEntry.status || 'completed' as const,
-            url: uploadEntry.url || fileUrl,
+            url: uploadEntry.url, // Always use the URL from API response
             // Add all metadata from the API response
             name: uploadEntry.name || u.file.name,
             fileName: uploadEntry.fileName || u.file.name,
@@ -797,20 +807,29 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
 
   const updateImageData = (currentUploads?: DocumentUpload[]): DocumentUpload[] | undefined => {
     const uploadsToUse = currentUploads || uploads
-    const completedImages = uploadsToUse.filter(
-      (u) => (u.type === 'building_image' || u.type === 'interior_image') && u.previewReady
-    )
+    
+    // STRICT FILTER: Only include images with valid previews AND status
+    const completedImages = uploadsToUse.filter((u) => {
+      const isImageType = u.type === 'building_image' || u.type === 'interior_image'
+      const hasPreviewReady = u.previewReady === true
+      const hasValidPreview = typeof u.preview === 'string' && u.preview.trim().length > 0
+      const isCompleted = u.status === 'completed'
+      
+      return isImageType && hasPreviewReady && hasValidPreview && isCompleted
+    })
 
     if (completedImages.length === 0) {
       updateData({ propertyImages: [], selectedImagePreview: null, interiorImages: [] })
       return currentUploads
     }
 
+    // Double-check: filter again to ensure no empty strings slip through
     const validUploads = completedImages.filter(
-      (u) => typeof u.preview === 'string' && u.preview.trim().length > 0
+      (u) => typeof u.preview === 'string' && u.preview.trim().length > 0 && u.preview !== 'data:,'
     )
 
     if (validUploads.length === 0) {
+      updateData({ propertyImages: [], selectedImagePreview: null, interiorImages: [] })
       return currentUploads
     }
 
@@ -818,14 +837,24 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
       ? currentUploads.map((upload) => ({ ...upload }))
       : undefined
 
-    let imageData = validUploads.map((u) => ({
-      name: u.file.name,
-      preview: (u.preview as string).trim(),
-      isSelected: u.isSelected || false,
-      type: u.type,
-      url: u.url,
-      path: u.path
-    }))
+    // Construct image data with strict validation
+    let imageData = validUploads
+      .map((u) => {
+        const preview = (u.preview as string).trim()
+        // Skip if preview is empty or invalid
+        if (!preview || preview === 'data:,') {
+          return null
+        }
+        return {
+          name: u.file.name,
+          preview: preview,
+          isSelected: u.isSelected || false,
+          type: u.type,
+          url: u.url,
+          path: u.path
+        }
+      })
+      .filter((img): img is NonNullable<typeof img> => img !== null)
 
     const hasSelectedBuilding = imageData.some(
       (img) => img.type === 'building_image' && img.isSelected
@@ -866,16 +895,23 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
 
     const fallbackBuilding = selectedBuilding || imageData.find((img) => img.type === 'building_image')
     const selectedPreview = fallbackBuilding?.preview?.trim()
+    
+    // STRICT VALIDATION: Ensure selected preview is not empty
+    const validSelectedPreview = selectedPreview && selectedPreview !== 'data:,' ? selectedPreview : null
 
+    // STRICT VALIDATION: Filter interior photos more aggressively
     const interiorPhotos = validUploads
       .filter((u) => u.type === 'interior_image')
       .map((u) => (u.preview as string).trim())
-      .filter(Boolean)
+      .filter((preview) => {
+        // Ensure preview is valid, not empty, and not a blank data URL
+        return preview && preview.length > 0 && preview !== 'data:,'
+      })
       .slice(0, 6)
 
     updateData({
       propertyImages: imageData,
-      selectedImagePreview: selectedPreview || null,
+      selectedImagePreview: validSelectedPreview,
       interiorImages: interiorPhotos
     })
 
@@ -910,21 +946,29 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
         
         // Handle image types
         if (upload.type === 'building_image' || upload.type === 'interior_image') {
-          const remainingImages = remaining.filter(
-            (u) =>
-              (u.type === 'building_image' || u.type === 'interior_image') &&
-              u.previewReady &&
-              typeof u.preview === 'string' &&
-              u.preview.trim().length > 0
-          )
-          const validRemainingImages = remainingImages.filter(u => typeof u.preview === 'string' && u.preview.trim().length > 0)
+          // STRICT FILTER: Only keep images with valid previews and completed status
+          const remainingImages = remaining.filter((u) => {
+            const isImageType = u.type === 'building_image' || u.type === 'interior_image'
+            const hasPreviewReady = u.previewReady === true
+            const hasValidPreview = typeof u.preview === 'string' && u.preview.trim().length > 0 && u.preview !== 'data:,'
+            const isCompleted = u.status === 'completed'
+            
+            return isImageType && hasPreviewReady && hasValidPreview && isCompleted
+          })
+          const validRemainingImages = remainingImages
           
           // Handle interior images - remove from interiorImages array
           if (upload.type === 'interior_image') {
             const remainingInteriorImages = remaining
-              .filter(u => u.type === 'interior_image' && u.previewReady)
-              .map(u => (typeof u.preview === 'string' ? u.preview.trim() : ''))
-              .filter((src): src is string => !!src)
+              .filter(u => {
+                return u.type === 'interior_image' && 
+                       u.previewReady === true && 
+                       u.status === 'completed' &&
+                       typeof u.preview === 'string' && 
+                       u.preview.trim().length > 0 &&
+                       u.preview !== 'data:,'
+              })
+              .map(u => (u.preview as string).trim())
               .slice(0, 6)
             
             console.log('🖼️ Updating interior images:', {
@@ -934,36 +978,54 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
             
             updateData({ 
               interiorImages: remainingInteriorImages,
-              propertyImages: validRemainingImages.map(u => ({
-                name: u.file.name,
-                preview: (u.preview as string).trim(),
-                isSelected: u.isSelected || false,
-                type: u.type,
-                url: u.url,
-                path: u.path
-              }))
+              propertyImages: validRemainingImages
+                .map(u => {
+                  const preview = (u.preview as string).trim()
+                  // Skip if preview is invalid
+                  if (!preview || preview === 'data:,') return null
+                  
+                  return {
+                    name: u.file.name,
+                    preview: preview,
+                    isSelected: u.isSelected || false,
+                    type: u.type,
+                    url: u.url,
+                    path: u.path
+                  }
+                })
+                .filter((img): img is NonNullable<typeof img> => img !== null)
             })
           } else if (upload.type === 'building_image') {
             // Handle building images - update selectedImagePreview
             const buildingImages = validRemainingImages.filter(u => u.type === 'building_image')
             const selectedBuildingImage = buildingImages.find(u => u.isSelected) || buildingImages[0]
+            const selectedPreview = selectedBuildingImage?.preview?.trim()
+            const validSelectedPreview = selectedPreview && selectedPreview !== 'data:,' ? selectedPreview : null
             
             console.log('🏢 Updating building images:', {
               removed: upload.preview,
               remaining: buildingImages.length,
-              newSelected: selectedBuildingImage?.preview
+              newSelected: validSelectedPreview
             })
             
             updateData({ 
-              propertyImages: validRemainingImages.map(u => ({
-                name: u.file.name,
-                preview: (u.preview as string).trim(),
-                isSelected: u.isSelected || false,
-                type: u.type,
-                url: u.url,
-                path: u.path
-              })),
-              selectedImagePreview: selectedBuildingImage?.preview?.trim() || null
+              propertyImages: validRemainingImages
+                .map(u => {
+                  const preview = (u.preview as string).trim()
+                  // Skip if preview is invalid
+                  if (!preview || preview === 'data:,') return null
+                  
+                  return {
+                    name: u.file.name,
+                    preview: preview,
+                    isSelected: u.isSelected || false,
+                    type: u.type,
+                    url: u.url,
+                    path: u.path
+                  }
+                })
+                .filter((img): img is NonNullable<typeof img> => img !== null),
+              selectedImagePreview: validSelectedPreview
             })
           }
         }
@@ -983,29 +1045,40 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
         isSelected: upload.id === uploadId && (upload.type === 'building_image' || upload.type === 'interior_image')
       }))
       
-      // Update data immediately - but only use building_image for document preview
-      const imageUploads = updated.filter(
-        (u) =>
-          (u.type === 'building_image' || u.type === 'interior_image') &&
-          u.status === 'completed' &&
-          typeof u.preview === 'string' &&
-          u.preview.trim().length > 0
-      )
+      // STRICT FILTER: Only use completed images with valid previews
+      const imageUploads = updated.filter((u) => {
+        const isImageType = u.type === 'building_image' || u.type === 'interior_image'
+        const isCompleted = u.status === 'completed'
+        const hasValidPreview = typeof u.preview === 'string' && u.preview.trim().length > 0 && u.preview !== 'data:,'
+        
+        return isImageType && isCompleted && hasValidPreview
+      })
+      
       const buildingImages = imageUploads.filter((u) => u.type === 'building_image')
       const selectedBuildingImage = buildingImages.find(u => u.isSelected) || buildingImages[0]
+      const selectedPreview = selectedBuildingImage?.preview?.trim()
+      const validSelectedPreview = selectedPreview && selectedPreview !== 'data:,' ? selectedPreview : null
       
-      console.log('Selecting image:', { uploadId, selectedBuildingImage, preview: selectedBuildingImage?.preview })
+      console.log('Selecting image:', { uploadId, selectedBuildingImage, preview: validSelectedPreview })
       
       updateData({ 
-        propertyImages: imageUploads.map(u => ({
-          name: u.file.name,
-          preview: (u.preview as string).trim(),
-          isSelected: u.isSelected || false,
-          type: u.type,
-          url: u.url,
-          path: u.path
-        })),
-        selectedImagePreview: selectedBuildingImage?.preview?.trim() || null
+        propertyImages: imageUploads
+          .map(u => {
+            const preview = (u.preview as string).trim()
+            // Skip if preview is invalid
+            if (!preview || preview === 'data:,') return null
+            
+            return {
+              name: u.file.name,
+              preview: preview,
+              isSelected: u.isSelected || false,
+              type: u.type,
+              url: u.url,
+              path: u.path
+            }
+          })
+          .filter((img): img is NonNullable<typeof img> => img !== null),
+        selectedImagePreview: validSelectedPreview
       })
       
       return updated

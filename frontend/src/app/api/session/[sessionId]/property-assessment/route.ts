@@ -3,6 +3,10 @@ import { sessionStore } from '../../../../../lib/session-store-global'
 import { spawn } from 'child_process'
 import { join } from 'path'
 
+// Force this route to be dynamic (runtime-only) to avoid build-time issues
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 export async function POST(
   request: NextRequest,
   { params }: { params: { sessionId: string } }
