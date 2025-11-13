@@ -87,9 +87,12 @@ export class FileStorageService {
         pathname = `users/${userId}/${sessionId}/${filename}`
       }
       
+      // CRITICAL: Use addRandomSuffix to avoid caching issues
+      // When deleting and re-uploading files, the same URL would serve cached (deleted) content
+      // Random suffix ensures each upload gets a unique URL, preventing CDN cache issues
       const blob = await put(pathname, file, {
         access: 'public',
-        addRandomSuffix: false,
+        addRandomSuffix: true, // ✅ Generate unique URLs to prevent caching issues
       })
       
       console.log('✅ [BLOB] File uploaded successfully:', {
