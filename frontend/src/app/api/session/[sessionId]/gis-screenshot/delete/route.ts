@@ -40,54 +40,66 @@ export async function DELETE(
       }, { status: 404 })
     }
 
-    // Delete file from storage (Blob or local filesystem)
-    try {
-      await FileStorageService.deleteFile(screenshotUrl)
-      console.log(`✅ Deleted screenshot file from storage: ${screenshotUrl}`)
-    } catch (deleteError) {
-      console.warn(`⚠️ Failed to delete file from storage (may already be deleted):`, deleteError)
-      // Continue with DB deletion even if file deletion fails
+    // Prepare updated session data
+    const updatedScreenshots = { ...gisScreenshots }
+    delete updatedScreenshots[`cropMode${cropMode}`]
+    const updatedSessionData = {
+      ...sessionData,
+      gisScreenshots: updatedScreenshots
     }
 
-    // Delete from database (images table)
-    try {
-      // Determine image type based on cropMode
-      const imageType = cropMode === '0' ? 'סקרין שוט GOVMAP' : 'סקרין שוט תצ״א'
-      
-      // Create database pool (handles both Neon and pg)
-      const pool = new Pool({
-        connectionString: process.env.DATABASE_URL,
-        ssl: process.env.VERCEL ? { rejectUnauthorized: false } : false
-      })
-      
-      // Delete from images table
-      const deleteResult = await pool.query(`
+    // Execute all deletions in parallel to ensure synchronization
+    const deletionPromises = []
+
+    // 1. Delete file from storage (Blob or local filesystem)
+    deletionPromises.push(
+      FileStorageService.deleteFile(screenshotUrl)
+        .then(() => console.log(`✅ Deleted screenshot file from storage: ${screenshotUrl}`))
+        .catch((deleteError) => {
+          console.warn(`⚠️ Failed to delete file from storage (may already be deleted):`, deleteError)
+          // Don't throw - file might already be deleted
+        })
+    )
+
+    // 2. Delete from database (images table)
+    const imageType = cropMode === '0' ? 'סקרין שוט GOVMAP' : 'סקרין שוט תצ״א'
+    const pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.VERCEL ? { rejectUnauthorized: false } : false
+    })
+    
+    deletionPromises.push(
+      pool.query(`
         DELETE FROM images 
         WHERE session_id = $1 AND image_type = $2
       `, [params.sessionId, imageType])
-      
-      console.log(`✅ Deleted ${deleteResult.rowCount} image record(s) from database`)
-      
-      await pool.end()
-    } catch (dbError: any) {
-      console.error('❌ Error deleting from database:', dbError)
-      // Don't fail if DB deletion fails - file is already deleted
-    }
-
-    // Remove from gisScreenshots in shuma table
-    const updatedScreenshots = { ...gisScreenshots }
-    delete updatedScreenshots[`cropMode${cropMode}`]
-
-    // Update session data
-    await ShumaDB.saveShumaFromSession(
-      params.sessionId,
-      'default-org',
-      'system',
-      {
-        ...sessionData,
-        gisScreenshots: updatedScreenshots
-      }
+        .then((deleteResult) => {
+          console.log(`✅ Deleted ${deleteResult.rowCount} image record(s) from database`)
+        })
+        .catch((dbError: any) => {
+          console.error('❌ Error deleting from database:', dbError)
+          // Don't throw - continue even if DB deletion fails
+        })
+        .finally(() => {
+          pool.end()
+        })
     )
+
+    // 3. Update session data (remove from gisScreenshots)
+    deletionPromises.push(
+      ShumaDB.saveShumaFromSession(
+        params.sessionId,
+        'default-org',
+        'system',
+        updatedSessionData
+      ).catch((error: any) => {
+        console.error('❌ Failed to update session data:', error)
+        throw new Error('Failed to update session database')
+      })
+    )
+
+    // Wait for all deletions to complete in parallel
+    await Promise.all(deletionPromises)
 
     console.log('✅ GIS screenshot deleted successfully')
 

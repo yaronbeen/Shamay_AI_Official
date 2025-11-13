@@ -409,26 +409,81 @@ const collectInteriorImages = (data: ValuationData): string[] => {
   const seen = new Set<string>()
   const results: string[] = []
 
+  // Helper to validate if an image URL is valid and accessible
+  const isValidImageUrl = (url: string): boolean => {
+    if (!url || typeof url !== 'string') return false
+    const trimmed = url.trim()
+    
+    // Filter out empty strings
+    if (!trimmed) return false
+    
+    // Filter out placeholder indicators
+    if (trimmed.includes('placeholder') || trimmed.includes('[') || trimmed.includes('לא זמין')) {
+      return false
+    }
+    
+    // Must be a valid URL or data URI
+    if (!trimmed.startsWith('http') && !trimmed.startsWith('/') && !trimmed.startsWith('data:')) {
+      return false
+    }
+    
+    // Check if it looks like a valid image extension or blob URL
+    const hasValidExtension = /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i.test(trimmed)
+    const isBlobUrl = trimmed.includes('blob.vercel-storage.com') || trimmed.includes('/api/files/')
+    const isDataUri = trimmed.startsWith('data:image/')
+    
+    return hasValidExtension || isBlobUrl || isDataUri
+  }
+
+  // Helper to determine if a URL is base64 (large data URI)
+  const isBase64 = (url: string): boolean => {
+    return url.startsWith('data:image/')
+  }
+
+  // Helper to get the best URL from an upload entry
+  // Priority: url (blob) > signedUrl > path > fileUrl > absoluteUrl > preview (base64 - last resort)
+  const getBestUrlFromEntry = (entry: any): string | null => {
+    if (!entry) return null
+    
+    // Try blob URLs first (preferred - smaller, faster, persistent)
+    const candidates = [
+      entry.url,
+      entry.signedUrl,
+      entry.path,
+      entry.fileUrl,
+      entry.absoluteUrl,
+      entry.preview // base64 - only use as last resort
+    ]
+    
+    for (const candidate of candidates) {
+      if (candidate && typeof candidate === 'string' && isValidImageUrl(candidate)) {
+        // Prefer non-base64 URLs
+        if (!isBase64(candidate)) {
+          return candidate.trim()
+        }
+      }
+    }
+    
+    // If all candidates are invalid, try base64 as last resort
+    for (const candidate of candidates) {
+      if (candidate && typeof candidate === 'string' && isValidImageUrl(candidate)) {
+        return candidate.trim()
+      }
+    }
+    
+    return null
+  }
+
   const add = (value?: string | null) => {
     if (typeof value !== 'string') {
       return
     }
     const trimmed = value.trim()
-    if (!trimmed || seen.has(trimmed)) {
+    if (!trimmed || seen.has(trimmed) || !isValidImageUrl(trimmed)) {
       return
     }
     seen.add(trimmed)
     results.push(trimmed)
-  }
-
-  const addFromEntry = (entry: any) => {
-    if (!entry) return
-    add(entry.preview)
-    add(entry.url)
-    add(entry.path)
-    add(entry.signedUrl)
-    add(entry.fileUrl)
-    add(entry.absoluteUrl)
   }
 
   const isInteriorType = (value?: string) => {
@@ -436,28 +491,35 @@ const collectInteriorImages = (data: ValuationData): string[] => {
     return type === 'interior_image' || type === 'interior' || type === 'room' || type === 'living_room'
   }
 
-  const interiorArrays: Array<string[] | undefined> = [
-    Array.isArray((data as any).interiorImages) ? (data as any).interiorImages : undefined,
-    Array.isArray((data as any).livingRoomImages) ? (data as any).livingRoomImages : undefined,
-    Array.isArray((data as any).roomImages) ? (data as any).roomImages : undefined
-  ]
-
-  interiorArrays.forEach((array) => {
-    if (!array) return
-    array.forEach(add)
+  // SINGLE SOURCE OF TRUTH: Use uploads array (most up-to-date and has status tracking)
+  const uploads = Array.isArray((data as any).uploads) ? (data as any).uploads : []
+  const interiorUploads = uploads.filter((entry: any) => {
+    // Only include completed uploads of interior type
+    return entry.status === 'completed' && isInteriorType(entry?.type)
   })
 
-  const propertyImages = Array.isArray((data as any).propertyImages) ? (data as any).propertyImages : []
-  propertyImages
-    .filter((entry: any) => isInteriorType(entry?.type))
-    .forEach(addFromEntry)
+  // Get the best URL for each upload (ONE URL per upload, not duplicates)
+  interiorUploads.forEach((upload: any) => {
+    const bestUrl = getBestUrlFromEntry(upload)
+    if (bestUrl) {
+      add(bestUrl)
+    }
+  })
 
-  const uploads = Array.isArray((data as any).uploads) ? (data as any).uploads : []
-  uploads
-    .filter((entry: any) => isInteriorType(entry?.type))
-    .forEach(addFromEntry)
+  // FALLBACK: If no uploads found, try interiorImages array (for backward compatibility)
+  if (results.length === 0) {
+    const interiorArrays: Array<string[] | undefined> = [
+      Array.isArray((data as any).interiorImages) ? (data as any).interiorImages : undefined,
+    ]
 
-  return results.slice(0, 6)
+    interiorArrays.forEach((array) => {
+      if (!array) return
+      array.forEach(add)
+    })
+  }
+
+  // Return only valid images (up to 6)
+  return results.filter(isValidImageUrl).slice(0, 6)
 }
 
 const toArray = <T>(value: T | T[] | null | undefined): T[] => {
@@ -1202,8 +1264,9 @@ export function generateDocumentHTML(
   companySettings?: CompanySettings
 ): string {
   const customEdits = (data as any).customDocumentEdits || {}
+  
   const valuationDate = data.valuationDate || new Date().toISOString()
-  const visitDate = data.visitDate || valuationDate
+  const valuationEffectiveDate = data.valuationEffectiveDate || valuationDate
   const address = getAddress(data)
   const reference = getReference(data)
   const finalValue = (data as any).finalValuation || (data as any).marketAnalysis?.estimatedValue
@@ -1504,8 +1567,8 @@ export function generateDocumentHTML(
           <p>${normalizeText(data.clientName)}</p>
                 </div>
         <div class="info-grid section-block">
-          <p><strong>מועד הביקור בנכס:</strong> ${formatDateHebrew(visitDate)}, על ידי ${normalizeText(data.shamayName, 'שמאי מקרקעין מוסמך')}.</p>
-          <p><strong>תאריך קובע לשומה:</strong> ${formatDateHebrew(valuationDate)}, מועד הביקור בנכס.</p>
+          <p><strong>מועד הביקור בנכס:</strong> ${formatDateHebrew(valuationEffectiveDate)}, על ידי ${normalizeText(data.shamayName, 'שמאי מקרקעין מוסמך')}.</p>
+          <p><strong>המועד הקובע לשומה:</strong> ${formatDateHebrew(valuationEffectiveDate)}</p>
           </div>
         <div class="section-block">
           <div class="sub-title">פרטי הנכס:</div>
@@ -1614,7 +1677,9 @@ export function generateDocumentHTML(
           <div class="section-block">
             <div class="sub-title">תמונות אופייניות להמחשה</div>
             <div class="media-gallery">
-              ${interiorGallery.map((img: string, idx: number) => `
+              ${interiorGallery
+                .filter((img: string) => img && img.trim() && img.trim().length > 0)
+                .map((img: string, idx: number) => `
                 <figure class="media-card">
                   <img
                     src="${img}"
@@ -2099,7 +2164,7 @@ export function generateDocumentHTML(
     ${previewScripts}
     ${(() => {
       if (!customEdits || Object.keys(customEdits).length === 0) {
-        return ''
+        return '<script>window.__customEditsApplied = true;</script>'
       }
       const editsJson = JSON.stringify(customEdits) 
       return `
@@ -2108,21 +2173,22 @@ export function generateDocumentHTML(
         const applyEdits = () => {
           try {
             const edits = ${editsJson};
+            
             Object.entries(edits).forEach(([selector, html]) => {
               try {
                 const elements = document.querySelectorAll(selector);
-                if (!elements.length) {
-                  return;
-                }
+                if (!elements.length) return;
                 elements.forEach((element) => {
                   element.innerHTML = html;
                 });
               } catch (selectorError) {
-                console.warn('Failed to apply custom edit for selector:', selector, selectorError);
+                console.error('Failed to apply edit:', selectorError.message);
               }
             });
+            window.__customEditsApplied = true;
           } catch (error) {
             console.error('Error applying custom document edits:', error);
+            window.__customEditsApplied = true;
           }
         };
 
@@ -2186,30 +2252,40 @@ export function generateDocumentHTML(
   // For PDF export, restructure HTML into two sections
   const customEditsScript = (() => {
     if (!customEdits || Object.keys(customEdits).length === 0) {
-      return ''
+      return `
+        <script>
+          window.__customEditsApplied = true;
+        </script>
+      `
     }
-    const editsJson = JSON.stringify(customEdits)
+    
+    const transformedEdits = customEdits
+    const editsJson = JSON.stringify(transformedEdits)
+    
     return `
       <script>
         (function() {
+          const edits = ${editsJson};
+          
           const applyEdits = () => {
             try {
-              const edits = ${editsJson};
+              const base = document.querySelector('.document') || document;
+              
               Object.entries(edits).forEach(([selector, html]) => {
                 try {
-                  const elements = document.querySelectorAll(selector);
-                  if (!elements.length) {
-                    return;
-                  }
+                  const elements = base.querySelectorAll(selector);
                   elements.forEach((element) => {
                     element.innerHTML = html;
                   });
-                } catch (selectorError) {
-                  console.warn('Failed to apply custom edit for selector:', selector, selectorError);
+                } catch (err) {
+                  console.error('Failed to apply selector:', selector, err);
                 }
               });
+              
+              window.__customEditsApplied = true;
             } catch (error) {
-              console.error('Error applying custom document edits:', error);
+              console.error('Error applying custom edits:', error);
+              window.__customEditsApplied = true;
             }
           };
           
@@ -2225,7 +2301,7 @@ export function generateDocumentHTML(
   
   let fullHtml = ''
   if (!isPreview) {
-    // PDF export: Cover + print-break + Pages section with fixed header/footer
+    // PDF export: TWO separate sections - cover (standalone) and pages (with header/footer)
     const pdfHeaderFooter = `
       ${companySettings?.companyLogo ? `<header><img src="${companySettings.companyLogo}" alt="Company Logo" /></header>` : ''}
       ${companySettings?.footerLogo ? `<footer><img src="${companySettings.footerLogo}" alt="Footer Logo" /></footer>` : ''}
@@ -2240,25 +2316,7 @@ export function generateDocumentHTML(
           <style>${css}${pdfExportCss}</style>
         </head>
         <body>
-          <!--
-            STRUCTURE MATCHES 6216.6.25.pdf REFERENCE:
-            
-            1. Cover page: standalone, uses its own artwork/logos
-               - No injected header/footer (hidden via CSS)
-               - .page.cover has page-break-after: always
-            
-            2. All following pages: fixed header + footer on every page
-               - Header: fixed at top (60px height)
-               - Footer: fixed at bottom (60px height)
-               - Content: flows in <main> with 80px top/bottom margins
-          -->
-          
-          <!-- COVER PAGE (uses its own artwork/logos only) -->
-          <section class="cover">
-            ${headerBlock}
-          </section>
-          
-          <!-- ALL SUBSEQUENT PAGES (with fixed header/footer) -->
+          ${headerBlock}
           <section class="pages">
             ${pdfHeaderFooter}
             <main>
@@ -2269,10 +2327,10 @@ export function generateDocumentHTML(
               ${considerationsSection}
               ${valuationSection}
               ${summarySection}
+              ${customEditsScript}
             </main>
           </section>
-          ${customEditsScript}
-      </body>
+        </body>
       </html>
     `
   } else {
@@ -2291,15 +2349,6 @@ export function generateDocumentHTML(
     </html>
   `
   }
-  
-  // Apply custom edits from user
-  Object.entries(customEdits).forEach(([selector, content]) => {
-    if (typeof content === 'string' && content.trim()) {
-      // For simple text replacements in generated content
-      // This is a basic implementation - for more complex edits, we'd need a DOM parser
-      console.log(`Applying custom edit for ${selector}:`, content.substring(0, 50))
-    }
-  })
   
   if (isPreview) {
     return `<style>${css}</style>${bodyContent}`

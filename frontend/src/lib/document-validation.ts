@@ -64,12 +64,17 @@ export function validateValuationData(data: ValuationData): ValidationResult {
   }
 
   // TA20: Visit Date (Critical)
-  if (!data.visitDate) {
-    errors.push({ field: 'visitDate', message: 'תאריך ביקור הנכס הוא שדה חובה', taId: 'TA20' })
+  const visitDate =
+    data.valuationEffectiveDate ||
+    (data as any).visitDate ||
+    ''
+
+  if (!visitDate) {
+    errors.push({ field: 'valuationEffectiveDate', message: 'תאריך ביקור הנכס הוא שדה חובה', taId: 'TA20' })
   } else {
     const dateRegex = /^\d{4}-\d{2}-\d{2}$/
-    if (!dateRegex.test(data.visitDate)) {
-      warnings.push({ field: 'visitDate', message: 'תאריך ביקור הנכס - פורמט מומלץ: YYYY-MM-DD', taId: 'TA20' })
+    if (!dateRegex.test(visitDate)) {
+      warnings.push({ field: 'valuationEffectiveDate', message: 'תאריך ביקור הנכס - פורמט מומלץ: YYYY-MM-DD', taId: 'TA20' })
     }
   }
 

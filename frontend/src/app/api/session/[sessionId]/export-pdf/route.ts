@@ -244,6 +244,14 @@ export async function POST(
         {}),
       ...clientCustomEdits
     }
+    
+    // Debug logging for custom edits
+    console.log(`📝 [Export Route] Saved edits: ${Object.keys(valuationData.customDocumentEdits || {}).length}`)
+    console.log(`📝 [Export Route] Client edits: ${Object.keys(clientCustomEdits).length}`)
+    console.log(`📝 [Export Route] Merged edits: ${Object.keys(mergedCustomEdits).length}`)
+    if (Object.keys(mergedCustomEdits).length > 0) {
+      console.log(`📝 [Export Route] Merged edit selectors:`, Object.keys(mergedCustomEdits))
+    }
 
     validatePdfData(valuationData)
 
