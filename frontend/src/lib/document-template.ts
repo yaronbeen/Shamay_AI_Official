@@ -1,6 +1,7 @@
 import { ValuationData } from '../components/ValuationWizard'
 import { STATIC_TEXTS } from './static-texts-he'
 import { LOCKED_HEBREW_TEXT, COMPLETE_TA_BINDINGS } from './report-spec-hebrew'
+import { formatBlockParcelFromString } from './comparable-data-formatter'
 
 export interface CompanySettings {
   companyLogo?: string
@@ -282,14 +283,21 @@ const createComparablesTable = (data: ValuationData) => {
   }
 
   const rows = items.slice(0, 10).map((item) => {
-    const saleDate = formatDateNumeric(item.sale_date || item.date || item.transaction_date || item.saleDate)
-    const gushChelka = normalizeText(item.gush_chelka || item.block_lot || item.gush_chelka_code || item.gushChelka, '—')
+    const saleDate = formatDateNumeric(item.sale_date || item.date || item.transaction_date || item.saleDate || item.sale_day)
+    
+    // Format gush/chelka using the formatter function
+    // If block_of_land exists, use formatBlockParcelFromString to convert "007113-0009-010-00" → "7113/9"
+    const rawBlockOfLand = item.block_of_land || item.gush_chelka_code
+    const gushChelka = rawBlockOfLand 
+      ? formatBlockParcelFromString(rawBlockOfLand)
+      : normalizeText(item.gush_chelka || item.block_lot || item.gushChelka, '—')
+    
     const address = normalizeText(item.address || item.street_address || item.streetAddress, '—')
     const rooms = normalizeText(item.rooms || item.room_count, '—')
     const floor = normalizeText(item.floor_number || item.floor || item.floor_num || item.floorNumber, '—')
-    const size = normalizeText(item.size || item.area || item.sqm || item.sizeInSqm || item.apartmentArea, '—')
-    const buildYear = normalizeText(item.building_year || item.year_built || item.construction_year || item.buildYear || item.constructionYear, '—')
-    const price = item.price ? `₪ ${(Number(item.price)).toLocaleString('he-IL')}` : '—'
+    const size = normalizeText(item.size || item.area || item.sqm || item.sizeInSqm || item.apartmentArea || item.surface, '—')
+    const buildYear = normalizeText(item.building_year || item.year_built || item.construction_year || item.buildYear || item.year_of_constru || item.constructionYear, '—')
+    const price = item.price || item.declared_price || item.sale_value_nis ? `₪ ${(Number(item.price || item.declared_price || item.sale_value_nis)).toLocaleString('he-IL')}` : '—'
     const pricePerSqm = item.price_per_sqm
       ? `₪ ${(Math.round(Number(item.price_per_sqm) / 100) * 100).toLocaleString('he-IL')}`
       : '—'
@@ -297,7 +305,7 @@ const createComparablesTable = (data: ValuationData) => {
     return `
       <tr>
         <td>${saleDate}</td>
-        <td>${address}</td>
+        <td class="address-cell">${address}</td>
         <td>${gushChelka}</td>
         <td>${rooms}</td>
         <td>${floor}</td>
@@ -314,7 +322,7 @@ const createComparablesTable = (data: ValuationData) => {
       <thead>
         <tr>
           <th>יום מכירה</th>
-          <th>כתובת</th>
+          <th class="address-cell">כתובת</th>
           <th>גו"ח</th>
           <th>חדרים</th>
           <th>קומה</th>
@@ -555,7 +563,8 @@ const resolveLandRegistryData = (data: ValuationData) => {
     type: attachment?.type || attachment?.description,
     area: attachment?.area,
     color: attachment?.color,
-    symbol: attachment?.symbol
+    symbol: attachment?.symbol,
+    sharedWith: attachment?.shared_with || attachment?.sharedWith
   }))
 
   const additionalAreas = toArray((mergedRegistry as any).additional_areas).map((item: any) => ({
@@ -691,10 +700,12 @@ const buildBaseCss = () => `
   .table th,
   .table td {
     border: 1px solid rgba(148, 163, 184, 0.4);
-    padding: 8px 10px;
+    padding: 16px 12px;
     text-align: right;
-    vertical-align: top;
+    vertical-align: middle;
     word-break: break-word;
+    line-height: 1.8;
+    min-height: 45px;
   }
   tr, th, td {
     break-inside: avoid;
@@ -712,6 +723,20 @@ const buildBaseCss = () => `
   .table.comparables th,
   .table.comparables td {
     white-space: nowrap;
+    padding: 18px 14px;
+    font-size: 10pt;
+    min-height: 50px;
+  }
+  .table.comparables th {
+    font-size: 10.5pt;
+    font-weight: 600;
+    padding: 20px 14px;
+  }
+  .table.comparables .address-cell {
+    white-space: normal;
+    word-wrap: break-word;
+    max-width: 200px;
+    line-height: 1.6;
   }
   .muted {
     color: #475569;
@@ -1104,12 +1129,22 @@ const buildBaseCss = () => `
     border: 1px solid rgba(148, 163, 184, 0.3);
   }
   .comparables-table .table {
-          font-size: 9pt; 
+          font-size: 10pt; 
   }
   .comparables-table .table th,
   .comparables-table .table td {
-    padding: 6px 8px;
-    line-height: 1.4;
+    padding: 16px 12px;
+    line-height: 1.8;
+    min-height: 48px;
+  }
+  .comparables-table .table th {
+    padding: 18px 12px;
+  }
+  .comparables-table .table .address-cell {
+    white-space: normal;
+    word-wrap: break-word;
+    max-width: 200px;
+    line-height: 1.6;
   }
 `
 
@@ -1658,6 +1693,23 @@ export function generateDocumentHTML(
               ` : ''}
             ${sharedBuildingAddresses.length > 0 ? `<p class="muted">כתובות: ${sharedBuildingAddresses.join(' • ')}</p>` : ''}
             ${sharedBuildingNotes ? `<p class="muted">${sharedBuildingNotes}</p>` : ''}
+            ${(() => {
+              // Extract sub-chelka specific data from shared building sub_plots array
+              const subPlots = toArray(sharedBuildingRaw?.sub_plots?.value || sharedBuildingData?.sub_plots || [])
+              const currentSubChelka = data.extractedData?.sub_chelka || landRegistry?.sub_chelka || data.subParcel
+              const matchingSubPlot = subPlots.find((sp: any) => 
+                sp?.sub_plot_number?.toString() === currentSubChelka?.toString() ||
+                sp?.sub_plot_number === currentSubChelka
+              )
+              
+              if (matchingSubPlot) {
+                const parts: string[] = []
+                if (matchingSubPlot.area) parts.push(`שטח: ${formatNumber(matchingSubPlot.area)} מ"ר`)
+                if (matchingSubPlot.description) parts.push(`תיאור: ${normalizeText(matchingSubPlot.description)}`)
+                return parts.length > 0 ? `<p class="muted"><strong>פרטי תת חלקה:</strong> ${parts.join(', ')}</p>` : ''
+              }
+              return ''
+            })()}
             </div>
                   ` : ''}
         ${interiorNarrative ? `
@@ -1702,7 +1754,8 @@ export function generateDocumentHTML(
         type: att?.description || att?.type,
         area: att?.area,
         color: att?.color,
-        symbol: att?.symbol
+        symbol: att?.symbol,
+        sharedWith: att?.shared_with || att?.sharedWith
       }))
     : []
   const combinedAttachments = dedupeByKey([...extractedAttachmentsArray, ...attachments], (item) => {
@@ -1740,17 +1793,28 @@ export function generateDocumentHTML(
         actionType: note?.action_type || note?.actionType,
         date: note?.date,
         beneficiary: note?.beneficiary,
-        extra: note?.extra
+        extra: note?.extra,
+        isSubChelka: false
       }))
     : []
   const landRegistryNotesArray = toArray((landRegistry as any)?.notes).map((note: any) => ({
     actionType: note?.action_type || note?.actionType,
     date: note?.date,
     beneficiary: note?.beneficiary,
-    extra: note?.extra
+    extra: note?.extra,
+    isSubChelka: false
   }))
-  const combinedNotes = dedupeByKey([...extractedNotesArray, ...landRegistryNotesArray], (item) => {
-    return [item.actionType || '', item.date || '', item.beneficiary || ''].join('|')
+  
+  // Sub-chelka specific notes
+  const subChelkaNotes = {
+    actionType: landRegistry?.sub_chelka_notes_action_type || (data.extractedData as any)?.sub_chelka_notes_action_type,
+    beneficiary: landRegistry?.sub_chelka_notes_beneficiary || (data.extractedData as any)?.sub_chelka_notes_beneficiary,
+    isSubChelka: true
+  }
+  const subChelkaNotesArray = (subChelkaNotes.actionType || subChelkaNotes.beneficiary) ? [subChelkaNotes] : []
+  
+  const combinedNotes = dedupeByKey([...extractedNotesArray, ...landRegistryNotesArray, ...subChelkaNotesArray], (item) => {
+    return [item.actionType || '', item.date || '', item.beneficiary || '', item.isSubChelka ? 'sub' : 'general'].join('|')
   })
 
   const registrarOffice = normalizeText(
@@ -1802,6 +1866,10 @@ export function generateDocumentHTML(
             <p><strong>מספר מבנה:</strong> ${normalizeText(buildingIdentifier, '—')}</p>
             <p><strong>שטח רשום:</strong> ${registeredAreaSqm} מ"ר</p>
             <p><strong>חלק ברכוש משותף:</strong> ${sharedProperty}</p>
+            ${landRegistry?.total_number_of_entries ? `<p><strong>מספר אגפים/כניסות:</strong> ${formatNumber(landRegistry?.total_number_of_entries)}</p>` : ''}
+            ${landRegistry?.regulation_type ? `<p><strong>תקנון:</strong> ${normalizeText(landRegistry?.regulation_type)}</p>` : ''}
+            ${landRegistry?.rights ? `<p><strong>זכויות:</strong> ${normalizeText(landRegistry?.rights)}</p>` : ''}
+            ${landRegistry?.address_from_tabu ? `<p><strong>כתובת (מהנסח):</strong> ${normalizeText(landRegistry?.address_from_tabu)}</p>` : ''}
                           </div>
         </div>
         ${combinedAttachments.length > 0 ? `
@@ -1809,7 +1877,7 @@ export function generateDocumentHTML(
             <div class="sub-title">הצמדות</div>
             <ul class="legal-list">
               ${combinedAttachments.map((att: any) => `
-                <li>${normalizeText(att.type)}${att.area ? ` בשטח ${formatNumber(att.area)} מ"ר` : ''}${att.symbol ? `, המסומנ/ת בתשריט באות ${att.symbol}` : ''}${att.color ? `, בצבע ${att.color}` : ''}.</li>
+                <li>${normalizeText(att.type)}${att.area ? ` בשטח ${formatNumber(att.area)} מ"ר` : ''}${att.symbol ? `, המסומנ/ת בתשריט באות ${att.symbol}` : ''}${att.color ? `, בצבע ${att.color}` : ''}${att.sharedWith ? `, משותפת עם: ${normalizeText(att.sharedWith)}` : ''}.</li>
                         `).join('')}
             </ul>
                       </div>
@@ -1846,11 +1914,12 @@ export function generateDocumentHTML(
               ` : ''}
         ${combinedNotes.length > 0 ? `
           <div class="section-block">
-            <div class="sub-title">הערות</div>
+            <div class="sub-title">הערות${combinedNotes.some((n: any) => n.isSubChelka) ? ' - הערות לתת חלקה והערות כלליות' : ''}</div>
             <ul class="legal-list">
-              ${combinedNotes.map((note: any) => `
-                <li>${normalizeText(note.actionType)}${note.date ? ` מיום ${formatDateNumeric(note.date)}` : ''}${note.beneficiary ? ` לטובת ${normalizeText(note.beneficiary)}` : ''}${note.extra ? `, ${normalizeText(note.extra)}` : ''}.</li>
-              `).join('')}
+              ${combinedNotes.map((note: any) => {
+                const prefix = note.isSubChelka ? '<strong>הערות לתת חלקה:</strong> ' : ''
+                return `<li>${prefix}${normalizeText(note.actionType)}${note.date ? ` מיום ${formatDateNumeric(note.date)}` : ''}${note.beneficiary ? ` לטובת ${normalizeText(note.beneficiary)}` : ''}${note.extra ? `, ${normalizeText(note.extra)}` : ''}.</li>`
+              }).join('')}
             </ul>
             </div>
         ` : ''}
@@ -1876,9 +1945,18 @@ export function generateDocumentHTML(
           <div class="sub-title">2.3 הסתייגות</div>
           <p>${LOCKED_HEBREW_TEXT.legalDisclaimer}</p>
         </div>
-        ${landRegistry?.easements_description || landRegistry?.easements_essence ? `
+        ${landRegistry?.easements_description || landRegistry?.easements_essence || landRegistry?.sub_parcel_easements_essence || landRegistry?.sub_parcel_easements_description ? `
           <div class="callout section-block">
-            <strong>הערות ונשיאת זיקת הנאה:</strong> ${normalizeText(landRegistry?.easements_description || landRegistry?.easements_essence)}
+            ${landRegistry?.easements_description || landRegistry?.easements_essence ? `
+              <div style="margin-bottom: 8px;">
+                <strong>זיקות הנאה לכל החלקה:</strong> ${normalizeText(landRegistry?.easements_description || landRegistry?.easements_essence)}
+              </div>
+            ` : ''}
+            ${landRegistry?.sub_parcel_easements_essence || landRegistry?.sub_parcel_easements_description ? `
+              <div>
+                <strong>זיקות הנאה לתת החלקה:</strong> ${normalizeText(landRegistry?.sub_parcel_easements_description || landRegistry?.sub_parcel_easements_essence)}
+              </div>
+            ` : ''}
           </div>
         ` : ''}
         ${buildingPermitRows.length > 0 ? `
@@ -2034,7 +2112,16 @@ export function generateDocumentHTML(
   // ===== CHAPTER 5 - Calculations =====
   const comparablesList = (data as any).comparableData || []
   const includedComps = comparablesList.filter((c: any) => c.included !== false)
-  const equivPricePerSqm = (data as any).pricePerSqm || (data as any).marketAnalysis?.averagePricePerSqm || 0
+  
+  // Extract analysis data from comparable data analysis results
+  const analysisData = (data as any).comparableAnalysis || (data as any).marketAnalysis || {}
+  const averagePrice = analysisData.averagePrice || 0
+  const medianPrice = analysisData.medianPrice || 0
+  const averagePricePerSqm = analysisData.averagePricePerSqm || 0
+  const medianPricePerSqm = analysisData.medianPricePerSqm || 0
+  
+  // Use the final price per sqm (prioritize averagePricePerSqm, then median, then fallback)
+  const equivPricePerSqm = (data as any).pricePerSqm || averagePricePerSqm || medianPricePerSqm || (data as any).marketAnalysis?.averagePricePerSqm || 0
   
   const valuationSection = `
     <section class="page">
@@ -2051,7 +2138,44 @@ export function generateDocumentHTML(
               ${createComparablesTable(data)}
               <p class="muted">* מוצגות ${includedComps.length} עסקאות כלולות מתוך ${comparablesList.length} שנבדקו</p>
             </div>
-            </div>
+            
+            ${(averagePrice > 0 || medianPrice > 0 || averagePricePerSqm > 0 || medianPricePerSqm > 0) ? `
+              <div class="section-block" style="margin-top: 16px; padding: 12px; background: rgba(59, 130, 246, 0.08); border-radius: 12px;">
+                <div class="sub-title" style="font-size: 11pt; margin: 0 0 12px 0;">ניתוח סטטיסטי של העסקאות</div>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; font-size: 10pt;">
+                  ${averagePrice > 0 ? `
+                    <div>
+                      <strong style="color: #1e40af;">מחיר ממוצע:</strong>
+                      <div style="font-size: 11pt; font-weight: 600; color: #1e3a8a;">${formatCurrency(averagePrice)}</div>
+                    </div>
+                  ` : ''}
+                  ${medianPrice > 0 ? `
+                    <div>
+                      <strong style="color: #1e40af;">מחיר חציוני:</strong>
+                      <div style="font-size: 11pt; font-weight: 600; color: #1e3a8a;">${formatCurrency(medianPrice)}</div>
+                    </div>
+                  ` : ''}
+                  ${averagePricePerSqm > 0 ? `
+                    <div>
+                      <strong style="color: #1e40af;">ממוצע למ"ר:</strong>
+                      <div style="font-size: 11pt; font-weight: 600; color: #059669;">${formatCurrency(averagePricePerSqm)}</div>
+                    </div>
+                  ` : ''}
+                  ${medianPricePerSqm > 0 ? `
+                    <div>
+                      <strong style="color: #1e40af;">חציון למ"ר:</strong>
+                      <div style="font-size: 11pt; font-weight: 600; color: #059669;">${formatCurrency(medianPricePerSqm)}</div>
+                    </div>
+                  ` : ''}
+                </div>
+                ${analysisData.priceRange ? `
+                  <p class="muted" style="margin-top: 12px; font-size: 9pt;">
+                    טווח מחירים: ${formatCurrency(analysisData.priceRange.min)} - ${formatCurrency(analysisData.priceRange.max)}
+                  </p>
+                ` : ''}
+              </div>
+            ` : ''}
+          </div>
         ` : `
           <p style="color: #dc2626; font-weight: 600;">⚠️ נדרשות מינימום 3 עסקאות השוואה לחישוב שווי</p>
         `}
@@ -2176,12 +2300,15 @@ export function generateDocumentHTML(
             Object.entries(edits).forEach(([selector, html]) => {
               try {
                 const elements = document.querySelectorAll(selector);
-                if (!elements.length) return;
+                if (!elements.length) {
+                  console.warn('No elements found for selector:', selector);
+                  return;
+                }
                 elements.forEach((element) => {
                   element.innerHTML = html;
                 });
               } catch (selectorError) {
-                console.error('Failed to apply edit:', selectorError.message);
+                console.error('Failed to apply edit for selector:', selector, selectorError);
               }
             });
             window.__customEditsApplied = true;
@@ -2258,8 +2385,7 @@ export function generateDocumentHTML(
       `
     }
     
-    const transformedEdits = customEdits
-    const editsJson = JSON.stringify(transformedEdits)
+    const editsJson = JSON.stringify(customEdits)
     
     return `
       <script>
@@ -2268,19 +2394,35 @@ export function generateDocumentHTML(
           
           const applyEdits = () => {
             try {
+              console.log('Applying', Object.keys(edits).length, 'custom edits to PDF export');
+              
+              // Always query from document root - the .document wrapper should exist
               const base = document.querySelector('.document') || document;
+              
+              let appliedCount = 0;
+              let failedCount = 0;
               
               Object.entries(edits).forEach(([selector, html]) => {
                 try {
                   const elements = base.querySelectorAll(selector);
+                  
+                  if (!elements.length) {
+                    console.warn('No elements found for selector:', selector);
+                    failedCount++;
+                    return;
+                  }
+                  
                   elements.forEach((element) => {
                     element.innerHTML = html;
+                    appliedCount++;
                   });
                 } catch (err) {
                   console.error('Failed to apply selector:', selector, err);
+                  failedCount++;
                 }
               });
               
+              console.log('Custom edits applied:', appliedCount, 'succeeded,', failedCount, 'failed');
               window.__customEditsApplied = true;
             } catch (error) {
               console.error('Error applying custom edits:', error);
@@ -2301,6 +2443,7 @@ export function generateDocumentHTML(
   let fullHtml = ''
   if (!isPreview) {
     // PDF export: TWO separate sections - cover (standalone) and pages (with header/footer)
+    // IMPORTANT: Wrap in .document to match preview structure so custom edit selectors work!
     const pdfHeaderFooter = `
       ${companySettings?.companyLogo ? `<header><img src="${companySettings.companyLogo}" alt="Company Logo" /></header>` : ''}
       ${companySettings?.footerLogo ? `<footer><img src="${companySettings.footerLogo}" alt="Footer Logo" /></footer>` : ''}
@@ -2315,20 +2458,22 @@ export function generateDocumentHTML(
           <style>${css}${pdfExportCss}</style>
         </head>
         <body>
-          ${headerBlock}
-          <section class="pages">
-            ${pdfHeaderFooter}
-            <main>
-              ${introductionPage}
-              ${sectionOne}
-              ${sectionTwo}
-              ${planningSection}
-              ${considerationsSection}
-              ${valuationSection}
-              ${summarySection}
-              ${customEditsScript}
-            </main>
-          </section>
+          <div class="document">
+            ${headerBlock}
+            <section class="pages">
+              ${pdfHeaderFooter}
+              <main>
+                ${introductionPage}
+                ${sectionOne}
+                ${sectionTwo}
+                ${planningSection}
+                ${considerationsSection}
+                ${valuationSection}
+                ${summarySection}
+                ${customEditsScript}
+              </main>
+            </section>
+          </div>
         </body>
       </html>
     `
