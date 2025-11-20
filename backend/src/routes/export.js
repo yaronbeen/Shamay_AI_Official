@@ -402,6 +402,79 @@ async function convertImageUrlsToBase64(htmlContent, sessionId, userId = 'dev-us
 }
 
 /**
+ * Apply custom edits to HTML by executing the embedded script using Puppeteer
+ * This must be done BEFORE splitting cover/content to preserve nth-of-type selectors
+ */
+async function applyCustomEditsToHtml(htmlContent, browser) {
+  try {
+    // Check if there are custom edits in the HTML
+    const scriptMatch = htmlContent.match(/<script>\s*\(function\(\) {[\s\S]*?const edits = ({[\s\S]*?});[\s\S]*?}\)\(\);\s*<\/script>/);
+    
+    if (!scriptMatch) {
+      console.log('ℹ️ No custom edits found in HTML');
+      return htmlContent;
+    }
+    
+    const editsJsonString = scriptMatch[1];
+    let edits;
+    
+    try {
+      edits = JSON.parse(editsJsonString);
+    } catch (parseError) {
+      console.error('Failed to parse custom edits JSON:', parseError);
+      return htmlContent;
+    }
+    
+    const editCount = Object.keys(edits).length;
+    if (editCount === 0) {
+      console.log('ℹ️ Custom edits object is empty');
+      return htmlContent;
+    }
+    
+    console.log(`✅ Applying ${editCount} custom edit(s) to HTML before PDF generation`);
+    
+    // Use Puppeteer to load HTML and execute the embedded script
+    const tempPage = await browser.newPage();
+    
+    try {
+      await tempPage.setContent(htmlContent, { 
+        waitUntil: ['load', 'domcontentloaded']
+      });
+      
+      // Wait for custom edits script to execute
+      await tempPage.evaluate(() => {
+        return new Promise((resolve) => {
+          if (window.__customEditsApplied) {
+            resolve();
+            return;
+          }
+          
+          const startTime = Date.now();
+          const checkInterval = setInterval(() => {
+            if (window.__customEditsApplied || (Date.now() - startTime > 2000)) {
+              clearInterval(checkInterval);
+              resolve();
+            }
+          }, 50);
+        });
+      });
+      
+      // Extract the modified HTML
+      const modifiedHtml = await tempPage.content();
+      
+      console.log(`📝 Custom edits successfully applied to HTML`);
+      
+      return modifiedHtml;
+    } finally {
+      await tempPage.close();
+    }
+  } catch (error) {
+    console.error('Error applying custom edits to HTML:', error);
+    return htmlContent; // Return original HTML if anything fails
+  }
+}
+
+/**
  * POST /api/export/pdf
  * Generate PDF from HTML template using Puppeteer
  */
@@ -447,6 +520,10 @@ router.post('/pdf', async (req, res) => {
 
     const renderTimeout = parseInt(process.env.PDF_RENDER_TIMEOUT_MS || '120000', 10);
     
+    // CRITICAL: Apply custom edits to HTML BEFORE splitting into cover/content
+    // This ensures nth-of-type selectors work correctly
+    optimizedHtml = await applyCustomEditsToHtml(optimizedHtml, browser);
+    
     // ===== STRATEGY: Render cover and content separately, then merge =====
     const coverMatch = optimizedHtml.match(/<section[^>]*class="[^"]*cover[^"]*"[^>]*>([\s\S]*?)<\/section>/);
     const headerLogoMatch = optimizedHtml.match(/<section class="pages">[\s\S]*?<header><img src="([^"]+)"[^>]*>/);
@@ -463,11 +540,7 @@ router.post('/pdf', async (req, res) => {
       throw new Error('Could not extract cover or content sections from HTML');
     }
     
-    // Extract custom edits script and remove it from content
-    const customEditsScriptMatch = contentMatch[1].match(/(<script>[\s\S]*?window\.__customEditsApplied[\s\S]*?<\/script>)/);
-    const customEditsScript = customEditsScriptMatch ? customEditsScriptMatch[1] : '';
-    
-    // Remove custom edits script from content to avoid it being in the table
+    // Remove custom edits script from content (already applied above)
     const cleanContent = contentMatch[1].replace(/(<script>[\s\S]*?window\.__customEditsApplied[\s\S]*?<\/script>)/, '');
     
     const coverHtml = `
@@ -479,13 +552,15 @@ router.post('/pdf', async (req, res) => {
             ${css}
             @page { size: A4; margin: 0; }
             body { margin: 0; padding: 0; }
+            .document { width: 100%; height: 100%; }
           </style>
         </head>
         <body>
-          <section class="cover">
-            ${coverMatch[1]}
-          </section>
-          ${customEditsScript}
+          <div class="document">
+            <section class="cover">
+              ${coverMatch[1]}
+            </section>
+          </div>
         </body>
       </html>
     `;
@@ -500,26 +575,6 @@ router.post('/pdf', async (req, res) => {
     });
     
     await coverPage.evaluateHandle('document.fonts.ready');
-    
-    if (customEditsScript) {
-      await coverPage.evaluate(() => {
-        return new Promise((resolve) => {
-          if (window.__customEditsApplied) {
-            resolve();
-            return;
-          }
-          
-          const startTime = Date.now();
-          const checkInterval = setInterval(() => {
-            if (window.__customEditsApplied || (Date.now() - startTime > 2000)) {
-              clearInterval(checkInterval);
-              resolve();
-            }
-          }, 50);
-        });
-      });
-    }
-    
     await new Promise((resolve) => setTimeout(resolve, 300));
     
     await coverPage.emulateMediaType('print');
@@ -613,6 +668,12 @@ router.post('/pdf', async (req, res) => {
             .content-wrapper {
               width: 100%;
               box-sizing: border-box;
+            }
+            /* Document wrapper for selector compatibility */
+            .content-wrapper .document {
+              width: 100%;
+              padding: 0;
+              margin: 0;
             }
             /* Flatten page wrappers for natural content flow */
             .page { 
@@ -920,13 +981,14 @@ router.post('/pdf', async (req, res) => {
               <tr>
                 <td>
                   <div class="content-wrapper">
-                    ${cleanContent}
+                    <div class="document">
+                      ${cleanContent}
+                    </div>
                   </div>
                 </td>
               </tr>
             </tbody>
           </table>
-          ${customEditsScript}
         </body>
       </html>
     `;
@@ -941,24 +1003,6 @@ router.post('/pdf', async (req, res) => {
     });
     
     await contentPage.evaluateHandle('document.fonts.ready');
-    
-    await contentPage.evaluate(() => {
-      return new Promise((resolve) => {
-        if (window.__customEditsApplied) {
-          resolve();
-          return;
-        }
-        
-        const startTime = Date.now();
-        const checkInterval = setInterval(() => {
-          if (window.__customEditsApplied || (Date.now() - startTime > 2000)) {
-            clearInterval(checkInterval);
-            resolve();
-          }
-        }, 50);
-      });
-    });
-    
     await new Promise((resolve) => setTimeout(resolve, 300));
     
     // Ensure all images are loaded

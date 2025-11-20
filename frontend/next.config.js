@@ -34,6 +34,10 @@ const nextConfig = {
         source: '/api/comparable-data/:path*',
         destination: `${backendUrl}/api/comparable-data/:path*`,
       },
+      {
+        source: '/api/asset-details/:path*',
+        destination: `${backendUrl}/api/asset-details/:path*`,
+      },
     ];
   },
   // Keep existing configuration

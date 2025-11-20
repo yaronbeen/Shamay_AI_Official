@@ -24,6 +24,7 @@ CREATE TABLE land_registry_extracts_comprehensive (
     sub_plots_count INTEGER, -- תתי חלקות (כמה יש)
     buildings_count INTEGER, -- כמה מבנים
     address_from_tabu TEXT, -- כתובת (מהנסח טאבו AS IS)
+    total_number_of_entries INTEGER, -- כמה אגפים / כניסות
     
     -- Unit/Apartment Information
     unit_description TEXT, -- תיאור הדירה
@@ -41,6 +42,7 @@ CREATE TABLE land_registry_extracts_comprehensive (
     attachments_color VARCHAR(50), -- הצמדות - צבע בתשריט
     attachments_description TEXT, -- הצמדות - תיאור הצמדה
     attachments_area DECIMAL(10,2), -- הצמדות - שטח במטר
+    attachments_shared_with TEXT, -- הצמדות - משותפת לחלקות
     
     -- Ownership (בעלויות)
     owners JSONB, -- Complete owners data (array)
@@ -52,10 +54,14 @@ CREATE TABLE land_registry_extracts_comprehensive (
     plot_notes TEXT, -- הערות לכל החלקה
     notes_action_type VARCHAR(200), -- הערות - מהות פעולה
     notes_beneficiary VARCHAR(200), -- הערות - שם המוטב
+    sub_chelka_notes_action_type VARCHAR(200), -- הערות לתת חלקה - מהות פעולה
+    sub_chelka_notes_beneficiary VARCHAR(200), -- הערות לתת חלקה - שם המוטב
     
     -- Easements (זיקות הנאה)
     easements_essence TEXT, -- זיקות הנאה - מהות
     easements_description TEXT, -- זיקות הנאה - תיאור
+    sub_parcel_easements_essence TEXT, -- זיקות הנאה לתת החלקה - מהות
+    sub_parcel_easements_description TEXT, -- זיקות הנאה לתת החלקה - תיאור
     
     -- Mortgages (משכנתאות)
     mortgages JSONB, -- Complete mortgages data (array)
@@ -65,6 +71,7 @@ CREATE TABLE land_registry_extracts_comprehensive (
     mortgage_borrowers TEXT, -- משכנתאות - שם הלווים (primary mortgage)
     mortgage_amount DECIMAL(12,2), -- משכנתאות - סכום (primary mortgage)
     mortgage_property_share VARCHAR(100), -- משכנתאות - חלק בנכס (primary mortgage)
+    mortgage_registration_date DATE, -- משכנתאות - תאריך רישום (primary mortgage)
     
     -- Confidence Scores
     confidence_document_info DECIMAL(5,4) DEFAULT 0,
@@ -130,8 +137,15 @@ COMMENT ON COLUMN land_registry_extracts_comprehensive.chelka IS 'חלקה - Plo
 COMMENT ON COLUMN land_registry_extracts_comprehensive.sub_chelka IS 'תת חלקה - Sub-plot Number';
 COMMENT ON COLUMN land_registry_extracts_comprehensive.total_plot_area IS 'שטח קרקע של כל החלקה - Total Plot Area';
 COMMENT ON COLUMN land_registry_extracts_comprehensive.regulation_type IS 'תקנון - Regulation Type (מוסכם/לא מוסכם/מצוי)';
+COMMENT ON COLUMN land_registry_extracts_comprehensive.total_number_of_entries IS 'כמה אגפים / כניסות (Total number of entries/units)';
 COMMENT ON COLUMN land_registry_extracts_comprehensive.owners IS 'בעלויות - Complete ownership data';
+COMMENT ON COLUMN land_registry_extracts_comprehensive.attachments_shared_with IS 'הצמדות - משותפת לחלקות (Attachments shared with other parcels)';
+COMMENT ON COLUMN land_registry_extracts_comprehensive.sub_chelka_notes_action_type IS 'הערות לתת חלקה - מהות פעולה (Sub-plot notes - action type)';
+COMMENT ON COLUMN land_registry_extracts_comprehensive.sub_chelka_notes_beneficiary IS 'הערות לתת חלקה - שם המוטב (Sub-plot notes - beneficiary)';
+COMMENT ON COLUMN land_registry_extracts_comprehensive.sub_parcel_easements_essence IS 'זיקות הנאה לתת החלקה - מהות (Sub-parcel easements - essence)';
+COMMENT ON COLUMN land_registry_extracts_comprehensive.sub_parcel_easements_description IS 'זיקות הנאה לתת החלקה - תיאור (Sub-parcel easements - description)';
 COMMENT ON COLUMN land_registry_extracts_comprehensive.mortgages IS 'משכנתאות - Complete mortgage data';
+COMMENT ON COLUMN land_registry_extracts_comprehensive.mortgage_registration_date IS 'משכנתאות - תאריך רישום (Mortgage registration date)';
 
 -- Create views for easier querying
 CREATE VIEW property_summary AS

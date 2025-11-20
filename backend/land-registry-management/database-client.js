@@ -51,15 +51,15 @@ class LandRegistryDatabaseClient {
           document_filename,
           registration_office, issue_date, tabu_extract_date,
           gush, chelka, sub_chelka,
-          total_plot_area, regulation_type, sub_plots_count, buildings_count, address_from_tabu,
+          total_plot_area, regulation_type, sub_plots_count, buildings_count, address_from_tabu, total_number_of_entries,
           unit_description, floor, registered_area, apartment_registered_area, balcony_area,
           shared_property, building_number, additional_areas,
-          attachments, attachments_symbol, attachments_color, attachments_description, attachments_area,
+          attachments, attachments_symbol, attachments_color, attachments_description, attachments_area, attachments_shared_with,
           owners, owners_count, ownership_type, rights,
-          plot_notes, notes_action_type, notes_beneficiary,
-          easements_essence, easements_description,
+          plot_notes, notes_action_type, notes_beneficiary, sub_chelka_notes_action_type, sub_chelka_notes_beneficiary,
+          easements_essence, easements_description, sub_parcel_easements_essence, sub_parcel_easements_description,
           mortgages, mortgage_essence, mortgage_rank, mortgage_lenders, mortgage_borrowers,
-          mortgage_amount, mortgage_property_share,
+          mortgage_amount, mortgage_property_share, mortgage_registration_date,
           confidence_document_info, confidence_property_info, confidence_unit_info,
           confidence_ownership, confidence_attachments, confidence_notes,
           confidence_easements, confidence_mortgages, confidence_overall,
@@ -67,7 +67,8 @@ class LandRegistryDatabaseClient {
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
           $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38,
-          $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55
+          $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56,
+          $57, $58, $59, $60, $61, $62
         )
         RETURNING id, created_at;
       `;
@@ -102,54 +103,61 @@ class LandRegistryDatabaseClient {
         extractionData.sub_plots_count || null, // 10
         extractionData.buildings_count || null, // 11
         extractionData.address_from_tabu || null, // 12
-        extractionData.unit_description || null, // 13
-        extractionData.floor || null, // 14
-        extractionData.registered_area || null, // 15
-        extractionData.apartment_registered_area || null, // 16
-        extractionData.balcony_area || null, // 17
-        extractionData.shared_property || null, // 18
-        extractionData.building_number || null, // 19
-        extractionData.additional_areas ? JSON.stringify(extractionData.additional_areas) : null, // 20
-        extractionData.attachments ? JSON.stringify(extractionData.attachments) : null, // 21
-        extractionData.attachments_symbol || null, // 22
-        extractionData.attachments_color || null, // 23
-        extractionData.attachments_description || null, // 24
-        extractionData.attachments_area || null, // 25
-        extractionData.owners ? JSON.stringify(extractionData.owners) : null, // 26
-        extractionData.owners_count || 0, // 27
-        extractionData.ownership_type || null, // 28
-        extractionData.rights || null, // 29
-        extractionData.plot_notes || null, // 30
-        extractionData.notes_action_type || null, // 31
-        extractionData.notes_beneficiary || null, // 32
-        extractionData.easements_essence || null, // 33
-        extractionData.easements_description || null, // 34
-        extractionData.mortgages ? JSON.stringify(extractionData.mortgages) : null, // 35
-        extractionData.mortgage_essence || null, // 36
-        extractionData.mortgage_rank || null, // 37
-        extractionData.mortgage_lenders || null, // 38
-        extractionData.mortgage_borrowers || null, // 39
-        extractionData.mortgage_amount || null, // 40
-        extractionData.mortgage_property_share || null, // 41
-        extractionData.confidence_scores?.document_info || 0, // 42
-        extractionData.confidence_scores?.property_info || 0, // 43
-        extractionData.confidence_scores?.unit_info || 0, // 44
-        extractionData.confidence_scores?.ownership || 0, // 45
-        extractionData.confidence_scores?.attachments || 0, // 46
-        extractionData.confidence_scores?.notes || 0, // 47
-        extractionData.confidence_scores?.easements || 0, // 48
-        extractionData.confidence_scores?.mortgages || 0, // 49
-        extractionData.confidence_scores?.overall || 0, // 50
-        extractionData.extraction_method || 'anthropic_ai', // 51
-        extractionData.model_used || 'claude-sonnet-4-20250514', // 52 - Latest Sonnet model
-        extractionData.text_length || 0, // 53
+        extractionData.total_number_of_entries || null, // 13
+        extractionData.unit_description || null, // 14
+        extractionData.floor || null, // 15
+        extractionData.registered_area || null, // 16
+        extractionData.apartment_registered_area || null, // 17
+        extractionData.balcony_area || null, // 18
+        extractionData.shared_property || null, // 19
+        extractionData.building_number || null, // 20
+        extractionData.additional_areas ? JSON.stringify(extractionData.additional_areas) : null, // 21
+        extractionData.attachments ? JSON.stringify(extractionData.attachments) : null, // 22
+        extractionData.attachments_symbol || null, // 23
+        extractionData.attachments_color || null, // 24
+        extractionData.attachments_description || null, // 25
+        extractionData.attachments_area || null, // 26
+        extractionData.attachments_shared_with || null, // 27
+        extractionData.owners ? JSON.stringify(extractionData.owners) : null, // 28
+        extractionData.owners_count || 0, // 29
+        extractionData.ownership_type || null, // 30
+        extractionData.rights || null, // 31
+        extractionData.plot_notes || extractionData.plot_notes_general || null, // 32
+        extractionData.notes_action_type || null, // 33
+        extractionData.notes_beneficiary || null, // 34
+        extractionData.sub_chelka_notes_action_type || null, // 35
+        extractionData.sub_chelka_notes_beneficiary || null, // 36
+        extractionData.easements_essence || null, // 37
+        extractionData.easements_description || null, // 38
+        extractionData.sub_parcel_easements_essence || null, // 39
+        extractionData.sub_parcel_easements_description || null, // 40
+        extractionData.mortgages ? JSON.stringify(extractionData.mortgages) : null, // 41
+        extractionData.mortgage_essence || null, // 42
+        extractionData.mortgage_rank || null, // 43
+        extractionData.mortgage_lenders || null, // 44
+        extractionData.mortgage_borrowers || null, // 45
+        extractionData.mortgage_amount || null, // 46
+        extractionData.mortgage_property_share || null, // 47
+        parseDate(extractionData.mortgage_registration_date), // 48
+        extractionData.confidence_scores?.document_info || 0, // 49
+        extractionData.confidence_scores?.property_info || 0, // 50
+        extractionData.confidence_scores?.unit_info || 0, // 51
+        extractionData.confidence_scores?.ownership || 0, // 52
+        extractionData.confidence_scores?.attachments || 0, // 53
+        extractionData.confidence_scores?.notes || 0, // 54
+        extractionData.confidence_scores?.easements || 0, // 55
+        extractionData.confidence_scores?.mortgages || 0, // 56
+        extractionData.confidence_scores?.overall || 0, // 57
+        extractionData.extraction_method || 'anthropic_ai', // 58
+        extractionData.model_used || 'claude-sonnet-4-20250514', // 59 - Latest Sonnet model
+        extractionData.text_length || 0, // 60
         // Add raw_text and raw_response if they fit within reasonable limits
         (extractionData.raw_text || '').length > 50000 ? 
           (extractionData.raw_text || '').substring(0, 50000) : 
-          (extractionData.raw_text || ''), // 54
+          (extractionData.raw_text || ''), // 61
         (extractionData.raw_response || '').length > 50000 ? 
           (extractionData.raw_response || '').substring(0, 50000) : 
-          (extractionData.raw_response || '') // 55
+          (extractionData.raw_response || '') // 62
       ];
 
       const result = await this.client.query(query, values);

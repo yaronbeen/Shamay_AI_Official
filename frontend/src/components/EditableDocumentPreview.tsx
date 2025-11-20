@@ -833,7 +833,7 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
   }, [applyOverridesToDocument, updateIframeHeight])
 
   return (
-    <div className="bg-white shadow-lg rounded-lg overflow-hidden">
+    <div className="bg-white shadow-lg rounded-lg overflow-hidden max-w-[1400px] mx-auto">
       <div className="bg-gray-100 px-4 py-3 border-b flex justify-between items-center">
         <div>
           <h3 className="text-sm font-medium text-gray-700">תצוגה מקדימה של הדוח</h3>
@@ -937,12 +937,12 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
         </div>
       </div>
       
-      <div className="p-2 overflow-x-auto">
+      <div className="p-4 overflow-x-auto">
         <iframe
           ref={previewFrameRef}
           srcDoc={htmlContent}
-          className="w-full border border-gray-200 rounded shadow-sm bg-white"
-          style={{ minHeight: '1122px', width: '100%' }}
+          className="w-full border border-gray-200 rounded shadow-sm bg-white mx-auto"
+          style={{ minHeight: '1122px', width: '100%', maxWidth: '1200px' }}
           title="Document preview"
           onLoad={handleIframeLoad}
         />

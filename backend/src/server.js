@@ -76,6 +76,7 @@ app.use('/api/gis-screenshot', require('./routes/gis-screenshot'));
 app.use('/api/address-to-govmap', require('./routes/address-to-govmap'));
 app.use('/api/garmushka', require('./routes/garmushka'));
 app.use('/api/comparable-data', require('./routes/comparable-data'));
+app.use('/api/asset-details', require('./routes/asset-details'));
 app.use('/api/export', require('./routes/export'));
 
 // Static file serving for uploads
