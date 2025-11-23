@@ -2394,16 +2394,120 @@ export function generateDocumentHTML(
           
           const applyEdits = () => {
             try {
-              console.log('Applying', Object.keys(edits).length, 'custom edits to PDF export');
+              console.log('🔧 [Custom Edits] Starting application of', Object.keys(edits).length, 'edits');
               
-              // Always query from document root - the .document wrapper should exist
-              const base = document.querySelector('.document') || document;
+              // Check if we are in export mode (nested structure)
+              const docRoot = document.querySelector('.document');
+              const isExportMode = !!(docRoot && docRoot.querySelector('.pages > main'));
+              
+              console.log('🔧 [Custom Edits] Export mode:', isExportMode);
+              
+              // Use document as base to support full path selectors
+              const base = document;
+              const pageSections = Array.from(base.querySelectorAll('section.page'));
+              
+              console.log('🔧 [Custom Edits] Found', pageSections.length, 'page sections');
               
               let appliedCount = 0;
               let failedCount = 0;
               
               Object.entries(edits).forEach(([selector, html]) => {
                 try {
+                  console.log('🔧 [Custom Edits] Processing selector:', selector.substring(0, 80) + '...');
+                  let handled = false;
+                  
+                  if (isExportMode) {
+                    // Match selectors like: div > section:nth-of-type(N) ...
+                    // Find the section:nth-of-type pattern and extract page number
+                    const nthOfTypeIndex = selector.indexOf('section:nth-of-type(');
+                    if (nthOfTypeIndex !== -1) {
+                      const start = nthOfTypeIndex + 'section:nth-of-type('.length;
+                      const end = selector.indexOf(')', start);
+                      if (end !== -1) {
+                        const pageNumStr = selector.substring(start, end).trim();
+                        const pageNum = parseInt(pageNumStr, 10);
+                        if (!isNaN(pageNum)) {
+                          const restOfSelector = selector.substring(end + 1);
+                          console.log('🔧 [Custom Edits] ✅ Matched export selector - page number:', pageNum, 'rest:', restOfSelector.substring(0, 50));
+                          
+                          // In export mode: page 1 is cover (index 0), pages 2+ are content pages (index 1+)
+                          // pageSections includes ALL pages in order: [cover, page1, page2, ...]
+                          const pageIndex = pageNum - 1;
+                          
+                          if (pageIndex < 0 || pageIndex >= pageSections.length) {
+                            console.warn('🔧 [Custom Edits] ❌ Page index out of range:', pageIndex, 'total pages:', pageSections.length);
+                          } else {
+                            const pageElement = pageSections[pageIndex];
+                            const trimmedRest = restOfSelector.trim();
+                            
+                            if (!trimmedRest) {
+                              console.log('🔧 [Custom Edits] Applying to entire page', pageNum);
+                              pageElement.innerHTML = html;
+                              appliedCount++;
+                              handled = true;
+                            } else {
+                              const scopedSelector = restOfSelector.startsWith(' ')
+                                ? \`:scope\${restOfSelector}\`
+                                : \`:scope \${restOfSelector}\`;
+                              
+                              console.log('🔧 [Custom Edits] Trying scoped selector:', scopedSelector.substring(0, 80));
+                              let scopedApplied = false;
+                              
+                              try {
+                                const scopedMatches = pageElement.querySelectorAll(scopedSelector);
+                                
+                                if (scopedMatches.length > 0) {
+                                  console.log('🔧 [Custom Edits] ✅ Found', scopedMatches.length, 'matches with scoped selector');
+                                  scopedMatches.forEach((element) => {
+                                    element.innerHTML = html;
+                                    appliedCount++;
+                                  });
+                                  scopedApplied = true;
+                                  handled = true;
+                                } else {
+                                  console.warn('🔧 [Custom Edits] ❌ No scoped matches for selector:', scopedSelector.substring(0, 80), 'on page:', pageNum);
+                                }
+                              } catch (scopeError) {
+                                console.warn('🔧 [Custom Edits] ❌ Scoped selector failed:', scopeError.message);
+                              }
+                              
+                              if (!scopedApplied) {
+                                const fallbackSelector = trimmedRest.replace(/^>\s*/, '').trim();
+                                
+                                if (fallbackSelector) {
+                                  console.log('🔧 [Custom Edits] Trying fallback selector:', fallbackSelector.substring(0, 80));
+                                  const fallbackMatches = pageElement.querySelectorAll(fallbackSelector);
+                                  
+                                  if (fallbackMatches.length > 0) {
+                                    console.log('🔧 [Custom Edits] ✅ Found', fallbackMatches.length, 'matches with fallback selector');
+                                    fallbackMatches.forEach((element) => {
+                                      element.innerHTML = html;
+                                      appliedCount++;
+                                    });
+                                    handled = true;
+                                  } else {
+                                    console.warn('🔧 [Custom Edits] ❌ Fallback selector had no matches:', fallbackSelector.substring(0, 80), 'on page:', pageNum);
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        } else {
+                          console.warn('🔧 [Custom Edits] Invalid page number in selector:', pageNumStr);
+                        }
+                      } else {
+                        console.warn('🔧 [Custom Edits] Could not find closing parenthesis for section:nth-of-type');
+                      }
+                    } else {
+                      console.log('🔧 [Custom Edits] Selector does not contain section:nth-of-type, will try original');
+                    }
+                  }
+                  
+                  if (handled) {
+                    return;
+                  }
+                  
+                  // Fallback: try original selector
                   const elements = base.querySelectorAll(selector);
                   
                   if (!elements.length) {
@@ -2460,7 +2564,7 @@ export function generateDocumentHTML(
         <body>
           <div class="document">
             ${headerBlock}
-            <section class="pages">
+            <div class="pages">
               ${pdfHeaderFooter}
               <main>
                 ${introductionPage}
@@ -2472,7 +2576,7 @@ export function generateDocumentHTML(
                 ${summarySection}
                 ${customEditsScript}
               </main>
-            </section>
+            </div>
           </div>
         </body>
       </html>

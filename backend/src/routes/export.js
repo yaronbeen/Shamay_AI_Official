@@ -408,7 +408,9 @@ async function convertImageUrlsToBase64(htmlContent, sessionId, userId = 'dev-us
 async function applyCustomEditsToHtml(htmlContent, browser) {
   try {
     // Check if there are custom edits in the HTML
-    const scriptMatch = htmlContent.match(/<script>\s*\(function\(\) {[\s\S]*?const edits = ({[\s\S]*?});[\s\S]*?}\)\(\);\s*<\/script>/);
+    // Updated regex to be more flexible and match the template structure in document-template.ts
+    // Matches: const edits = { ... }; followed by const applyEdits
+    const scriptMatch = htmlContent.match(/<script>\s*\(function\(\) {[\s\S]*?const edits = ([\s\S]*?);\s*const applyEdits[\s\S]*?}\)\(\);\s*<\/script>/);
     
     if (!scriptMatch) {
       console.log('ℹ️ No custom edits found in HTML');
@@ -431,38 +433,99 @@ async function applyCustomEditsToHtml(htmlContent, browser) {
       return htmlContent;
     }
     
+    console.log(`✅ Found ${editCount} custom edit(s) in HTML`);
+    console.log(`🔍 Edit selectors:`, Object.keys(edits).slice(0, 5).join(', '), editCount > 5 ? '...' : '');
     console.log(`✅ Applying ${editCount} custom edit(s) to HTML before PDF generation`);
     
     // Use Puppeteer to load HTML and execute the embedded script
     const tempPage = await browser.newPage();
     
     try {
-      await tempPage.setContent(htmlContent, { 
-        waitUntil: ['load', 'domcontentloaded']
+      // Capture console logs BEFORE setting content
+      const consoleLogs = [];
+      tempPage.on('console', (msg) => {
+        const text = msg.text();
+        consoleLogs.push(text);
+        if (text.includes('Custom Edits') || text.includes('Applying') || text.includes('Found') || text.includes('matches')) {
+          console.log('🔍 [Puppeteer Console]', text);
+        }
       });
+      
+      // Capture errors
+      tempPage.on('pageerror', (error) => {
+        console.error('❌ [Puppeteer Page Error]', error.message);
+      });
+      
+      await tempPage.setContent(htmlContent, { 
+        waitUntil: ['load', 'domcontentloaded', 'networkidle0'],
+        timeout: 30000
+      });
+      
+      // Wait a bit for scripts to execute
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       // Wait for custom edits script to execute
       await tempPage.evaluate(() => {
         return new Promise((resolve) => {
           if (window.__customEditsApplied) {
+            console.log('✅ Edits already applied');
             resolve();
             return;
           }
           
+          console.log('⏳ Waiting for edits to apply...');
           const startTime = Date.now();
           const checkInterval = setInterval(() => {
-            if (window.__customEditsApplied || (Date.now() - startTime > 2000)) {
+            if (window.__customEditsApplied) {
+              console.log('✅ Edits applied after', Date.now() - startTime, 'ms');
+              clearInterval(checkInterval);
+              resolve();
+            } else if (Date.now() - startTime > 10000) {
+              console.warn('⚠️ Timeout waiting for edits (10s)');
               clearInterval(checkInterval);
               resolve();
             }
-          }, 50);
+          }, 100);
         });
       });
+      
+      // Verify edits were applied by checking a sample element
+      const verificationResult = await tempPage.evaluate(() => {
+        const docRoot = document.querySelector('.document');
+        const pageSections = Array.from(document.querySelectorAll('section.page'));
+        return {
+          hasDocument: !!docRoot,
+          pageCount: pageSections.length,
+          isExportMode: !!(docRoot && docRoot.querySelector('.pages > main')),
+          customEditsApplied: !!window.__customEditsApplied
+        };
+      });
+      
+      console.log('🔍 Verification result:', JSON.stringify(verificationResult, null, 2));
+      console.log('🔍 Console logs:', consoleLogs.join('\n'));
       
       // Extract the modified HTML
       const modifiedHtml = await tempPage.content();
       
-      console.log(`📝 Custom edits successfully applied to HTML`);
+      // Verify edits by checking if specific edited content exists
+      const sampleEditCheck = await tempPage.evaluate(() => {
+        // Try to find an element that should have been edited
+        const pages = Array.from(document.querySelectorAll('section.page'));
+        const sampleChecks = pages.slice(0, 3).map((page, idx) => {
+          const body = page.querySelector('.page-body');
+          return {
+            pageIndex: idx + 1,
+            hasBody: !!body,
+            bodyLength: body ? body.innerHTML.length : 0,
+            first100Chars: body ? body.innerHTML.substring(0, 100).replace(/\s+/g, ' ') : ''
+          };
+        });
+        return sampleChecks;
+      });
+      
+      console.log('🔍 Sample page content check:', JSON.stringify(sampleEditCheck, null, 2));
+      console.log(`📝 Modified HTML length: ${modifiedHtml.length} chars`);
+      console.log(`📝 Console logs captured: ${consoleLogs.length} messages`);
       
       return modifiedHtml;
     } finally {
@@ -526,13 +589,13 @@ router.post('/pdf', async (req, res) => {
     
     // ===== STRATEGY: Render cover and content separately, then merge =====
     const coverMatch = optimizedHtml.match(/<section[^>]*class="[^"]*cover[^"]*"[^>]*>([\s\S]*?)<\/section>/);
-    const headerLogoMatch = optimizedHtml.match(/<section class="pages">[\s\S]*?<header><img src="([^"]+)"[^>]*>/);
-    const footerLogoMatch = optimizedHtml.match(/<section class="pages">[\s\S]*?<footer><img src="([^"]+)"[^>]*>/);
+    const headerLogoMatch = optimizedHtml.match(/<div[^>]*class="pages"[^>]*>[\s\S]*?<header><img src="([^"]+)"[^>]*>/);
+    const footerLogoMatch = optimizedHtml.match(/<div[^>]*class="pages"[^>]*>[\s\S]*?<footer><img src="([^"]+)"[^>]*>/);
     
     const headerLogoSrc = headerLogoMatch ? headerLogoMatch[1] : '';
     const footerLogoSrc = footerLogoMatch ? footerLogoMatch[1] : '';
     
-    const contentMatch = optimizedHtml.match(/<section class="pages">[\s\S]*?<main>([\s\S]*?)<\/main>/);
+    const contentMatch = optimizedHtml.match(/<div[^>]*class="pages"[^>]*>[\s\S]*?<main>([\s\S]*?)<\/main>/);
     const cssMatch = optimizedHtml.match(/<style>([\s\S]*?)<\/style>/);
     const css = cssMatch ? cssMatch[1] : '';
     

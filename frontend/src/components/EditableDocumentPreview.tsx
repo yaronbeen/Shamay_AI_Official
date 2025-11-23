@@ -713,9 +713,78 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
       
       alert('✅ השינויים נשמרו בהצלחה!')
       setLastRefreshTime(new Date())
+      
+      // Exit edit mode after successful save
+      setIsEditMode(false)
     } catch (error) {
       console.error('Error saving:', error)
       alert('❌ שגיאה בשמירת השינויים')
+    } finally {
+      setIsSaving(false)
+    }
+  }, [customHtmlOverrides, data, onDataChange])
+
+  const handleRevert = useCallback(async () => {
+    const sessionId = (data as any).sessionId
+    if (!sessionId) {
+      alert('לא ניתן לבטל - חסר מזהה סשן')
+      return
+    }
+
+    const hasLocalChanges = Object.keys(customHtmlOverrides).length > 0
+    const hasSavedChanges = !!(data as any).customDocumentEdits || !!(data as any).propertyAnalysis?.__customDocumentEdits
+
+    if (!hasLocalChanges && !hasSavedChanges) {
+      alert('אין שינויים לביטול')
+      return
+    }
+
+    const confirmed = window.confirm('האם אתה בטוח שברצונך לבטל את כל השינויים? פעולה זו תמחק את כל השינויים מהמסד נתונים ולא ניתנת לביטול.')
+    if (!confirmed) {
+      return
+    }
+
+    setIsSaving(true)
+    try {
+      // Remove customDocumentEdits from the session data
+      const updatedData = {
+        ...data,
+        customDocumentEdits: {},
+        propertyAnalysis: {
+          ...(data as any).propertyAnalysis,
+          __customDocumentEdits: {}
+        }
+      }
+      
+      const response = await fetch(`/api/session/${sessionId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: updatedData
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to revert changes')
+      }
+
+      // Clear local state
+      setCustomHtmlOverrides({})
+      setDebouncedOverrides({})
+      
+      // Update parent component data
+      onDataChange({ customDocumentEdits: {} } as any)
+      
+      // Reload document without overrides
+      setLastRefreshTime(new Date())
+      
+      // Exit edit mode
+      setIsEditMode(false)
+      
+      alert('✅ כל השינויים בוטלו ונמחקו מהמסד נתונים')
+    } catch (error) {
+      console.error('Error reverting:', error)
+      alert('❌ שגיאה בביטול השינויים')
     } finally {
       setIsSaving(false)
     }
@@ -926,6 +995,32 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
                   </>
                 ) : (
                   <>💾 שמור ({Object.keys(customHtmlOverrides).length})</>
+                )}
+              </button>
+              
+              <button
+                onClick={handleRevert}
+                disabled={isSaving || (Object.keys(customHtmlOverrides).length === 0 && !(data as any).customDocumentEdits && !(data as any).propertyAnalysis?.__customDocumentEdits)}
+                className={`px-3 py-1 text-xs rounded border transition-colors ${
+                  isSaving || (Object.keys(customHtmlOverrides).length === 0 && !(data as any).customDocumentEdits && !(data as any).propertyAnalysis?.__customDocumentEdits)
+                    ? 'bg-gray-300 text-gray-500 border-gray-400 cursor-not-allowed'
+                    : 'bg-red-500 text-white border-red-600 hover:bg-red-600'
+                }`}
+                title={
+                  isSaving 
+                    ? 'מבטל...' 
+                    : (Object.keys(customHtmlOverrides).length === 0 && !(data as any).customDocumentEdits && !(data as any).propertyAnalysis?.__customDocumentEdits)
+                      ? 'אין שינויים לביטול' 
+                      : 'בטל את כל השינויים'
+                }
+              >
+                {isSaving ? (
+                  <>
+                    <span className="inline-block animate-spin mr-1">⟳</span>
+                    מבטל...
+                  </>
+                ) : (
+                  <>↶ בטל שינויים</>
                 )}
               </button>
               
