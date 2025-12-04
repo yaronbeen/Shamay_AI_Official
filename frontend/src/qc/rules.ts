@@ -19,22 +19,29 @@ export interface QCResult {
 // Helper functions
 const isDateValid = (dateStr: string): boolean => {
   if (!dateStr) return false
-  const pattern = /^\d{2}\.\d{2}\.\d{4}$/
+  // Accept both single-digit and double-digit day/month (e.g., "4.12.2025" or "04.12.2025")
+  const pattern = /^\d{1,2}\.\d{1,2}\.\d{4}$/
   if (!pattern.test(dateStr)) return false
   
   const [day, month, year] = dateStr.split('.').map(Number)
   const date = new Date(year, month - 1, day)
-  const today = new Date()
   
-  return date <= today && date.getDate() === day && date.getMonth() === month - 1 && date.getFullYear() === year
+  // Validate that the date components match (handles invalid dates like Feb 30)
+  return date.getDate() === day && date.getMonth() === month - 1 && date.getFullYear() === year
 }
 
 const isDateBeforeToday = (dateStr: string): boolean => {
   if (!isDateValid(dateStr)) return false
+  
   const [day, month, year] = dateStr.split('.').map(Number)
   const date = new Date(year, month - 1, day)
   const today = new Date()
-  today.setHours(23, 59, 59, 999) // End of today
+  
+  // Normalize both dates to midnight for accurate date-only comparison
+  date.setHours(0, 0, 0, 0)
+  today.setHours(0, 0, 0, 0)
+  
+  // Return true if date is today or before (valid)
   return date <= today
 }
 

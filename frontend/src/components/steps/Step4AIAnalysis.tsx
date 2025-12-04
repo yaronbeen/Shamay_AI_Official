@@ -246,13 +246,34 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
             }))
             
             // Save to session - update both comparableDataAnalysis AND comparableData for document
+            // Parse numeric values safely (handles strings from backend)
+            const avgPricePerSqm = typeof analysis.averagePricePerSqm === 'string'
+              ? parseFloat(analysis.averagePricePerSqm.trim())
+              : (typeof analysis.averagePricePerSqm === 'number' ? analysis.averagePricePerSqm : 0)
+            
+            // Check if analysis has section52 (from FinalAssetValuation) - prioritize that for finalValuation
+            const section52Value = (analysis.section52 as any)?.asset_value_nis
+            const section52ValueNum = typeof section52Value === 'string'
+              ? parseFloat(section52Value.trim())
+              : (typeof section52Value === 'number' ? section52Value : null)
+            
+            const estimatedValue = typeof analysis.estimatedValue === 'string'
+              ? parseFloat(analysis.estimatedValue.trim())
+              : (typeof analysis.estimatedValue === 'number' ? analysis.estimatedValue : null)
+            
+            // Use section52 value if available, otherwise use estimatedValue
+            const finalValuation = section52ValueNum || estimatedValue || data.finalValuation || null
+            
             updateData({
               comparableDataAnalysis: analysis,
+              comparableAnalysis: analysis, // Also store as comparableAnalysis for document-template compatibility
               comparableData: analysis.comparables || [],
-              pricePerSqm: analysis.averagePricePerSqm || data.pricePerSqm || 0,
+              pricePerSqm: avgPricePerSqm || data.pricePerSqm || 0,
+              finalValuation: finalValuation, // Store finalValuation for Step5 and document
               marketAnalysis: {
                 ...data.marketAnalysis,
-                averagePricePerSqm: analysis.averagePricePerSqm || 0,
+                averagePricePerSqm: avgPricePerSqm,
+                estimatedValue: estimatedValue,
                 marketTrend: (analysis as any).market_trends || data.marketAnalysis?.marketTrend || '',
                 priceRange: (analysis as any).price_range 
                   ? `₪${(analysis as any).price_range.min?.toLocaleString()} - ₪${(analysis as any).price_range.max?.toLocaleString()}`
@@ -262,7 +283,11 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
               }
             })
             
-            console.log('✅ Step4AIAnalysis: Comparable data analysis updated in session and document data')
+            console.log('✅ Step4AIAnalysis: Comparable data analysis updated in session and document data', {
+              finalValuation,
+              section52Value: section52ValueNum,
+              estimatedValue
+            })
           }}
         />
       ) : (

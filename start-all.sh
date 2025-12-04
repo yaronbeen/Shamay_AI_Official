@@ -20,6 +20,23 @@ port_in_use() {
     lsof -i :$1 >/dev/null 2>&1
 }
 
+# Neon DB Connection String
+NEON_DB_URL="${NEON_DB_URL:-postgresql://neondb_owner:npg_T8K7GEFhcPyB@ep-hidden-resonance-ad86yclx-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require}"
+
+# Parse Neon DB connection string
+parse_neon_url() {
+    local url="$1"
+    # Extract components from connection string
+    if [[ $url =~ postgresql://([^:]+):([^@]+)@([^/]+)/([^?]+) ]]; then
+        NEON_USER="${BASH_REMATCH[1]}"
+        NEON_PASSWORD="${BASH_REMATCH[2]}"
+        NEON_HOST="${BASH_REMATCH[3]}"
+        NEON_DB="${BASH_REMATCH[4]}"
+    fi
+}
+
+parse_neon_url "$NEON_DB_URL"
+
 # Check prerequisites
 echo -e "${BLUE}🔍 Checking prerequisites...${NC}"
 
@@ -29,9 +46,10 @@ if ! command_exists node; then
     exit 1
 fi
 
-# Check if PostgreSQL is installed
+# Check if PostgreSQL client is installed (needed for psql)
 if ! command_exists psql; then
-    echo -e "${RED}❌ PostgreSQL is not installed. Please install PostgreSQL first.${NC}"
+    echo -e "${RED}❌ PostgreSQL client (psql) is not installed. Please install PostgreSQL client tools first.${NC}"
+    echo -e "${YELLOW}   macOS: brew install postgresql${NC}"
     exit 1
 fi
 
@@ -43,72 +61,32 @@ fi
 
 echo -e "${GREEN}✅ Prerequisites check passed${NC}"
 
-# Start PostgreSQL
-echo -e "${BLUE}🗄️  Starting PostgreSQL...${NC}"
-if port_in_use 5432; then
-    echo -e "${YELLOW}⚠️  PostgreSQL is already running on port 5432${NC}"
+# Connect to Neon DB
+echo -e "${BLUE}🗄️  Connecting to Neon DB...${NC}"
+echo -e "${YELLOW}   Host: ${NEON_HOST}${NC}"
+echo -e "${YELLOW}   Database: ${NEON_DB}${NC}"
+
+# Test Neon DB connection
+echo -e "${BLUE}⏳ Testing Neon DB connection...${NC}"
+if PGPASSWORD="$NEON_PASSWORD" psql "postgresql://${NEON_USER}:${NEON_PASSWORD}@${NEON_HOST}/${NEON_DB}?sslmode=require" -c "SELECT 1;" >/dev/null 2>&1; then
+    echo -e "${GREEN}✅ Successfully connected to Neon DB${NC}"
+    echo -e "${GREEN}✅ Database tables already exist - ready to use${NC}"
 else
-    # Try different PostgreSQL start commands based on OS
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        # macOS
-        if command_exists brew; then
-            brew services start postgresql
-        else
-            pg_ctl -D /usr/local/var/postgres start
-        fi
-    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        # Linux
-        sudo systemctl start postgresql
-    else
-        echo -e "${YELLOW}⚠️  Please start PostgreSQL manually${NC}"
-    fi
-fi
-
-# Wait for PostgreSQL to be ready
-echo -e "${BLUE}⏳ Waiting for PostgreSQL to be ready...${NC}"
-sleep 3
-
-# Setup database
-echo -e "${BLUE}📊 Setting up database...${NC}"
-
-# Check if database exists
-DB_EXISTS=$(psql -U postgres -lqt | cut -d \| -f 1 | grep -w shamay_land_registry | wc -l)
-
-if [ $DB_EXISTS -eq 0 ]; then
-    echo -e "${YELLOW}📊 Database 'shamay_land_registry' does not exist. Creating...${NC}"
-    psql -U postgres -c "CREATE DATABASE shamay_land_registry;"
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✅ Database created successfully${NC}"
-    else
-        echo -e "${RED}❌ Failed to create database${NC}"
-        exit 1
-    fi
-else
-    echo -e "${GREEN}✅ Database 'shamay_land_registry' already exists${NC}"
-fi
-
-# Run complete database initialization
-echo -e "${BLUE}📊 Initializing database schema and tables...${NC}"
-psql -U postgres -d shamay_land_registry -f database/init_complete_database.sql
-
-if [ $? -eq 0 ]; then
-    echo -e "${GREEN}✅ Database schema initialized successfully${NC}"
-else
-    echo -e "${RED}❌ Failed to initialize database schema${NC}"
+    echo -e "${RED}❌ Failed to connect to Neon DB${NC}"
+    echo -e "${YELLOW}   Please verify your NEON_DB_URL environment variable${NC}"
     exit 1
 fi
 
 # Check if .env.local exists in frontend
 if [ ! -f "frontend/.env.local" ]; then
     echo -e "${YELLOW}⚠️  .env.local not found. Creating from template...${NC}"
-    cat > frontend/.env.local << 'EOF'
-# Database Configuration
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/shamay_land_registry"
-DB_HOST="localhost"
-DB_PORT="5432"
-DB_NAME="shamay_land_registry"
-DB_USER="postgres"
-DB_PASSWORD="postgres"
+    cat > frontend/.env.local << EOF
+# Database Configuration (Neon DB)
+DATABASE_URL="${NEON_DB_URL}"
+DB_HOST="${NEON_HOST}"
+DB_NAME="${NEON_DB}"
+DB_USER="${NEON_USER}"
+DB_PASSWORD="${NEON_PASSWORD}"
 
 # NextAuth Configuration
 NEXTAUTH_URL="http://localhost:3002"
@@ -121,8 +99,22 @@ OPENAI_API_KEY="your-openai-api-key-here"
 NODE_ENV="development"
 PORT=3002
 EOF
-    echo -e "${GREEN}✅ Created .env.local with default values${NC}"
+    echo -e "${GREEN}✅ Created .env.local with Neon DB configuration${NC}"
     echo -e "${YELLOW}⚠️  Please update .env.local with your actual OpenAI API key${NC}"
+else
+    # Update existing .env.local with Neon DB URL if DATABASE_URL is not set
+    if ! grep -q "DATABASE_URL.*neon" frontend/.env.local 2>/dev/null; then
+        echo -e "${YELLOW}⚠️  Updating .env.local with Neon DB configuration...${NC}"
+        # Backup existing file
+        cp frontend/.env.local frontend/.env.local.backup
+        # Update DATABASE_URL if it exists, or add it if it doesn't
+        if grep -q "^DATABASE_URL=" frontend/.env.local; then
+            sed -i.bak "s|^DATABASE_URL=.*|DATABASE_URL=\"${NEON_DB_URL}\"|" frontend/.env.local
+        else
+            echo "DATABASE_URL=\"${NEON_DB_URL}\"" >> frontend/.env.local
+        fi
+        echo -e "${GREEN}✅ Updated .env.local with Neon DB configuration${NC}"
+    fi
 fi
 
 # Install dependencies if needed
@@ -147,9 +139,10 @@ echo -e "${GREEN}🎉 SHAMAY.AI Setup Complete!${NC}"
 echo -e "${GREEN}=============================================${NC}"
 echo ""
 echo -e "${YELLOW}📊 Database:${NC}"
-echo -e "   Name: shamay_land_registry"
-echo -e "   Host: localhost:5432"
-echo -e "   User: postgres / shamay_user"
+echo -e "   Name: ${NEON_DB}"
+echo -e "   Host: ${NEON_HOST}"
+echo -e "   User: ${NEON_USER}"
+echo -e "   Type: Neon DB (Cloud)"
 echo ""
 echo -e "${YELLOW}🌐 Application URLs:${NC}"
 echo -e "   Frontend: ${BLUE}http://localhost:3002${NC}"
@@ -167,6 +160,45 @@ echo ""
 if ! command -v concurrently >/dev/null 2>&1; then
     echo -e "${YELLOW}Installing concurrently globally...${NC}"
     npm install -g concurrently
+fi
+
+# Ensure backend has DATABASE_URL
+if [ ! -f "backend/.env" ]; then
+    echo -e "${YELLOW}⚠️  Creating backend/.env with Neon DB configuration...${NC}"
+    cat > backend/.env << EOF
+# Database Configuration (Neon DB)
+DATABASE_URL="${NEON_DB_URL}"
+POSTGRES_URL="${NEON_DB_URL}"
+DB_HOST="${NEON_HOST}"
+DB_NAME="${NEON_DB}"
+DB_USER="${NEON_USER}"
+DB_PASSWORD="${NEON_PASSWORD}"
+
+# Application Configuration
+NODE_ENV="development"
+PORT=3001
+EOF
+    echo -e "${GREEN}✅ Created backend/.env with Neon DB configuration${NC}"
+else
+    # Update existing backend/.env with Neon DB URL if DATABASE_URL is not set
+    if ! grep -q "DATABASE_URL.*neon" backend/.env 2>/dev/null; then
+        echo -e "${YELLOW}⚠️  Updating backend/.env with Neon DB configuration...${NC}"
+        # Backup existing file
+        cp backend/.env backend/.env.backup
+        # Update DATABASE_URL if it exists, or add it if it doesn't
+        if grep -q "^DATABASE_URL=" backend/.env; then
+            sed -i.bak "s|^DATABASE_URL=.*|DATABASE_URL=\"${NEON_DB_URL}\"|" backend/.env
+        else
+            echo "DATABASE_URL=\"${NEON_DB_URL}\"" >> backend/.env
+        fi
+        # Also set POSTGRES_URL
+        if grep -q "^POSTGRES_URL=" backend/.env; then
+            sed -i.bak "s|^POSTGRES_URL=.*|POSTGRES_URL=\"${NEON_DB_URL}\"|" backend/.env
+        else
+            echo "POSTGRES_URL=\"${NEON_DB_URL}\"" >> backend/.env
+        fi
+        echo -e "${GREEN}✅ Updated backend/.env with Neon DB configuration${NC}"
+    fi
 fi
 
 # Start both services concurrently

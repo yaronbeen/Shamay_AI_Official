@@ -86,12 +86,14 @@ export interface ValuationData {
   }
   marketAnalysis?: {
     averagePricePerSqm: number
+    estimatedValue?: number
     priceRange: string
     marketTrend: string
     demandLevel: string
     competition: string
   }
   comparableDataAnalysis?: any
+  comparableAnalysis?: any // Alias for document-template compatibility
   riskAssessment?: {
     legalRisks: string
     marketRisks: string

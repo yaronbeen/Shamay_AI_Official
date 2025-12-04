@@ -3,23 +3,22 @@ const router = express.Router();
 const { db } = require('../models/ShumaDB');
 
 /**
- * Field mapping: Spec fields → asset_details columns
+ * Field mapping: Spec fields → properties columns (with asset_details join for address)
  * 
- * Spec (Section 5.1)         →  asset_details table
+ * Spec (Section 5.1)         →  properties table (source of truth)
  * ==========================================
- * block_number               →  Extract from parcel_id (first part)
- * surface                    →  registered_area_sqm
- * year_of_constru            →  year_built
- * sale_value_nis             →  declared_price_ils
- * sale_day                   →  transaction_date
- * street                     →  street
- * house_number               →  house_number
- * city                       →  city
- * rooms                      →  room_count
+ * block_number               →  Extract from block_of_land (first part)
+ * surface                    →  surface (square meters of apartment)
+ * year_of_constru            →  year_of_construction
+ * sale_value_nis             →  sale_value_nis
+ * sale_day                   →  sale_date
+ * settlement                 →  settlement (from properties)
+ * address                    →  JOIN with asset_details for street, house_number, city (or N/A if missing)
+ * rooms                      →  rooms
  * floor                      →  floor
- * asset_type                 →  building_function or transaction_type
- * price_per_sqm              →  price_per_sqm
- * block_of_land              →  parcel_id
+ * asset_type                 →  asset_type
+ * price_per_sqm              →  sale_value_nis / surface (calculated)
+ * block_of_land              →  block_of_land
  */
 
 /**
@@ -50,7 +49,12 @@ const { db } = require('../models/ShumaDB');
  */
 router.get('/search', async (req, res) => {
   try {
-    console.log('🔍 Asset Details Search - Query params:', req.query);
+    const isDev = process.env.NODE_ENV !== 'production';
+    const isVercel = process.env.VERCEL === '1';
+    
+    if (isDev && !isVercel) {
+      console.log('🔍 Asset Details Search - Query params:', req.query);
+    }
     
     const {
       block_number,
@@ -84,23 +88,44 @@ router.get('/search', async (req, res) => {
 
     // Build optimized query with index-friendly WHERE clauses
     // Order matters: Put most selective filters first
+    // properties table is the source of truth, LEFT JOIN asset_details for address
+    // Try to join on block_of_land or id - we'll test which works
     let query = `
       SELECT 
-        id,
-        transaction_date as sale_day,
-        CONCAT(street, ' ', COALESCE(house_number::text, ''), ', ', city) as address,
-        street,
-        house_number,
-        city,
-        parcel_id as block_of_land,
-        room_count as rooms,
-        floor,
-        registered_area_sqm as surface,
-        year_built as year_of_constru,
-        declared_price_ils as sale_value_nis,
-        price_per_sqm,
-        building_function as asset_type
-      FROM asset_details
+        p.id,
+        p.sale_day as sale_day,
+        COALESCE(
+          NULLIF(
+            TRIM(
+              COALESCE(ad.street, '') || 
+              CASE WHEN ad.street IS NOT NULL AND ad.house_number IS NOT NULL THEN ' ' ELSE '' END ||
+              COALESCE(ad.house_number::text, '') ||
+              CASE WHEN (ad.street IS NOT NULL OR ad.house_number IS NOT NULL) AND ad.city IS NOT NULL THEN ', ' ELSE '' END ||
+              COALESCE(ad.city, '')
+            ),
+            ''
+          ),
+          p.settlement,
+          'N/A'
+        ) as address,
+        COALESCE(NULLIF(ad.street, ''), 'N/A') as street,
+        COALESCE(NULLIF(ad.house_number::text, ''), 'N/A') as house_number,
+        COALESCE(NULLIF(ad.city, ''), p.settlement, 'N/A') as city,
+        p.settlement,
+        p.block_of_land,
+        p.rooms,
+        COALESCE(ad.floor, NULL) as floor,
+        p.surface,
+        p.year_of_construction as year_of_constru,
+        p.sale_value_nis,
+        CASE 
+          WHEN p.surface > 0 AND CAST(p.sale_value_nis AS NUMERIC) > 0 
+          THEN ROUND(CAST(p.sale_value_nis AS NUMERIC) / p.surface)
+          ELSE NULL
+        END as price_per_sqm,
+        p.asset_type
+      FROM properties p
+      LEFT JOIN asset_details ad ON p.block_of_land = ad.parcel_id
       WHERE 1=1
     `;
 
@@ -108,114 +133,205 @@ router.get('/search', async (req, res) => {
     let paramIndex = 1;
 
     // ⚡ OPTIMIZATION 1: Filter by block_number FIRST (most selective)
-    // parcel_id format: "006154-0330-004-00"
-    // We need to match the first segment (gush) with leading zeros
-    // Example: block_number=6154 should match "006154-0330-004-00"
+    // block_of_land format may vary, try to match block number
     if (block_number) {
-      // Pad block_number with leading zeros to 6 digits to match format
+      // Try to match block number in block_of_land field
+      // Handle both string format (like "006154-0330-004-00") and integer/numeric format
       const paddedBlock = String(block_number).padStart(6, '0');
-      query += ` AND parcel_id LIKE $${paramIndex}`;
-      params.push(`${paddedBlock}-%`); // Match "006154-%" pattern
-      paramIndex++;
+      query += ` AND (
+        CAST(p.block_of_land AS TEXT) LIKE $${paramIndex} 
+        OR CAST(p.block_of_land AS TEXT) LIKE $${paramIndex + 1}
+        OR CAST(p.block_of_land AS TEXT) = $${paramIndex + 2}
+      )`;
+      params.push(`${paddedBlock}-%`, `%${block_number}%`, block_number);
+      paramIndex += 3;
     }
 
-    // ⚡ OPTIMIZATION 2: City filter (uses idx_asset_details_city)
+    // ⚡ OPTIMIZATION 2: Settlement filter (from properties table)
     if (city && !block_number) {
-      // Only use if block_number not provided (to avoid over-filtering)
-      query += ` AND LOWER(city) = LOWER($${paramIndex})`;
+      // Use settlement field from properties table
+      query += ` AND LOWER(p.settlement) = LOWER($${paramIndex})`;
       params.push(city);
       paramIndex++;
     }
 
-    // ⚡ OPTIMIZATION 3: Date range (uses idx_asset_details_transaction_date)
+    // ⚡ OPTIMIZATION 3: Date range (uses sale_day from properties)
     // Add this early as it's highly selective
     if (sale_date_from) {
-      query += ` AND transaction_date >= $${paramIndex}`;
+      query += ` AND p.sale_day >= $${paramIndex}`;
       params.push(sale_date_from);
       paramIndex++;
     }
     if (sale_date_to) {
-      query += ` AND transaction_date <= $${paramIndex}`;
+      query += ` AND p.sale_day <= $${paramIndex}`;
       params.push(sale_date_to);
       paramIndex++;
     }
 
-    // ⚡ OPTIMIZATION 4: Year range (uses idx_asset_details_year_built)
+    // ⚡ OPTIMIZATION 4: Year range (uses year_of_construction from properties)
     if (year_min) {
-      query += ` AND year_built >= $${paramIndex}`;
+      query += ` AND p.year_of_construction >= $${paramIndex}`;
       params.push(parseInt(year_min, 10));
       paramIndex++;
     }
     if (year_max) {
-      query += ` AND year_built <= $${paramIndex}`;
+      query += ` AND p.year_of_construction <= $${paramIndex}`;
       params.push(parseInt(year_max, 10));
       paramIndex++;
     }
 
     // Additional filters (less selective, applied after indexed filters)
     if (surface_min) {
-      query += ` AND registered_area_sqm >= $${paramIndex}`;
+      query += ` AND p.surface >= $${paramIndex}`;
       params.push(parseFloat(surface_min));
       paramIndex++;
     }
     if (surface_max) {
-      query += ` AND registered_area_sqm <= $${paramIndex}`;
+      query += ` AND p.surface <= $${paramIndex}`;
       params.push(parseFloat(surface_max));
       paramIndex++;
     }
 
     if (rooms) {
       const roomNum = parseFloat(rooms);
-      query += ` AND room_count >= $${paramIndex} AND room_count < $${paramIndex + 1}`;
+      query += ` AND p.rooms >= $${paramIndex} AND p.rooms < $${paramIndex + 1}`;
       params.push(roomNum, roomNum + 1);
       paramIndex += 2;
     }
 
     if (floor) {
-      query += ` AND floor = $${paramIndex}`;
+      query += ` AND ad.floor = $${paramIndex}`;
       params.push(parseInt(floor, 10));
       paramIndex++;
     }
 
     if (asset_type) {
-      query += ` AND building_function ILIKE $${paramIndex}`;
+      query += ` AND p.asset_type ILIKE $${paramIndex}`;
       params.push(`%${asset_type}%`);
       paramIndex++;
     }
 
     // Filter out nulls for critical fields (improves query performance)
-    query += ` AND registered_area_sqm IS NOT NULL`;
-    query += ` AND declared_price_ils IS NOT NULL`;
-    query += ` AND transaction_date IS NOT NULL`;
+    query += ` AND p.surface IS NOT NULL`;
+    query += ` AND p.sale_value_nis IS NOT NULL`;
+    query += ` AND p.sale_day IS NOT NULL`;
+    query += ` AND p.surface > 0`;
+    query += ` AND CAST(p.sale_value_nis AS NUMERIC) > 0`;
 
     // ⚡ OPTIMIZATION 5: Sort by indexed column
-    query += ` ORDER BY transaction_date DESC`;
+    query += ` ORDER BY p.sale_day DESC`;
     
     // ⚡ OPTIMIZATION 6: Aggressive pagination
     query += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     params.push(safeLimit, safeOffset);
+    
+    if (isDev && !isVercel) {
+      console.log('📊 Optimized query with', params.length - 2, 'filters');
+      console.log('📊 Params:', params);
+    }
 
-    console.log('📊 Optimized query with', params.length - 2, 'filters');
-    console.log('📊 Params:', params);
+    // Only run test queries in development (not in Vercel production)
+    if (isDev && !isVercel && process.env.DEBUG_DB_SCHEMA === 'true') {
+      try {
+        const testQuery = await db.query(`
+          SELECT column_name, data_type 
+          FROM information_schema.columns 
+          WHERE table_schema = 'public' AND table_name = 'properties'
+          ORDER BY ordinal_position
+          LIMIT 20
+        `);
+        console.log('✅ Properties table columns:', testQuery.rows.map(r => `${r.column_name} (${r.data_type})`).join(', '));
+        
+        const countQuery = await db.query('SELECT COUNT(*) as count FROM properties');
+        console.log('✅ Properties table row count:', countQuery.rows[0]?.count);
+      } catch (testError) {
+        let errorMsg = 'Unknown error';
+        if (testError instanceof Error) {
+          errorMsg = testError.message || testError.toString();
+        } else if (testError && typeof testError === 'object') {
+          errorMsg = testError.message || testError.error?.message || JSON.stringify(testError);
+        } else {
+          errorMsg = String(testError);
+        }
+        console.error('❌ Properties table test failed:', errorMsg);
+        console.error('❌ Test error code:', testError.code || testError.error?.code);
+        console.error('❌ Test error detail:', testError.detail || testError.error?.detail);
+        console.error('❌ Test error type:', typeof testError);
+        console.error('❌ Test error keys:', Object.keys(testError || {}));
+      }
+    }
 
     const startTime = Date.now();
-    const result = await db.query(query, params);
+    let result
+    try {
+      if (isDev && !isVercel) {
+        console.log('🔍 Executing query:', query.substring(0, 200) + '...');
+      }
+      result = await db.query(query, params);
+    } catch (queryError) {
+      // Handle ErrorEvent from Neon WebSocket - extract actual error message
+      let errorMsg = 'Unknown error';
+      let errorDetail = '';
+      let errorHint = '';
+      let errorCode = '';
+      
+      // Try to extract error information from various possible formats
+      if (queryError instanceof Error) {
+        errorMsg = queryError.message || queryError.toString();
+        errorDetail = queryError.detail || '';
+        errorHint = queryError.hint || '';
+        errorCode = queryError.code || '';
+      } else if (queryError && typeof queryError === 'object') {
+        // Try to get message from ErrorEvent or other error objects
+        errorMsg = queryError.message || queryError.error?.message || queryError.toString() || JSON.stringify(queryError);
+        errorDetail = queryError.detail || queryError.error?.detail || '';
+        errorHint = queryError.hint || queryError.error?.hint || '';
+        errorCode = queryError.code || queryError.error?.code || '';
+        
+        // If it's an ErrorEvent, try to get more info
+        if (queryError.type === 'error' || queryError.constructor?.name === 'ErrorEvent') {
+          errorMsg = queryError.message || queryError.error?.message || 'WebSocket connection error';
+        }
+      } else {
+        errorMsg = String(queryError);
+      }
+      
+      console.error('❌ SQL Query Error:', errorMsg);
+      console.error('❌ Error Code:', errorCode);
+      console.error('❌ Error Detail:', errorDetail);
+      console.error('❌ Error Hint:', errorHint);
+      console.error('❌ Error Type:', typeof queryError);
+      console.error('❌ Error Constructor:', queryError?.constructor?.name);
+      console.error('❌ Full Error Object:', JSON.stringify(queryError, Object.getOwnPropertyNames(queryError)));
+      console.error('❌ SQL Query (first 500 chars):', query.substring(0, 500));
+      console.error('❌ SQL Params:', params);
+      
+      throw new Error(`Database query failed: ${errorMsg}${errorDetail ? ' - ' + errorDetail : ''}${errorHint ? ' - Hint: ' + errorHint : ''}`);
+    }
     const queryTime = Date.now() - startTime;
 
-    console.log(`⚡ Query executed in ${queryTime}ms, returned ${result.rows.length} rows`);
+    if (isDev && !isVercel) {
+      console.log(`⚡ Query executed in ${queryTime}ms, returned ${result.rows.length} rows`);
+    }
 
-    // Calculate price_per_sqm for rows that don't have it
-    // If price_per_sqm is missing, 0, or 0.0, calculate it from sale_value_nis / surface
+    // Price per sqm is already calculated in SQL query
+    // Parse string values to numbers (sale_value_nis is stored as character varying)
     const processedRows = result.rows.map(row => {
-      const hasPricePerSqm = row.price_per_sqm && row.price_per_sqm > 0;
-      const calculatedPricePerSqm = (row.sale_value_nis && row.surface && row.surface > 0)
-        ? Math.round(row.sale_value_nis / row.surface)
-        : null;
+      // Parse sale_value_nis from string to number
+      const saleValueNis = typeof row.sale_value_nis === 'string' 
+        ? parseFloat(row.sale_value_nis.trim()) 
+        : (typeof row.sale_value_nis === 'number' ? row.sale_value_nis : null);
+      
+      // Ensure price_per_sqm is numeric
+      const pricePerSqm = typeof row.price_per_sqm === 'string'
+        ? parseFloat(row.price_per_sqm.trim())
+        : (typeof row.price_per_sqm === 'number' ? row.price_per_sqm : null);
       
       return {
         ...row,
-        estimated_price_ils: row.sale_value_nis, // Add estimated_price_ils alias
-        price_per_sqm: hasPricePerSqm ? row.price_per_sqm : calculatedPricePerSqm
+        sale_value_nis: saleValueNis, // Ensure numeric type
+        estimated_price_ils: saleValueNis, // Add estimated_price_ils alias (numeric)
+        price_per_sqm: pricePerSqm // Ensure numeric type
       };
     });
 
@@ -236,9 +352,20 @@ router.get('/search', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Asset details search failed:', error);
+    console.error('❌ Error type:', typeof error);
+    console.error('❌ Error keys:', Object.keys(error));
+    if (error.message) console.error('❌ Error message:', error.message);
+    if (error.code) console.error('❌ Error code:', error.code);
+    if (error.detail) console.error('❌ Error detail:', error.detail);
+    if (error.hint) console.error('❌ Error hint:', error.hint);
+    if (error.query) console.error('❌ Failed query:', error.query);
+    if (error.position) console.error('❌ Error position:', error.position);
+    
     return res.status(500).json({
       success: false,
-      error: error.message || 'Failed to search asset details'
+      error: error.message || error.toString() || 'Failed to search asset details',
+      details: error.detail || error.hint || 'Unknown database error',
+      code: error.code || 'UNKNOWN'
     });
   }
 });
@@ -277,26 +404,30 @@ router.get('/stats', async (req, res) => {
     // Query 1: Get ranges (fast with indexes)
     const rangesQuery = `
       SELECT
-        MIN(year_built) as min_year,
-        MAX(year_built) as max_year,
-        MIN(registered_area_sqm) as min_surface,
-        MAX(registered_area_sqm) as max_surface,
-        MIN(transaction_date) as earliest_transaction,
-        MAX(transaction_date) as latest_transaction
-      FROM asset_details
-      WHERE registered_area_sqm IS NOT NULL
-        AND transaction_date IS NOT NULL
-        AND declared_price_ils IS NOT NULL
+        MIN(year_of_construction) as min_year,
+        MAX(year_of_construction) as max_year,
+        MIN(surface) as min_surface,
+        MAX(surface) as max_surface,
+        MIN(sale_day) as earliest_transaction,
+        MAX(sale_day) as latest_transaction
+      FROM properties
+      WHERE surface IS NOT NULL
+        AND sale_day IS NOT NULL
+        AND sale_value_nis IS NOT NULL
+        AND surface > 0
+        AND CAST(sale_value_nis AS NUMERIC) > 0
     `;
 
-    // Query 2: Get distinct cities (limit to reasonable number)
+    // Query 2: Get distinct settlements (from properties table, limit to reasonable number)
     const citiesQuery = `
-      SELECT DISTINCT city
-      FROM asset_details
-      WHERE city IS NOT NULL
-        AND registered_area_sqm IS NOT NULL
-        AND transaction_date IS NOT NULL
-      ORDER BY city
+      SELECT DISTINCT settlement
+      FROM properties
+      WHERE settlement IS NOT NULL
+        AND surface IS NOT NULL
+        AND sale_day IS NOT NULL
+        AND surface > 0
+        AND CAST(sale_value_nis AS NUMERIC) > 0
+      ORDER BY settlement
       LIMIT 500
     `;
 
@@ -304,7 +435,7 @@ router.get('/stats', async (req, res) => {
     const countQuery = `
       SELECT reltuples::bigint AS approximate_count
       FROM pg_class
-      WHERE relname = 'asset_details'
+      WHERE relname = 'properties'
     `;
 
     const startTime = Date.now();
@@ -315,11 +446,13 @@ router.get('/stats', async (req, res) => {
     ]);
     const queryTime = Date.now() - startTime;
 
-    const cities = citiesResult.rows.map(r => r.city);
+    const settlements = citiesResult.rows.map(r => r.settlement);
     const stats = {
       ...rangesResult.rows[0],
-      city_count: cities.length,
-      cities: cities,
+      settlement_count: settlements.length,
+      settlements: settlements,
+      city_count: settlements.length, // Keep for backward compatibility
+      cities: settlements, // Keep for backward compatibility
       total_records: countResult.rows[0]?.approximate_count || 0,
       year_count: rangesResult.rows[0].max_year - rangesResult.rows[0].min_year + 1,
       queryTimeMs: queryTime
@@ -356,7 +489,7 @@ router.get('/stats', async (req, res) => {
  */
 router.post('/analyze', async (req, res) => {
   try {
-    const { selectedIds, propertyArea } = req.body;
+    const { selectedIds, propertyArea, apartmentSqm, balconySqm, balconyCoef } = req.body;
 
     if (!selectedIds || !Array.isArray(selectedIds) || selectedIds.length === 0) {
       return res.status(400).json({
@@ -371,55 +504,109 @@ router.post('/analyze', async (req, res) => {
     const placeholders = selectedIds.map((_, i) => `$${i + 1}`).join(',');
     const query = `
       SELECT 
-        id,
-        transaction_date as sale_day,
-        CONCAT(street, ' ', house_number, ', ', city) as address,
-        street,
-        house_number,
-        city,
-        parcel_id as block_of_land,
-        room_count as rooms,
-        floor,
-        registered_area_sqm as surface,
-        year_built as year_of_constru,
-        declared_price_ils as sale_value_nis,
-        price_per_sqm,
-        building_function as asset_type
-      FROM asset_details
-      WHERE id IN (${placeholders})
+        p.id,
+        p.sale_day as sale_day,
+        COALESCE(
+          NULLIF(
+            TRIM(
+              COALESCE(ad.street, '') || 
+              CASE WHEN ad.street IS NOT NULL AND ad.house_number IS NOT NULL THEN ' ' ELSE '' END ||
+              COALESCE(ad.house_number::text, '') ||
+              CASE WHEN (ad.street IS NOT NULL OR ad.house_number IS NOT NULL) AND ad.city IS NOT NULL THEN ', ' ELSE '' END ||
+              COALESCE(ad.city, '')
+            ),
+            ''
+          ),
+          p.settlement,
+          'N/A'
+        ) as address,
+        COALESCE(ad.street, 'N/A') as street,
+        COALESCE(ad.house_number::text, 'N/A') as house_number,
+        COALESCE(ad.city, p.settlement, 'N/A') as city,
+        p.settlement,
+        p.block_of_land,
+        p.rooms,
+        COALESCE(ad.floor, NULL) as floor,
+        p.surface,
+        p.year_of_construction as year_of_constru,
+        p.sale_value_nis,
+        CASE 
+          WHEN p.surface > 0 AND CAST(p.sale_value_nis AS NUMERIC) > 0 
+          THEN ROUND(CAST(p.sale_value_nis AS NUMERIC) / p.surface)
+          ELSE NULL
+        END as price_per_sqm,
+        p.asset_type
+      FROM properties p
+      LEFT JOIN asset_details ad ON p.id = ad.property_id
+      WHERE p.id IN (${placeholders})
     `;
 
     const result = await db.query(query, selectedIds);
     
-    // Process comparables: calculate price_per_sqm if missing and add estimated_price_ils
+    // Process comparables: add estimated_price_ils alias and ensure numeric types
     const comparables = result.rows.map(row => {
-      const hasPricePerSqm = row.price_per_sqm && row.price_per_sqm > 0;
-      const calculatedPricePerSqm = (row.sale_value_nis && row.surface && row.surface > 0)
-        ? Math.round(row.sale_value_nis / row.surface)
-        : null;
+      // Parse sale_value_nis from string to number (it's stored as character varying)
+      const saleValueNis = typeof row.sale_value_nis === 'string' 
+        ? parseFloat(row.sale_value_nis.trim()) 
+        : (typeof row.sale_value_nis === 'number' ? row.sale_value_nis : null);
+      
+      // Ensure price_per_sqm is numeric
+      const pricePerSqm = typeof row.price_per_sqm === 'string'
+        ? parseFloat(row.price_per_sqm.trim())
+        : (typeof row.price_per_sqm === 'number' ? row.price_per_sqm : null);
       
       return {
         ...row,
-        estimated_price_ils: row.sale_value_nis, // Add estimated_price_ils alias
-        price_per_sqm: hasPricePerSqm ? row.price_per_sqm : calculatedPricePerSqm
+        sale_value_nis: saleValueNis, // Ensure numeric type
+        estimated_price_ils: saleValueNis, // Add estimated_price_ils alias (numeric)
+        price_per_sqm: pricePerSqm // Ensure numeric type
       };
     });
 
-    console.log('📊 Fetched comparables:', comparables.length);
-    console.log('📊 Sample comparable:', comparables[0]);
+    const isDev = process.env.NODE_ENV !== 'production';
+    const isVercel = process.env.VERCEL === '1';
+    
+    if (isDev && !isVercel) {
+      console.log('📊 Fetched comparables:', comparables.length);
+      console.log('📊 Sample comparable:', comparables[0]);
+    }
 
     // Calculate statistics
+    // CRITICAL: Parse sale_value_nis from string to number (it's stored as character varying)
     const prices = comparables
-      .map(c => c.sale_value_nis)
-      .filter(p => p && p > 0);
+      .map(c => {
+        const price = c.sale_value_nis;
+        // Handle string values from database
+        if (typeof price === 'string') {
+          const parsed = parseFloat(price.trim());
+          return isNaN(parsed) || parsed <= 0 ? null : parsed;
+        }
+        // Handle numeric values
+        return (typeof price === 'number' && price > 0) ? price : null;
+      })
+      .filter(p => p !== null && p > 0);
     
-    console.log('📊 Valid prices:', prices.length, 'values:', prices.slice(0, 3));
+    if (isDev && !isVercel) {
+      console.log('📊 Valid prices:', prices.length, 'values:', prices.slice(0, 3));
+    }
     
+    // CRITICAL: Parse price_per_sqm to number (might be string or numeric)
     const pricesPerSqm = comparables
-      .map(c => c.price_per_sqm)
-      .filter(p => p && p > 0);
+      .map(c => {
+        const price = c.price_per_sqm;
+        // Handle string values
+        if (typeof price === 'string') {
+          const parsed = parseFloat(price.trim());
+          return isNaN(parsed) || parsed <= 0 ? null : parsed;
+        }
+        // Handle numeric values
+        return (typeof price === 'number' && price > 0) ? price : null;
+      })
+      .filter(p => p !== null && p > 0);
 
-    console.log('📊 Valid prices per sqm:', pricesPerSqm.length, 'values:', pricesPerSqm.slice(0, 3));
+    if (isDev && !isVercel) {
+      console.log('📊 Valid prices per sqm:', pricesPerSqm.length, 'values:', pricesPerSqm.slice(0, 3));
+    }
 
     const calculateMedian = (arr) => {
       if (arr.length === 0) return 0;
@@ -456,13 +643,46 @@ router.post('/analyze', async (req, res) => {
       } : { min: 0, max: 0 }
     };
 
-    // Estimate property value if area provided
-    if (propertyArea && propertyArea > 0 && averagePricePerSqm > 0) {
-      analysis.estimatedValue = Math.round(averagePricePerSqm * propertyArea);
+    // Estimate property value using Section 5.2 calculation logic:
+    // effective_sqm = apartment_sqm + (balcony_sqm * balcony_coef)
+    // asset_value_nis = final_price_per_sqm * effective_sqm
+    
+    // Use medianPricePerSqm for more robust estimation (less affected by outliers)
+    // Fall back to averagePricePerSqm if median is not available
+    const pricePerSqmForEstimation = medianPricePerSqm > 0 ? medianPricePerSqm : averagePricePerSqm;
+    
+    // Calculate effective area using Section 5.2 logic
+    // If apartmentSqm and balconySqm are provided, use them; otherwise fall back to propertyArea
+    let effectiveSqm = 0;
+    const coef = (balconyCoef !== undefined && balconyCoef !== null) ? parseFloat(balconyCoef) : 0.5; // Default 0.5
+    const validCoef = Math.max(0.1, Math.min(1.5, coef)); // Clamp to 0.1-1.5 range
+    
+    if (apartmentSqm && apartmentSqm > 0) {
+      const aptArea = parseFloat(apartmentSqm);
+      const balconyArea = (balconySqm && balconySqm > 0) ? parseFloat(balconySqm) : 0;
+      // Calculate effective area: apartment + (balcony * coefficient)
+      effectiveSqm = Math.ceil(aptArea + (balconyArea * validCoef)); // Round up to whole sqm
+    } else if (propertyArea && propertyArea > 0) {
+      // Fallback: use propertyArea as effective area (assumes it's already equivalent area)
+      effectiveSqm = Math.ceil(parseFloat(propertyArea));
+    }
+    
+    if (effectiveSqm > 0 && pricePerSqmForEstimation > 0) {
+      // Calculate asset value: price per sqm * effective sqm
+      const rawValue = pricePerSqmForEstimation * effectiveSqm;
+      // Round to nearest 1,000 NIS
+      analysis.estimatedValue = Math.round(rawValue / 1000) * 1000;
       analysis.estimatedRange = {
         low: Math.round(analysis.estimatedValue * 0.9),
         high: Math.round(analysis.estimatedValue * 1.1)
       };
+      
+      // Include calculation details for transparency
+      analysis.estimationMethod = medianPricePerSqm > 0 ? 'median' : 'average';
+      analysis.effectiveSqm = effectiveSqm;
+      analysis.apartmentSqm = apartmentSqm ? parseFloat(apartmentSqm) : null;
+      analysis.balconySqm = (balconySqm && balconySqm > 0) ? parseFloat(balconySqm) : null;
+      analysis.balconyCoef = validCoef;
     }
 
     console.log('✅ Analysis complete:', {
@@ -518,38 +738,52 @@ router.post('/save-selection', async (req, res) => {
     const placeholders = selectedIds.map((_, i) => `$${i + 1}`).join(',');
     const query = `
       SELECT 
-        id,
-        transaction_date as sale_day,
-        CONCAT(street, ' ', house_number, ', ', city) as address,
-        street,
-        house_number,
-        city,
-        parcel_id as block_of_land,
-        room_count as rooms,
-        floor,
-        registered_area_sqm as surface,
-        year_built as year_of_constru,
-        declared_price_ils as sale_value_nis,
-        price_per_sqm,
-        building_function as asset_type
-      FROM asset_details
-      WHERE id IN (${placeholders})
-      ORDER BY transaction_date DESC
+        p.id,
+        p.sale_day as sale_day,
+        COALESCE(
+          NULLIF(
+            TRIM(
+              COALESCE(ad.street, '') || 
+              CASE WHEN ad.street IS NOT NULL AND ad.house_number IS NOT NULL THEN ' ' ELSE '' END ||
+              COALESCE(ad.house_number::text, '') ||
+              CASE WHEN (ad.street IS NOT NULL OR ad.house_number IS NOT NULL) AND ad.city IS NOT NULL THEN ', ' ELSE '' END ||
+              COALESCE(ad.city, '')
+            ),
+            ''
+          ),
+          p.settlement,
+          'N/A'
+        ) as address,
+        COALESCE(ad.street, 'N/A') as street,
+        COALESCE(ad.house_number::text, 'N/A') as house_number,
+        COALESCE(ad.city, p.settlement, 'N/A') as city,
+        p.settlement,
+        p.block_of_land,
+        p.rooms,
+        COALESCE(ad.floor, NULL) as floor,
+        p.surface,
+        p.year_of_construction as year_of_constru,
+        p.sale_value_nis,
+        CASE 
+          WHEN p.surface > 0 AND CAST(p.sale_value_nis AS NUMERIC) > 0 
+          THEN ROUND(CAST(p.sale_value_nis AS NUMERIC) / p.surface)
+          ELSE NULL
+        END as price_per_sqm,
+        p.asset_type
+      FROM properties p
+      LEFT JOIN asset_details ad ON p.id = ad.property_id
+      WHERE p.id IN (${placeholders})
+      ORDER BY p.sale_day DESC
     `;
 
     const result = await db.query(query, selectedIds);
     
-    // Calculate price_per_sqm if missing, 0, or 0.0, and add estimated_price_ils
+    // Add estimated_price_ils alias
     const selectedComparables = result.rows.map(row => {
-      const hasPricePerSqm = row.price_per_sqm && row.price_per_sqm > 0;
-      const calculatedPricePerSqm = (row.sale_value_nis && row.surface && row.surface > 0)
-        ? Math.round(row.sale_value_nis / row.surface)
-        : null;
-      
       return {
         ...row,
         estimated_price_ils: row.sale_value_nis, // Add estimated_price_ils alias
-        price_per_sqm: hasPricePerSqm ? row.price_per_sqm : calculatedPricePerSqm
+        price_per_sqm: row.price_per_sqm // Already calculated in SQL
       };
     });
 
