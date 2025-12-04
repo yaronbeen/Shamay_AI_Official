@@ -117,11 +117,31 @@ const formatDateHebrew = (value?: string) => {
   return `${day} ${month} ${year}`
 }
 
-const formatCurrency = (value?: number) => {
-  if (value === undefined || value === null || Number.isNaN(Number(value))) {
+// Helper function to safely parse numeric values (handles strings from backend)
+const parseNumeric = (value: any, fallback: number = 0): number => {
+  if (value === null || value === undefined || value === '') {
+    return fallback
+  }
+  if (typeof value === 'number') {
+    return isNaN(value) || !isFinite(value) ? fallback : value
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (trimmed === '' || trimmed.toLowerCase() === 'null' || trimmed.toLowerCase() === 'undefined') {
+      return fallback
+    }
+    const parsed = parseFloat(trimmed)
+    return isNaN(parsed) || !isFinite(parsed) ? fallback : parsed
+  }
+  return fallback
+}
+
+const formatCurrency = (value?: number | string) => {
+  const numValue = parseNumeric(value)
+  if (numValue === 0 && (value === undefined || value === null || value === '')) {
     return '₪ —'
   }
-  return `₪ ${(Number(value)).toLocaleString('he-IL')}`
+  return `₪ ${numValue.toLocaleString('he-IL')}`
 }
 
 const formatNumber = (value?: number | string, fallbackText = '—') => {
@@ -283,7 +303,8 @@ const createComparablesTable = (data: ValuationData) => {
   }
 
   const rows = items.slice(0, 10).map((item) => {
-    const saleDate = formatDateNumeric(item.sale_date || item.date || item.transaction_date || item.saleDate || item.sale_day)
+    // Parse sale date - backend returns sale_day (prioritize this)
+    const saleDate = formatDateNumeric(item.sale_day || item.sale_date || item.date || item.transaction_date || item.saleDate)
     
     // Format gush/chelka using the formatter function
     // If block_of_land exists, use formatBlockParcelFromString to convert "007113-0009-010-00" → "7113/9"
@@ -292,14 +313,27 @@ const createComparablesTable = (data: ValuationData) => {
       ? formatBlockParcelFromString(rawBlockOfLand)
       : normalizeText(item.gush_chelka || item.block_lot || item.gushChelka, '—')
     
+    // Parse address - backend returns address (constructed from asset_details or settlement)
     const address = normalizeText(item.address || item.street_address || item.streetAddress, '—')
+    
+    // Parse rooms - backend returns rooms (numeric)
     const rooms = normalizeText(item.rooms || item.room_count, '—')
-    const floor = normalizeText(item.floor_number || item.floor || item.floor_num || item.floorNumber, '—')
-    const size = normalizeText(item.size || item.area || item.sqm || item.sizeInSqm || item.apartmentArea || item.surface, '—')
-    const buildYear = normalizeText(item.building_year || item.year_built || item.construction_year || item.buildYear || item.year_of_constru || item.constructionYear, '—')
-    const price = item.price || item.declared_price || item.sale_value_nis ? `₪ ${(Number(item.price || item.declared_price || item.sale_value_nis)).toLocaleString('he-IL')}` : '—'
-    const pricePerSqm = item.price_per_sqm
-      ? `₪ ${(Math.round(Number(item.price_per_sqm) / 100) * 100).toLocaleString('he-IL')}`
+    
+    // Parse floor - backend returns floor (from asset_details, may be null)
+    const floor = normalizeText(item.floor || item.floor_number || item.floor_num || item.floorNumber, '—')
+    
+    // Parse size - backend returns surface (numeric, prioritize this)
+    const size = normalizeText(item.surface || item.size || item.area || item.sqm || item.sizeInSqm || item.apartmentArea, '—')
+    
+    // Parse build year - backend returns year_of_constru (from year_of_construction, prioritize this)
+    const buildYear = normalizeText(item.year_of_constru || item.year_of_construction || item.building_year || item.year_built || item.construction_year || item.buildYear || item.constructionYear, '—')
+    // Parse prices safely (handles strings from backend)
+    const salePrice = parseNumeric(item.price || item.declared_price || item.sale_value_nis || item.estimated_price_ils)
+    const price = salePrice > 0 ? `₪ ${salePrice.toLocaleString('he-IL')}` : '—'
+    
+    const pricePerSqmValue = parseNumeric(item.price_per_sqm)
+    const pricePerSqm = pricePerSqmValue > 0
+      ? `₪ ${(Math.round(pricePerSqmValue / 100) * 100).toLocaleString('he-IL')}`
       : '—'
 
     return `
@@ -1304,7 +1338,27 @@ export function generateDocumentHTML(
   const valuationEffectiveDate = data.valuationEffectiveDate || valuationDate
   const address = getAddress(data)
   const reference = getReference(data)
-  const finalValue = (data as any).finalValuation || (data as any).marketAnalysis?.estimatedValue
+  // Parse final value safely (handles strings from backend)
+  // Priority: finalValuation > section52.asset_value_nis > comparableDataAnalysis.estimatedValue > marketAnalysis.estimatedValue
+  const finalValueRaw = (data as any).finalValuation || 
+    ((data as any).comparableDataAnalysis?.section52 as any)?.asset_value_nis ||
+    (data as any).comparableDataAnalysis?.estimatedValue ||
+    ((data as any).comparableAnalysis as any)?.estimatedValue ||
+    ((data as any).marketAnalysis as any)?.estimatedValue ||
+    0
+  const finalValue = parseNumeric(finalValueRaw)
+  
+  // Debug logging (only in development)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('📊 [Document Template] Final Value Sources:', {
+      finalValuation: (data as any).finalValuation,
+      section52Value: ((data as any).comparableDataAnalysis?.section52 as any)?.asset_value_nis,
+      comparableDataAnalysisEstimated: (data as any).comparableDataAnalysis?.estimatedValue,
+      comparableAnalysisEstimated: ((data as any).comparableAnalysis as any)?.estimatedValue,
+      marketAnalysisEstimated: ((data as any).marketAnalysis as any)?.estimatedValue,
+      finalValue
+    })
+  }
 
   const neighborhoodName = normalizeText(data.neighborhood, 'שכונה לא צוינה')
   const environmentParagraph = `שכונת ${neighborhoodName}${data.city ? ` ב${data.city}` : ''} נהנית מנגישות טובה, שירותים קהילתיים ומרקם מגורים מגוון.`
@@ -2110,18 +2164,45 @@ export function generateDocumentHTML(
   `
 
   // ===== CHAPTER 5 - Calculations =====
-  const comparablesList = (data as any).comparableData || []
+  const comparablesList = (data as any).comparableData || (data as any).comparable_data || []
   const includedComps = comparablesList.filter((c: any) => c.included !== false)
   
   // Extract analysis data from comparable data analysis results
-  const analysisData = (data as any).comparableAnalysis || (data as any).marketAnalysis || {}
-  const averagePrice = analysisData.averagePrice || 0
-  const medianPrice = analysisData.medianPrice || 0
-  const averagePricePerSqm = analysisData.averagePricePerSqm || 0
-  const medianPricePerSqm = analysisData.medianPricePerSqm || 0
+  // Priority: comparableDataAnalysis (from Step4) > comparableAnalysis > marketAnalysis
+  const analysisData = (data as any).comparableDataAnalysis || (data as any).comparableAnalysis || (data as any).marketAnalysis || {}
+  // Parse all numeric values safely (handles strings from backend)
+  const averagePrice = parseNumeric(analysisData.averagePrice)
+  const medianPrice = parseNumeric(analysisData.medianPrice)
+  const averagePricePerSqm = parseNumeric(analysisData.averagePricePerSqm)
+  const medianPricePerSqm = parseNumeric(analysisData.medianPricePerSqm)
   
-  // Use the final price per sqm (prioritize averagePricePerSqm, then median, then fallback)
-  const equivPricePerSqm = (data as any).pricePerSqm || averagePricePerSqm || medianPricePerSqm || (data as any).marketAnalysis?.averagePricePerSqm || 0
+  // Use the final price per sqm (prioritize data.pricePerSqm if > 0, then analysisData values)
+  // Check multiple sources to ensure we get a valid value
+  const topLevelPricePerSqm = parseNumeric((data as any).pricePerSqm)
+  const equivPricePerSqmRaw = topLevelPricePerSqm > 0 
+    ? topLevelPricePerSqm
+    : (averagePricePerSqm || 
+        medianPricePerSqm || 
+        (data as any).comparableDataAnalysis?.averagePricePerSqm ||
+        ((data as any).comparableAnalysis as any)?.averagePricePerSqm ||
+        (data as any).marketAnalysis?.averagePricePerSqm ||
+        ((data as any).comparableDataAnalysis?.section52 as any)?.final_price_per_sqm ||
+        0)
+  const equivPricePerSqm = parseNumeric(equivPricePerSqmRaw)
+  
+  // Debug logging (only in development)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('📊 [Document Template] Price Per Sqm Sources:', {
+      topLevelPricePerSqm,
+      averagePricePerSqm,
+      medianPricePerSqm,
+      comparableDataAnalysisAvg: (data as any).comparableDataAnalysis?.averagePricePerSqm,
+      comparableAnalysisAvg: ((data as any).comparableAnalysis as any)?.averagePricePerSqm,
+      marketAnalysisAvg: (data as any).marketAnalysis?.averagePricePerSqm,
+      section52Price: ((data as any).comparableDataAnalysis?.section52 as any)?.final_price_per_sqm,
+      equivPricePerSqm
+    })
+  }
   
   const valuationSection = `
     <section class="page">
@@ -2170,7 +2251,7 @@ export function generateDocumentHTML(
                 </div>
                 ${analysisData.priceRange ? `
                   <p class="muted" style="margin-top: 12px; font-size: 9pt;">
-                    טווח מחירים: ${formatCurrency(analysisData.priceRange.min)} - ${formatCurrency(analysisData.priceRange.max)}
+                    טווח מחירים: ${formatCurrency(parseNumeric(analysisData.priceRange.min))} - ${formatCurrency(parseNumeric(analysisData.priceRange.max))}
                   </p>
                 ` : ''}
               </div>

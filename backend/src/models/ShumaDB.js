@@ -11,17 +11,39 @@ const crypto = require('crypto')
 
 // Import based on environment
 let Pool, neonConfig
-try {
-  // Try to import Neon serverless (for production/Vercel)
-  const neonModule = require('@neondatabase/serverless')
-  neonConfig = neonModule.neonConfig
-  Pool = neonModule.Pool
-  console.log('✅ Using @neondatabase/serverless')
-} catch (e) {
-  // Fallback to pg for local development
-  const pg = require('pg')
-  Pool = pg.Pool
-  console.log('✅ Using pg (local development)')
+const isDev = process.env.NODE_ENV !== 'production'
+const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV === 'production'
+const hasDatabaseURL = !!(process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_URL_NON_POOLING)
+const useLocalDB = isDev && !isVercel && (!hasDatabaseURL || process.env.USE_LOCAL_DB === 'true')
+
+if (useLocalDB) {
+  // Local development: Use pg (standard PostgreSQL driver)
+  try {
+    const pg = require('pg')
+    Pool = pg.Pool
+    console.log('✅ Using pg (local PostgreSQL)')
+  } catch (e) {
+    console.error('❌ Failed to import pg:', e.message)
+    throw new Error('pg module is required for local development')
+  }
+} else {
+  // Production/Vercel or when DATABASE_URL is set: Use Neon serverless
+  try {
+    const neonModule = require('@neondatabase/serverless')
+    neonConfig = neonModule.neonConfig
+    Pool = neonModule.Pool
+    console.log('✅ Using @neondatabase/serverless')
+  } catch (e) {
+    // Fallback to pg if Neon is not available
+    try {
+      const pg = require('pg')
+      Pool = pg.Pool
+      console.log('⚠️ Neon not available, falling back to pg')
+    } catch (pgError) {
+      console.error('❌ Failed to import both Neon and pg:', pgError.message)
+      throw new Error('Database driver is not available')
+    }
+  }
 }
 
 // Lazy pool initialization - only create when first used
@@ -51,7 +73,18 @@ function getDatabaseConfig() {
   const POSTGRES_URL_NON_POOLING = process.env.POSTGRES_URL_NON_POOLING
   
   const isDev = process.env.NODE_ENV !== 'production'
+  const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV === 'production'
   const debugConfig = process.env.DEBUG_DB_CONFIG === 'true'
+  
+  // Check if we have a connection string
+  const connectionString = DATABASE_URL || POSTGRES_URL || POSTGRES_URL_NON_POOLING
+  
+  // Debug logging to understand what's happening
+  if (isDev) {
+    console.log('🔍 getDatabaseConfig - DATABASE_URL:', DATABASE_URL ? 'SET (' + DATABASE_URL.substring(0, 30) + '...)' : 'NOT SET')
+    console.log('🔍 getDatabaseConfig - connectionString:', connectionString ? 'SET (' + connectionString.substring(0, 30) + '...)' : 'NOT SET')
+    console.log('🔍 getDatabaseConfig - USE_LOCAL_DB:', process.env.USE_LOCAL_DB || 'NOT SET')
+  }
   
   // Only log config details in dev mode with debug flag
   if (isDev && debugConfig) {
@@ -59,16 +92,34 @@ function getDatabaseConfig() {
     console.log('🔍 DATABASE_URL:', DATABASE_URL ? 'SET ✅' : 'NOT SET ❌')
     console.log('🔍 POSTGRES_URL:', POSTGRES_URL ? 'SET ✅' : 'NOT SET ❌')
     console.log('🔍 POSTGRES_URL_NON_POOLING:', POSTGRES_URL_NON_POOLING ? 'SET ✅' : 'NOT SET ❌')
-    console.log('🔍 VERCEL:', process.env.VERCEL ? 'YES' : 'NO')
+    console.log('🔍 VERCEL:', isVercel ? 'YES' : 'NO')
     console.log('🔍 NODE_ENV:', process.env.NODE_ENV)
+    console.log('🔍 DB_HOST:', process.env.DB_HOST || 'localhost')
+    console.log('🔍 USE_LOCAL_DB:', process.env.USE_LOCAL_DB || 'NOT SET')
   }
   
-  // Prefer DATABASE_URL, then POSTGRES_URL, then POSTGRES_URL_NON_POOLING, then fallback to local
-  const connectionString = DATABASE_URL || POSTGRES_URL || POSTGRES_URL_NON_POOLING
-  
+  // Priority: If DATABASE_URL is set, use it (Neon) unless explicitly overridden
+  // Only use local PostgreSQL if:
+  // 1. USE_LOCAL_DB=true is explicitly set (override), OR
+  // 2. No connection string is available at all
   if (connectionString) {
+    // Check if user explicitly wants local DB despite having DATABASE_URL
+    if (isDev && !isVercel && process.env.USE_LOCAL_DB === 'true') {
+      if (debugConfig) {
+        console.log('⚠️ USE_LOCAL_DB=true set, overriding DATABASE_URL. Using local DB.')
+      }
+      return {
+        host: process.env.DB_HOST || 'localhost',
+        port: parseInt(process.env.DB_PORT || '5432'),
+        database: process.env.DB_NAME || 'shamay_land_registry',
+        user: process.env.DB_USER || 'postgres',
+        password: process.env.DB_PASSWORD || 'postgres123',
+      }
+    }
+    
+    // Use connection string (Neon) - this is the default when DATABASE_URL is set
     if (isDev && debugConfig) {
-      console.log('✅ Using connection string from env:', connectionString.substring(0, 20) + '...')
+      console.log('✅ Using connection string from env (Neon):', connectionString.substring(0, 20) + '...')
     }
     return {
       connectionString,
@@ -76,6 +127,21 @@ function getDatabaseConfig() {
     }
   }
   
+  // No connection string available - use local PostgreSQL (only in dev)
+  if (isDev && !isVercel) {
+    if (debugConfig) {
+      console.log('✅ Using LOCAL PostgreSQL connection (no DATABASE_URL set)')
+    }
+    return {
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT || '5432'),
+      database: process.env.DB_NAME || 'shamay_land_registry',
+      user: process.env.DB_USER || 'postgres',
+      password: process.env.DB_PASSWORD || 'postgres123',
+    }
+  }
+  
+  // Fallback to local PostgreSQL
   if (isDev && debugConfig) {
     console.log('⚠️ No connection string found, using fallback local config')
   }
@@ -95,12 +161,28 @@ function getPool() {
       console.log('🔍 ShumaDB: Initializing connection pool...')
     }
     
-    if (!Pool) {
+    const config = getDatabaseConfig()
+    
+    // CRITICAL: Neon Pool only works with connection strings, not with host/port/database config
+    // If config doesn't have connectionString, we MUST use pg Pool, not Neon Pool
+    let actualPool = Pool
+    if (!config.connectionString) {
+      // We're using local PostgreSQL - must use pg Pool
+      // Check if current Pool is Neon's Pool (it won't work with localhost)
+      try {
+        const pg = require('pg')
+        actualPool = pg.Pool
+        console.log('✅ Using pg Pool for local PostgreSQL connection')
+      } catch (e) {
+        console.error('❌ Failed to import pg:', e.message)
+        throw new Error('pg module is required for local PostgreSQL connections')
+      }
+    }
+    
+    if (!actualPool) {
       console.error('❌ Pool constructor is not available!')
       throw new Error('Database Pool is not initialized. Make sure pg or @neondatabase/serverless is installed.')
     }
-    
-    const config = getDatabaseConfig()
     
     // Add connection pool optimization settings
     if (!config.connectionString) {
@@ -130,7 +212,7 @@ function getPool() {
     }
     
     try {
-      pool = new Pool(config)
+      pool = new actualPool(config)
       if (isDev) {
         console.log('✅ Pool created successfully')
       }

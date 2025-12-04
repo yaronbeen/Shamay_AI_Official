@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import React from 'react'
 import { Download, FileText, CheckCircle, Loader2, ExternalLink } from 'lucide-react'
 import { ValuationData } from '../ValuationWizard'
 
@@ -9,10 +10,59 @@ interface Step5ExportProps {
   onSaveFinalResults?: (finalValuation: number, pricePerSqm: number, comparableData: any, propertyAnalysis: any) => Promise<void>
 }
 
+// Helper function to safely parse numeric values (handles strings from backend)
+const parseNumeric = (value: any, fallback: number = 0): number => {
+  if (value === null || value === undefined || value === '') {
+    return fallback
+  }
+  if (typeof value === 'number') {
+    return isNaN(value) || !isFinite(value) ? fallback : value
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (trimmed === '' || trimmed.toLowerCase() === 'null' || trimmed.toLowerCase() === 'undefined') {
+      return fallback
+    }
+    const parsed = parseFloat(trimmed)
+    return isNaN(parsed) || !isFinite(parsed) ? fallback : parsed
+  }
+  return fallback
+}
+
 export function Step5Export({ data }: Step5ExportProps) {
   const [exporting, setExporting] = useState(false)
   const [exportStatus, setExportStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null)
+  const [sessionData, setSessionData] = useState<ValuationData | null>(null)
+  
+  // Load latest data from session when component mounts
+  React.useEffect(() => {
+    const loadSessionData = async () => {
+      if (!data.sessionId) return
+      
+      try {
+        const response = await fetch(`/api/session/${data.sessionId}`)
+        if (response.ok) {
+          const result = await response.json()
+          if (result.data) {
+            setSessionData(result.data as ValuationData)
+            console.log('✅ Step5Export: Loaded session data', {
+              finalValuation: result.data.finalValuation,
+              pricePerSqm: result.data.pricePerSqm,
+              hasComparableDataAnalysis: !!result.data.comparableDataAnalysis
+            })
+          }
+        }
+      } catch (error) {
+        console.error('❌ Step5Export: Failed to load session data', error)
+      }
+    }
+    
+    loadSessionData()
+  }, [data.sessionId])
+  
+  // Use session data if available, otherwise fall back to props data
+  const displayData = sessionData || data
 
   const handleExportPDF = async () => {
     if (!data.sessionId) {
@@ -198,13 +248,13 @@ export function Step5Export({ data }: Step5ExportProps) {
               <div className="bg-white rounded-lg p-4 border border-blue-200">
                 <p className="text-xs text-gray-500 mb-1">שטח</p>
                 <p className="text-lg font-bold text-blue-900">
-                  {data.area ? `${data.area} מ"ר` : 'לא מוגדר'}
+                  {displayData.area ? `${displayData.area} מ"ר` : 'לא מוגדר'}
                 </p>
               </div>
               <div className="bg-white rounded-lg p-4 border border-blue-200">
                 <p className="text-xs text-gray-500 mb-1">חדרים</p>
                 <p className="text-lg font-bold text-blue-900">
-                  {data.rooms || 'לא מוגדר'}
+                  {displayData.rooms || 'לא מוגדר'}
                 </p>
               </div>
             </div>
@@ -212,7 +262,14 @@ export function Step5Export({ data }: Step5ExportProps) {
             <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg p-5 text-white">
               <p className="text-sm mb-2 opacity-90">שווי הנכס</p>
               <p className="text-3xl font-bold">
-                ₪{data.comparableDataAnalysis?.estimatedValue ? data.comparableDataAnalysis?.estimatedValue.toLocaleString() : '0'}
+                ₪{parseNumeric(
+                  displayData.finalValuation || 
+                  (displayData.comparableDataAnalysis as any)?.estimatedValue ||
+                  ((displayData.comparableDataAnalysis as any)?.section52 as any)?.asset_value_nis ||
+                  ((displayData as any).comparableAnalysis as any)?.finalValue ||
+                  ((displayData.marketAnalysis as any)?.estimatedValue) || ((displayData.marketAnalysis as any)?.averagePrice) ||
+                  0
+                ).toLocaleString('he-IL')}
               </p>
             </div>
 
@@ -220,13 +277,20 @@ export function Step5Export({ data }: Step5ExportProps) {
               <div className="bg-white rounded-lg p-4 border border-blue-200">
                 <p className="text-xs text-gray-500 mb-1">מחיר למ"ר</p>
                 <p className="text-lg font-bold text-blue-900">
-                  ₪{data.pricePerSqm ? data.pricePerSqm.toLocaleString() : '0'}
+                  ₪{parseNumeric(
+                    displayData.pricePerSqm ||
+                    (displayData.comparableDataAnalysis as any)?.averagePricePerSqm ||
+                    ((displayData as any).comparableAnalysis as any)?.averagePricePerSqm ||
+                    displayData.marketAnalysis?.averagePricePerSqm ||
+                    ((displayData.comparableDataAnalysis as any)?.section52 as any)?.final_price_per_sqm ||
+                    0
+                  ).toLocaleString('he-IL')}
                 </p>
               </div>
               <div className="bg-white rounded-lg p-4 border border-blue-200">
                 <p className="text-xs text-gray-500 mb-1">תאריך הערכה</p>
                 <p className="text-base font-semibold text-gray-900">
-                  {data.valuationDate || 'לא מוגדר'}
+                  {displayData.valuationDate || 'לא מוגדר'}
                 </p>
               </div>
             </div>

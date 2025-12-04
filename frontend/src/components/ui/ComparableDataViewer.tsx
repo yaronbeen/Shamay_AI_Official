@@ -14,19 +14,20 @@ interface ComparableDataViewerProps {
 interface ComparableTransaction {
   id: number
   sale_day: string
-  address: string
-  street?: string
-  house_number?: string
-  city?: string
-  block_of_land?: string
-  rooms?: number
-  floor?: number
-  surface?: number
-  year_of_constru?: number
-  sale_value_nis?: number
-  estimated_price_ils?: number
-  price_per_sqm?: number
-  asset_type?: string
+  address: string // From asset_details (street + house_number + city) OR settlement OR 'N/A'
+  street?: string // From asset_details or 'N/A'
+  house_number?: string // From asset_details or 'N/A'
+  city?: string // From asset_details or settlement or 'N/A'
+  settlement?: string // From properties table
+  block_of_land?: string // From properties table
+  rooms?: number // From properties table
+  floor?: number // From properties table
+  surface?: number // From properties table (square meters)
+  year_of_constru?: number // From properties table (year_of_construction)
+  sale_value_nis?: number // From properties table
+  estimated_price_ils?: number // Alias for sale_value_nis
+  price_per_sqm?: number // Calculated as sale_value_nis / surface
+  asset_type?: string // From properties table
 }
 
 interface FilterState {
@@ -35,6 +36,8 @@ interface FilterState {
   surfaceMax: number
   yearMin: number
   yearMax: number
+  dateFrom: string // Sale date from (YYYY-MM-DD format)
+  dateTo: string // Sale date to (YYYY-MM-DD format)
 }
 
 export default function ComparableDataViewer({ 
@@ -79,6 +82,10 @@ export default function ComparableDataViewer({
     persistedState?.finalPricePerSqm || null
   )
   
+  // Sorting state
+  const [sortColumn, setSortColumn] = useState<string | null>(persistedState?.sortColumn || null)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(persistedState?.sortDirection || 'desc')
+  
   // Pagination
   const [page, setPage] = useState(persistedState?.page || 0)
   const [pageSize] = useState(50)
@@ -103,27 +110,41 @@ export default function ComparableDataViewer({
     return ''
   }, [data])
 
-  const propertyArea = useMemo(() => {
-    // Try to extract area from measurement or permit
-    const area = (data as any).area || (data as any).registered_area_sqm
-    return area ? parseFloat(String(area)) : 0
+  // Extract apartment and balcony areas separately (Section 5.2 calculation logic)
+  const apartmentSqm = useMemo(() => {
+    // Net apartment area (built area)
+    return (data as any).builtArea || (data as any).area || (data as any).registered_area_sqm || 
+           (data.extractedData as any)?.builtArea || (data.extractedData as any)?.apartment_registered_area || 0
   }, [data])
+  
+  const balconySqm = useMemo(() => {
+    // Balcony area (if exists)
+    return (data as any).balconyArea || (data as any).balcony_area || 
+           (data.extractedData as any)?.balconyArea || (data.extractedData as any)?.balcony_area || 0
+  }, [data])
+  
+  // Property area for backward compatibility (used in filters)
+  const propertyArea = useMemo(() => {
+    return apartmentSqm || 0
+  }, [apartmentSqm])
 
   const propertyYear = useMemo(() => {
-    // Try to extract construction year from permit
-    const year = (data as any).year_built || (data as any).construction_year
+    // Try to extract construction year from permit or land registry
+    const year = (data as any).year_built || (data as any).construction_year || (data as any).year_of_construction
     return year ? parseInt(String(year), 10) : new Date().getFullYear()
   }, [data])
 
   // Filter state with defaults based on property data
-  // Only 3 filters: גוש (Block), מ"ר (Surface), שנת בנייה (Year)
+  // Filters: גוש (Block), מ"ר (Surface), שנת בנייה (Year), תאריך מכירה (Sale Date)
   const [filters, setFilters] = useState<FilterState>(
     persistedState?.filters || {
       blockNumber: propertyBlock,
       surfaceMin: Math.max(0, propertyArea - 15),
       surfaceMax: propertyArea + 15,
       yearMin: Math.max(1900, propertyYear - 10),
-      yearMax: Math.min(new Date().getFullYear() + 5, propertyYear + 10)
+      yearMax: Math.min(new Date().getFullYear() + 5, propertyYear + 10),
+      dateFrom: '', // No default - user can set if needed
+      dateTo: '' // No default - user can set if needed
     }
   )
 
@@ -140,6 +161,8 @@ export default function ComparableDataViewer({
       page,
       hasMore,
       filters,
+      sortColumn,
+      sortDirection,
       timestamp: new Date().toISOString()
     }
 
@@ -158,6 +181,8 @@ export default function ComparableDataViewer({
     page,
     hasMore,
     filters,
+    sortColumn,
+    sortDirection,
     storageKey
   ])
 
@@ -172,12 +197,14 @@ export default function ComparableDataViewer({
         offset: String(page * pageSize)
       })
 
-      // Only 3 filters: גוש (Block), מ"ר (Surface), שנת בנייה (Year)
+      // Filters: גוש (Block), מ"ר (Surface), שנת בנייה (Year), תאריך מכירה (Sale Date)
       if (filters.blockNumber) params.append('block_number', filters.blockNumber)
       if (filters.surfaceMin > 0) params.append('surface_min', String(filters.surfaceMin))
       if (filters.surfaceMax > 0) params.append('surface_max', String(filters.surfaceMax))
       if (filters.yearMin) params.append('year_min', String(filters.yearMin))
       if (filters.yearMax) params.append('year_max', String(filters.yearMax))
+      if (filters.dateFrom) params.append('sale_date_from', filters.dateFrom)
+      if (filters.dateTo) params.append('sale_date_to', filters.dateTo)
 
       console.log('🔍 Searching with params:', Object.fromEntries(params))
 
@@ -276,7 +303,10 @@ export default function ComparableDataViewer({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           selectedIds: Array.from(selectedIds),
-          propertyArea
+          propertyArea, // For backward compatibility
+          apartmentSqm: apartmentSqm || null, // Net apartment area
+          balconySqm: balconySqm || null, // Balcony area (if exists)
+          balconyCoef: 0.5 // Default coefficient (can be changed in Section 5.2)
         })
       })
 
@@ -284,10 +314,29 @@ export default function ComparableDataViewer({
 
       if (result.success) {
         setAnalysisResult(result)
-        setFinalPricePerSqm(result.averagePricePerSqm || result.medianPricePerSqm)
+        // Parse numeric values safely (handles strings from backend)
+        const avgPricePerSqm = typeof result.averagePricePerSqm === 'string' 
+          ? parseFloat(result.averagePricePerSqm.trim()) 
+          : (typeof result.averagePricePerSqm === 'number' ? result.averagePricePerSqm : null)
+        const medPricePerSqm = typeof result.medianPricePerSqm === 'string'
+          ? parseFloat(result.medianPricePerSqm.trim())
+          : (typeof result.medianPricePerSqm === 'number' ? result.medianPricePerSqm : null)
+        setFinalPricePerSqm(avgPricePerSqm || medPricePerSqm || null)
+        
+        // Parse estimatedValue (finalValue) safely
+        const estimatedValue = typeof result.estimatedValue === 'string'
+          ? parseFloat(result.estimatedValue.trim())
+          : (typeof result.estimatedValue === 'number' ? result.estimatedValue : null)
+        
+        // Ensure estimatedValue is included in the result passed to parent
+        const resultWithFinalValue = {
+          ...result,
+          estimatedValue: estimatedValue || result.estimatedValue || null,
+          finalValue: estimatedValue || result.estimatedValue || null // Also include as finalValue for compatibility
+        }
 
-    if (onAnalysisComplete) {
-          onAnalysisComplete(result)
+        if (onAnalysisComplete) {
+          onAnalysisComplete(resultWithFinalValue)
         }
       } else {
         setError(result.error || 'שגיאה בניתוח הנתונים')
@@ -330,8 +379,12 @@ export default function ComparableDataViewer({
         surfaceMin: Math.max(0, propertyArea - 15),
         surfaceMax: propertyArea + 15,
         yearMin: Math.max(1900, propertyYear - 10),
-        yearMax: Math.min(new Date().getFullYear() + 5, propertyYear + 10)
+        yearMax: Math.min(new Date().getFullYear() + 5, propertyYear + 10),
+        dateFrom: '',
+        dateTo: ''
       })
+      setSortColumn(null)
+      setSortDirection('desc')
       setError(null)
       setWasRestored(false)
     } catch (err) {
@@ -406,6 +459,92 @@ export default function ComparableDataViewer({
     }
   }
 
+  // Handle column sorting
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      // Toggle direction if clicking the same column
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      // Set new column and default to descending
+      setSortColumn(column)
+      setSortDirection('desc')
+    }
+  }
+
+  // Sort transactions based on current sort state
+  const sortedTransactions = useMemo(() => {
+    if (!sortColumn) return transactions
+
+    const sorted = [...transactions].sort((a, b) => {
+      let aValue: any = a[sortColumn as keyof ComparableTransaction]
+      let bValue: any = b[sortColumn as keyof ComparableTransaction]
+
+      // Handle null/undefined values
+      if (aValue === null || aValue === undefined) aValue = ''
+      if (bValue === null || bValue === undefined) bValue = ''
+
+      // Special handling for different column types
+      switch (sortColumn) {
+        case 'sale_day':
+          // Sort by date
+          const aDate = aValue ? new Date(aValue).getTime() : 0
+          const bDate = bValue ? new Date(bValue).getTime() : 0
+          return sortDirection === 'asc' ? aDate - bDate : bDate - aDate
+
+        case 'price_per_sqm':
+        case 'sale_value_nis':
+        case 'estimated_price_ils':
+        case 'surface':
+        case 'rooms':
+        case 'floor':
+        case 'year_of_constru':
+          // Sort by number
+          const aNum = typeof aValue === 'string' ? parseFloat(aValue) || 0 : (aValue || 0)
+          const bNum = typeof bValue === 'string' ? parseFloat(bValue) || 0 : (bValue || 0)
+          return sortDirection === 'asc' ? aNum - bNum : bNum - aNum
+
+        case 'address':
+        case 'city':
+        case 'settlement':
+        case 'street':
+        case 'asset_type':
+        case 'block_of_land':
+          // Sort by string (case-insensitive)
+          const aStr = String(aValue || '').toLowerCase()
+          const bStr = String(bValue || '').toLowerCase()
+          if (sortDirection === 'asc') {
+            return aStr.localeCompare(bStr, 'he')
+          } else {
+            return bStr.localeCompare(aStr, 'he')
+          }
+
+        default:
+          // Default string comparison
+          const aDefault = String(aValue || '').toLowerCase()
+          const bDefault = String(bValue || '').toLowerCase()
+          if (sortDirection === 'asc') {
+            return aDefault.localeCompare(bDefault, 'he')
+          } else {
+            return bDefault.localeCompare(aDefault, 'he')
+          }
+      }
+    })
+
+    return sorted
+  }, [transactions, sortColumn, sortDirection])
+
+  // Render sort indicator icon
+  const renderSortIcon = (column: string) => {
+    if (sortColumn !== column) {
+      return <span className="text-gray-400 text-xs">↕</span>
+    }
+    return sortDirection === 'asc' ? (
+      <span className="text-blue-600 text-xs">↑</span>
+    ) : (
+      <span className="text-blue-600 text-xs">↓</span>
+    )
+  }
+
   // If showing Section 5.2, render that instead
   if (showSection52 && finalPricePerSqm) {
     return (
@@ -425,8 +564,13 @@ export default function ComparableDataViewer({
           onValuationComplete={(valuation) => {
             console.log('✅ Section 5.2 complete:', valuation)
             if (onAnalysisComplete) {
+              // Ensure estimatedValue/finalValue is preserved when section52 completes
+              // Priority: section52.asset_value_nis > analysisResult.estimatedValue > analysisResult.finalValue
+              const finalValue = valuation.asset_value_nis || analysisResult?.estimatedValue || analysisResult?.finalValue
               onAnalysisComplete({
                 ...analysisResult,
+                estimatedValue: finalValue,
+                finalValue: finalValue, // Also include as finalValue for compatibility
                 section52: valuation
               })
             }
@@ -464,9 +608,9 @@ export default function ComparableDataViewer({
           </div>
         )}
 
-      {/* Filter Bar - Only 3 Filters: גוש, מ"ר, שנת בנייה */}
+      {/* Filter Bar - Filters: גוש, מ"ר, שנת בנייה, תאריך מכירה */}
       <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Filter 1: גוש (Block Number) */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -529,10 +673,41 @@ export default function ComparableDataViewer({
               />
               </div>
               </div>
+
+          {/* Filter 4: תאריך מכירה (Sale Date Range) */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              טווח תאריך מכירה
+            </label>
+            <div className="flex flex-col gap-2">
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">
+                  מתאריך
+                </label>
+                <input
+                  type="date"
+                  value={filters.dateFrom}
+                  onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">
+                  עד תאריך
+                </label>
+                <input
+                  type="date"
+                  value={filters.dateTo}
+                  onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+          </div>
               </div>
 
         <div className="mt-3 text-xs text-gray-600">
-          💡 המערכת תחפש עסקאות דומות בגוש, בטווח שטח ושנת בנייה שהוגדרו
+          💡 המערכת תחפש עסקאות דומות בגוש, בטווח שטח, שנת בנייה ותאריך מכירה שהוגדרו
               </div>
               </div>
 
@@ -589,19 +764,91 @@ export default function ComparableDataViewer({
                 <thead className="bg-gray-100 sticky top-0 z-10">
                   <tr className="text-right">
                     <th className="p-2 w-12">בחירה</th>
-                    <th className="p-2">יום מכירה</th>
-                    <th className="p-2">כתובת</th>
-                    <th className="p-2">גוש/חלקה</th>
-                    <th className="p-2">חדרים</th>
-                    <th className="p-2">קומה</th>
-                    <th className="p-2">שטח (מ"ר)</th>
-                    <th className="p-2">שנת בנייה</th>
-                    <th className="p-2">מחיר (₪)</th>
-                    <th className="p-2">מחיר למ"ר</th>
+                    <th 
+                      className="p-2 cursor-pointer hover:bg-gray-200 select-none"
+                      onClick={() => handleSort('sale_day')}
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        יום מכירה
+                        {renderSortIcon('sale_day')}
+                      </div>
+                    </th>
+                    <th 
+                      className="p-2 cursor-pointer hover:bg-gray-200 select-none"
+                      onClick={() => handleSort('address')}
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        כתובת
+                        {renderSortIcon('address')}
+                      </div>
+                    </th>
+                    <th 
+                      className="p-2 cursor-pointer hover:bg-gray-200 select-none"
+                      onClick={() => handleSort('block_of_land')}
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        גוש/חלקה
+                        {renderSortIcon('block_of_land')}
+                      </div>
+                    </th>
+                    <th 
+                      className="p-2 cursor-pointer hover:bg-gray-200 select-none"
+                      onClick={() => handleSort('rooms')}
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        חדרים
+                        {renderSortIcon('rooms')}
+                      </div>
+                    </th>
+                    <th 
+                      className="p-2 cursor-pointer hover:bg-gray-200 select-none"
+                      onClick={() => handleSort('floor')}
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        קומה
+                        {renderSortIcon('floor')}
+                      </div>
+                    </th>
+                    <th 
+                      className="p-2 cursor-pointer hover:bg-gray-200 select-none"
+                      onClick={() => handleSort('surface')}
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        שטח (מ"ר)
+                        {renderSortIcon('surface')}
+                      </div>
+                    </th>
+                    <th 
+                      className="p-2 cursor-pointer hover:bg-gray-200 select-none"
+                      onClick={() => handleSort('year_of_constru')}
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        שנת בנייה
+                        {renderSortIcon('year_of_constru')}
+                      </div>
+                    </th>
+                    <th 
+                      className="p-2 cursor-pointer hover:bg-gray-200 select-none"
+                      onClick={() => handleSort('sale_value_nis')}
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        מחיר (₪)
+                        {renderSortIcon('sale_value_nis')}
+                      </div>
+                    </th>
+                    <th 
+                      className="p-2 cursor-pointer hover:bg-gray-200 select-none"
+                      onClick={() => handleSort('price_per_sqm')}
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        מחיר למ"ר
+                        {renderSortIcon('price_per_sqm')}
+                      </div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {transactions.map((transaction) => {
+                  {sortedTransactions.map((transaction) => {
                     const isSelected = selectedIds.has(transaction.id)
                     return (
                       <tr

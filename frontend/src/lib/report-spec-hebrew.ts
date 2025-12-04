@@ -465,7 +465,7 @@ export const LOCKED_HEBREW_TEXT: LockedHebrewText = {
   vatIncluded: 'השווי כולל מע"מ.',
   
   // Chapter 6
-  finalValuationTemplate: 'בשים לב למיקומו של הנכס, לשטחו, ולכל שאר הנתונים כאמור וכמפורט לעיל, ובהביאי בחשבון שווים של נכסים דומים רלוונטיים, שווי הנכס בגבולות ‎{{asset_value_num}}‎ ₪ (‎{{asset_value_txt}}‎).',
+  finalValuationTemplate: 'בשים לב למיקומו של הנכס, לשטחו, ולכל שאר הנתונים כאמור וכמפורט לעיל, ובהביאי בחשבון שווים של נכסים דומים רלוונטיים, שווי הנכס בגבולות ‎{{asset_value_num}}‎ (‎{{asset_value_txt}}‎).',
   
   currentStateText: 'הכול במצבו הנוכחי, כריק, פנוי וחופשי מכל מחזיק, חוב ושיעבוד, נכון לתאריך חוות-דעת זו.',
   
