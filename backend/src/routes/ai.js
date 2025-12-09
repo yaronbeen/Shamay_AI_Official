@@ -7,6 +7,14 @@ const path = require('path');
 // Import the land registry module (now CommonJS)
 const { processLandRegistryDocument } = require('../../land-registry-management/index.js');
 
+// Import AI extractor factory
+const { 
+  getLandRegistryExtractor, 
+  getSharedBuildingExtractor, 
+  getBuildingPermitExtractor,
+  AI_PROVIDER 
+} = require('../utils/ai-extractor-factory');
+
 /**
  * POST /api/ai/land-registry
  * Process a land registry PDF with AI extraction
@@ -70,7 +78,6 @@ router.post('/land-registry', async (req, res) => {
     console.log(`🤖 Starting AI extraction...`);
     const result = await processLandRegistryDocument(tempFilePath, {
       useAI: true,
-      anthropicApiKey: process.env.ANTHROPIC_API_KEY,
       saveToDatabase: false // We'll save via ShumaDB instead
     });
     
@@ -83,58 +90,76 @@ router.post('/land-registry', async (req, res) => {
     console.log(`📋 Raw data keys:`, Object.keys(rawData).slice(0, 20));
     console.log(`📋 Sample data - gush: ${rawData.gush}, chelka: ${rawData.chelka}`);
     
+    // Helper function to extract value from nested structure (Gemini) or flat structure (Anthropic)
+    const getValue = (field) => {
+      if (!rawData[field]) return null;
+      // Handle nested structure: { value: ..., confidence: ... }
+      if (typeof rawData[field] === 'object' && 'value' in rawData[field]) {
+        return rawData[field].value;
+      }
+      // Handle flat structure
+      return rawData[field];
+    };
+    
     // Format response - Flatten rawData to main level
     const responseData = {
       success: true,
       // Core identifiers (flattened from rawData)
-      gush: rawData.gush || null,
-      chelka: rawData.chelka || rawData.parcel || null,
-      subChelka: rawData.sub_chelka || rawData.subParcel || null,
-      registrationOffice: rawData.registration_office || null,
-      ownershipType: rawData.ownership_type || rawData.regulation_type || null,
-      documentType: rawData.document_type || rawData.shtar_type || null,
+      gush: getValue('gush') || null,
+      chelka: getValue('chelka') || getValue('parcel') || null,
+      subChelka: getValue('sub_chelka') || getValue('subParcel') || null,
+      registrationOffice: getValue('registration_office') || null,
+      ownershipType: getValue('ownership_type') || getValue('regulation_type') || null,
+      documentType: getValue('document_type') || getValue('shtar_type') || null,
       // Area information
-      registeredArea: rawData.registered_area || rawData.total_plot_area || rawData.apartment_area || null,
-      apartmentArea: rawData.apartment_registered_area || rawData.apartment_area || null,
-      balconyArea: rawData.balcony_area || null,
+      registeredArea: getValue('registered_area') || getValue('total_plot_area') || getValue('apartment_area') || null,
+      apartmentArea: getValue('apartment_registered_area') || getValue('apartment_area') || null,
+      builtArea: getValue('built_area') || null,
+      balconyArea: getValue('balcony_area') || null,
       // Building details
-      buildingsCount: rawData.buildings_count || null,
-      addressFromTabu: rawData.address_from_tabu || null,
+      buildingsCount: getValue('buildings_count') || null,
+      addressFromTabu: getValue('address_from_tabu') || getValue('property_address') || null,
+      constructionYear: getValue('construction_year') || null,
+      propertyCondition: getValue('property_condition') || null,
+      finishStandard: getValue('finish_standard') || null,
       // Unit information
-      unitDescription: rawData.unit_description || null,
-      floor: rawData.floor || null,
-      buildingNumber: rawData.building_number || null,
-      // Attachments
-      attachments: rawData.attachments || [],
-      attachmentsDescription: rawData.attachments_description || null,
-      attachmentsArea: rawData.attachments_area || null,
+      unitDescription: getValue('unit_description') || null,
+      floor: getValue('floor') || null,
+      buildingNumber: getValue('building_number') || null,
+      sharedAreas: getValue('shared_areas') || getValue('shared_property') || null,
+      // Attachments (handle both array and nested structure)
+      attachments: Array.isArray(rawData.attachments) ? rawData.attachments : (getValue('attachments') || []),
+      attachmentsDescription: getValue('attachments_description') || null,
+      attachmentsArea: getValue('attachments_area') || null,
       // Additional areas
-      additionalAreas: rawData.additional_areas || [],
+      additionalAreas: Array.isArray(rawData.additional_areas) ? rawData.additional_areas : (getValue('additional_areas') || []),
       // Ownership
-      owners: rawData.owners || [],
-      ownersCount: rawData.owners_count || null,
-      sharedProperty: rawData.shared_property || null,
-      rights: rawData.rights || null,
+      owners: Array.isArray(rawData.owners) ? rawData.owners : (getValue('owners') || []),
+      ownersCount: getValue('owners_count') || null,
+      sharedProperty: getValue('shared_property') || null,
+      rights: getValue('rights') || null,
       // Notes
-      plotNotes: rawData.plot_notes || null,
-      notesActionType: rawData.notes_action_type || null,
-      notesBeneficiary: rawData.notes_beneficiary || null,
+      plotNotes: getValue('plot_notes') || null,
+      notesActionType: getValue('notes_action_type') || null,
+      notesBeneficiary: getValue('notes_beneficiary') || null,
       // Easements
-      easementsEssence: rawData.easements_essence || null,
-      easementsDescription: rawData.easements_description || null,
+      easementsEssence: getValue('easements_essence') || null,
+      easementsDescription: getValue('easements_description') || null,
       // Mortgages
-      mortgages: rawData.mortgages || [],
-      mortgageEssence: rawData.mortgage_essence || null,
-      mortgageRank: rawData.mortgage_rank || null,
-      mortgageLenders: rawData.mortgage_lenders || null,
-      mortgageBorrowers: rawData.mortgage_borrowers || null,
-      mortgageAmount: rawData.mortgage_amount || null,
-      mortgagePropertyShare: rawData.mortgage_property_share || null,
+      mortgages: Array.isArray(rawData.mortgages) ? rawData.mortgages : (getValue('mortgages') || []),
+      mortgageEssence: getValue('mortgage_essence') || null,
+      mortgageRank: getValue('mortgage_rank') || null,
+      mortgageLenders: getValue('mortgage_lenders') || null,
+      mortgageBorrowers: getValue('mortgage_borrowers') || null,
+      mortgageAmount: getValue('mortgage_amount') || null,
+      // Include field locations for scroll-to-source (Gemini only)
+      fieldLocations: rawData.fieldLocations || result.fieldLocations || {},
+      mortgagePropertyShare: getValue('mortgage_property_share') || null,
       // Confidence and metadata
       confidence: result.extractionResults?.overallConfidence || 0.0,
-      subPlotsCount: rawData.sub_plots_count || null,
-      issueDate: rawData.issue_date || null,
-      tabuExtractDate: rawData.tabu_extract_date || null,
+      subPlotsCount: getValue('sub_plots_count') || null,
+      issueDate: getValue('issue_date') || null,
+      tabuExtractDate: getValue('tabu_extract_date') || null,
       extracted_at: new Date().toISOString()
     };
     
@@ -238,10 +263,10 @@ router.post('/building-permit', async (req, res) => {
     
     console.log(`🔍 Backend AI: Processing building permit for session: ${sessionId}`);
     console.log(`📥 Processing from: ${fileUrl}`);
+    console.log(`🤖 Using AI provider: ${AI_PROVIDER}`);
     
-    // Dynamically import the ESM module
-    const { BuildingPermitAIExtractor } = require('../../building-permits/ai-field-extractor.js');
-    const extractor = new BuildingPermitAIExtractor(process.env.ANTHROPIC_API_KEY);
+    // Use factory to get appropriate extractor
+    const extractor = getBuildingPermitExtractor();
     
     // Handle both file paths and URLs
     let fileBuffer;
@@ -304,6 +329,8 @@ router.post('/building-permit', async (req, res) => {
       subChelka: result.sub_chelka?.value || null,
       confidence: result.overallConfidence || 0.0,
       extracted_at: new Date().toISOString(),
+      // Include field locations for scroll-to-source (Gemini only)
+      fieldLocations: result.fieldLocations || {},
       // Include confidence scores for debugging
       confidenceScores: {
         permitNumber: result.permit_number?.confidence || 0,
@@ -408,10 +435,10 @@ router.post('/shared-building', async (req, res) => {
     
     console.log(`🔍 Backend AI: Processing shared building order for session: ${sessionId}`);
     console.log(`📥 Processing from: ${fileUrl}`);
+    console.log(`🤖 Using AI provider: ${AI_PROVIDER}`);
     
-    // Import the Hebrew module for better extraction
-    const { SharedBuildingAIExtractor } = require('../../shared-building-order/ai-field-extractor-hebrew.js');
-    const extractor = new SharedBuildingAIExtractor(process.env.ANTHROPIC_API_KEY);
+    // Use factory to get appropriate extractor
+    const extractor = getSharedBuildingExtractor();
     
     // Handle both file paths and URLs
     let fileBuffer;
@@ -469,6 +496,8 @@ router.post('/shared-building', async (req, res) => {
       total_sub_plots: result.total_sub_plots?.value || null,
       confidence: result.overallConfidence || 0.0,
       extracted_at: new Date().toISOString(),
+      // Include field locations for scroll-to-source (Gemini only)
+      fieldLocations: result.fieldLocations || {},
       rawData: result // Include full raw data for debugging
     };
     
@@ -567,7 +596,7 @@ router.post('/interior-analysis', async (req, res) => {
     
     // Import the module
     const ApartmentInteriorAnalyzer = require('../../image-analysis/apartment-interior-analyzer/apartment-interior-analyzer.js');
-    const analyzer = new ApartmentInteriorAnalyzer(process.env.ANTHROPIC_API_KEY);
+    const analyzer = new ApartmentInteriorAnalyzer(process.env.GEMINI_API_KEY);
     
     const analyzedImages = [];
     let overallAnalysis = {
@@ -657,7 +686,7 @@ router.post('/exterior-analysis', async (req, res) => {
     
     // Import the module
     const BuildingExteriorAnalyzer = require('../../image-analysis/building-exterior-analyzer/building-exterior-analyzer.js');
-    const analyzer = new BuildingExteriorAnalyzer(process.env.ANTHROPIC_API_KEY);
+    const analyzer = new BuildingExteriorAnalyzer(process.env.GEMINI_API_KEY);
     
     const analyzedImages = [];
     let overallAnalysis = {

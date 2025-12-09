@@ -1,13 +1,17 @@
-const Anthropic = require('@anthropic-ai/sdk');
+const { GoogleGenAI } = require('@google/genai');
 const fs = require('fs');
 const path = require('path');
+const dotenv = require('dotenv');
+
+dotenv.config();
 
 class BuildingExteriorAnalyzer {
-    constructor(apiKey = process.env.ANTHROPIC_API_KEY) {
+    constructor(apiKey = process.env.GEMINI_API_KEY) {
         if (!apiKey) {
-            throw new Error('ANTHROPIC_API_KEY environment variable is required');
+            throw new Error('GEMINI_API_KEY environment variable is required');
         }
-        this.anthropic = new Anthropic({ apiKey });
+        this.ai = new GoogleGenAI({ apiKey });
+        this.model = 'gemini-3-pro-preview';
     }
 
     /**
@@ -53,30 +57,35 @@ class BuildingExteriorAnalyzer {
             // Prepare analysis prompt
             const prompt = this.buildAnalysisPrompt(options);
 
-            // Send to Anthropic
-            const response = await this.anthropic.messages.create({
-                model: 'claude-sonnet-4-20250514', // Latest Sonnet model
-                max_tokens: 2000,
-                messages: [{
-                    role: 'user',
-                    content: [
-                        {
-                            type: 'image',
-                            source: {
-                                type: 'base64',
-                                media_type: mimeType,
-                                data: base64Image
-                            }
-                        },
-                        {
-                            type: 'text',
-                            text: prompt
-                        }
-                    ]
-                }]
+            // Send to Gemini
+            const contents = [
+                {
+                    inlineData: {
+                        mimeType: mimeType,
+                        data: base64Image
+                    }
+                },
+                {
+                    text: prompt
+                }
+            ];
+
+            const response = await this.ai.models.generateContent({
+                model: this.model,
+                contents: contents
             });
 
-            const analysis = response.content[0].text;
+            // Extract text from response
+            let analysis;
+            if (response.text) {
+                analysis = response.text;
+            } else if (response.response && response.response.text) {
+                analysis = response.response.text;
+            } else if (response.candidates && response.candidates[0] && response.candidates[0].content) {
+                analysis = response.candidates[0].content.parts[0].text;
+            } else {
+                throw new Error('Unexpected response format from Gemini API');
+            }
             
             // Parse structured data if possible
             const structuredData = this.parseStructuredData(analysis);
@@ -87,8 +96,7 @@ class BuildingExteriorAnalyzer {
                 analysis,
                 structuredData,
                 timestamp: new Date().toISOString(),
-                tokens: (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0),
-                cost: this.estimateCost(response.usage?.input_tokens || 0, response.usage?.output_tokens || 0)
+                model: this.model
             };
 
         } catch (error) {
@@ -271,17 +279,6 @@ class BuildingExteriorAnalyzer {
     }
 
     /**
-     * Estimate API cost based on token usage
-     * @param {number} inputTokens - Input tokens used
-     * @param {number} outputTokens - Output tokens used
-     * @returns {number} - Estimated cost in USD
-     */
-    estimateCost(inputTokens, outputTokens) {
-        // Claude Opus pricing: $15 per 1M input tokens, $75 per 1M output tokens
-        return ((inputTokens * 15) + (outputTokens * 75)) / 1000000;
-    }
-
-    /**
      * Analyze multiple building exterior images in a folder
      */
     async analyzeBatch(folderPath, options = {}) {
@@ -376,8 +373,7 @@ class BuildingExteriorAnalyzer {
             buildingTypes: {},
             conditions: {},
             architecturalStyles: {},
-            averageTokensUsed: 0,
-            totalCost: 0
+            averageTokensUsed: 0
         };
 
         successful.forEach(result => {
@@ -400,12 +396,7 @@ class BuildingExteriorAnalyzer {
                         (comparison.architecturalStyles[result.structuredData.architecturalStyle] || 0) + 1;
                 }
             }
-
-            comparison.averageTokensUsed += result.tokens || 0;
-            comparison.totalCost += result.cost || 0;
         });
-
-        comparison.averageTokensUsed = Math.round(comparison.averageTokensUsed / successful.length);
 
         return comparison;
     }

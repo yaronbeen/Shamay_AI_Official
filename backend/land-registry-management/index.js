@@ -26,11 +26,18 @@ async function processLandRegistryDocument(pdfPath, options = {}) {
     let extractionResults;
     
     if (options.useAI !== false) {
-      // Use comprehensive extractor for better results
-      const aiExtractor = new LandRegistryComprehensiveAIExtractor(options.anthropicApiKey);
-      // Direct PDF processing with comprehensive multi-stage extraction
-      console.log('📄 Processing PDF with comprehensive multi-stage extraction...');
-      extractionResults = await aiExtractor.extractAllFieldsComprehensive(pdfPath, { isPdf: true });
+      // Use factory to get appropriate extractor (Gemini or Anthropic)
+      const { getLandRegistryExtractor } = require('../src/utils/ai-extractor-factory');
+      const aiExtractor = getLandRegistryExtractor();
+      
+      // Check if extractor has comprehensive method, otherwise use regular method
+      if (aiExtractor.extractAllFieldsComprehensive) {
+        console.log('📄 Processing PDF with comprehensive multi-stage extraction...');
+        extractionResults = await aiExtractor.extractAllFieldsComprehensive(pdfPath, { isPdf: true });
+      } else {
+        console.log('📄 Processing PDF with standard extraction...');
+        extractionResults = await aiExtractor.extractAllFields(pdfPath, { isPdf: true });
+      }
     } else {
       // For regex-based extraction, we'd need to extract text first
       // This would require pdf-parse or similar library
