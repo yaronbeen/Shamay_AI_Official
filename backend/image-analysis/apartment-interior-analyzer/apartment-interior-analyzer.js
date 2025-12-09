@@ -1,13 +1,17 @@
-const Anthropic = require('@anthropic-ai/sdk');
+const { GoogleGenAI } = require('@google/genai');
 const fs = require('fs');
 const path = require('path');
+const dotenv = require('dotenv');
+
+dotenv.config();
 
 class ApartmentInteriorAnalyzer {
-    constructor(apiKey = process.env.ANTHROPIC_API_KEY) {
+    constructor(apiKey = process.env.GEMINI_API_KEY) {
         if (!apiKey) {
-            throw new Error('ANTHROPIC_API_KEY environment variable is required');
+            throw new Error('GEMINI_API_KEY environment variable is required');
         }
-        this.anthropic = new Anthropic({ apiKey });
+        this.ai = new GoogleGenAI({ apiKey });
+        this.model = 'gemini-3-pro-preview';
     }
 
     /**
@@ -53,30 +57,35 @@ class ApartmentInteriorAnalyzer {
             // Prepare analysis prompt
             const prompt = this.buildAnalysisPrompt(options);
 
-            // Send to Anthropic
-            const response = await this.anthropic.messages.create({
-                model: 'claude-sonnet-4-20250514', // Latest Sonnet model
-                max_tokens: 2000,
-                messages: [{
-                    role: 'user',
-                    content: [
-                        {
-                            type: 'image',
-                            source: {
-                                type: 'base64',
-                                media_type: mimeType,
-                                data: base64Image
-                            }
-                        },
-                        {
-                            type: 'text',
-                            text: prompt
-                        }
-                    ]
-                }]
+            // Send to Gemini
+            const contents = [
+                {
+                    inlineData: {
+                        mimeType: mimeType,
+                        data: base64Image
+                    }
+                },
+                {
+                    text: prompt
+                }
+            ];
+
+            const response = await this.ai.models.generateContent({
+                model: this.model,
+                contents: contents
             });
 
-            const analysis = response.content[0].text;
+            // Extract text from response
+            let analysis;
+            if (response.text) {
+                analysis = response.text;
+            } else if (response.response && response.response.text) {
+                analysis = response.response.text;
+            } else if (response.candidates && response.candidates[0] && response.candidates[0].content) {
+                analysis = response.candidates[0].content.parts[0].text;
+            } else {
+                throw new Error('Unexpected response format from Gemini API');
+            }
             
             // Parse structured data if possible
             const structuredData = this.parseStructuredData(analysis);
@@ -87,7 +96,7 @@ class ApartmentInteriorAnalyzer {
                 analysis,
                 structuredData,
                 timestamp: new Date().toISOString(),
-                tokens: response.usage?.input_tokens + response.usage?.output_tokens || 0
+                model: this.model
             };
 
         } catch (error) {
@@ -148,36 +157,75 @@ class ApartmentInteriorAnalyzer {
                 condition: null,
                 features: [],
                 issues: [],
-                valueImpact: null
+                valueImpact: null,
+                area_estimate: null,
+                finish_level: null
             };
 
-            // Extract room type
-            const roomTypeMatch = analysis.match(/Room.*?:\s*([^\n]+)/i);
-            if (roomTypeMatch) {
-                structuredData.roomType = roomTypeMatch[1].trim();
-            }
-
-            // Extract condition
-            const conditionMatch = analysis.match(/condition.*?:\s*(excellent|good|fair|poor)/i);
-            if (conditionMatch) {
-                structuredData.condition = conditionMatch[1].toLowerCase();
-            }
-
-            // Extract features (basic pattern matching)
-            const featurePatterns = [
-                /built-in storage/i,
-                /natural light/i,
-                /hardwood floor/i,
-                /tile floor/i,
-                /carpet/i,
-                /high ceiling/i,
-                /balcony/i,
-                /air conditioning/i
+            // Extract room type (Hebrew patterns)
+            const roomTypePatterns = [
+                { pattern: /סלון|חדר מגורים/, type: 'living_room' },
+                { pattern: /חדר שינה|שינה/, type: 'bedroom' },
+                { pattern: /מטבח/, type: 'kitchen' },
+                { pattern: /חדר רחצה|שירותים/, type: 'bathroom' },
+                { pattern: /מרפסת/, type: 'balcony' }
             ];
 
-            featurePatterns.forEach(pattern => {
+            roomTypePatterns.forEach(({ pattern, type }) => {
                 if (pattern.test(analysis)) {
-                    structuredData.features.push(pattern.source.replace(/[/\\ig]/g, ''));
+                    structuredData.roomType = type;
+                }
+            });
+
+            // Extract condition (Hebrew patterns)
+            const conditionPatterns = [
+                { pattern: /מצב מצוין|איכות גבוהה|מצוין/, condition: 'excellent' },
+                { pattern: /מצב טוב|איכות טובה|טוב מאוד/, condition: 'good' },
+                { pattern: /מצב בינוני|בינוני/, condition: 'fair' },
+                { pattern: /דורש שיפוץ|מצב ירוד|ירוד/, condition: 'poor' }
+            ];
+
+            conditionPatterns.forEach(({ pattern, condition }) => {
+                if (pattern.test(analysis)) {
+                    structuredData.condition = condition;
+                }
+            });
+
+            // Extract finish level (Hebrew patterns)
+            const finishPatterns = [
+                { pattern: /גימור יוקרתי|יוקרתי|מצוין/, level: 'יוקרתי' },
+                { pattern: /גימור טוב|טוב מאוד|איכותי/, level: 'טוב' },
+                { pattern: /גימור בינוני|סטנדרטי/, level: 'בינוני' },
+                { pattern: /גימור בסיסי|בסיסי/, level: 'בסיסי' }
+            ];
+
+            finishPatterns.forEach(({ pattern, level }) => {
+                if (pattern.test(analysis)) {
+                    structuredData.finish_level = level;
+                }
+            });
+
+            // Extract area estimate
+            const areaMatch = analysis.match(/(\d+(?:\.\d+)?)\s*מ['"]ר|(\d+(?:\.\d+)?)\s*מטר/);
+            if (areaMatch) {
+                structuredData.area_estimate = parseFloat(areaMatch[1] || areaMatch[2]);
+            }
+
+            // Extract features (Hebrew patterns)
+            const featurePatterns = [
+                { pattern: /ארונות מובנים|אחסון מובנה/, feature: 'built_in_storage' },
+                { pattern: /תאורה טבעית|אור טבעי/, feature: 'natural_light' },
+                { pattern: /פרקט|רצפת עץ/, feature: 'hardwood_floor' },
+                { pattern: /קרמיקה|רצפת קרמיקה/, feature: 'tile_floor' },
+                { pattern: /שטיח|רצפת שטיח/, feature: 'carpet' },
+                { pattern: /תקרה גבוהה|גובה תקרה/, feature: 'high_ceiling' },
+                { pattern: /מרפסת/, feature: 'balcony' },
+                { pattern: /מיזוג אוויר|מזגן/, feature: 'air_conditioning' }
+            ];
+
+            featurePatterns.forEach(({ pattern, feature }) => {
+                if (pattern.test(analysis)) {
+                    structuredData.features.push(feature);
                 }
             });
 
