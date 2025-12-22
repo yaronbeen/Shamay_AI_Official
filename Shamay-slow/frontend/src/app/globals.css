@@ -1,0 +1,356 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Hebrew RTL Support - GLOBAL */
+html {
+  direction: rtl !important;
+  font-family: 'Calibri', 'Arial', 'David', sans-serif;
+}
+
+body {
+  @apply bg-gray-50 text-gray-900;
+  direction: rtl !important;
+}
+
+/* Force RTL on all major containers */
+#__next,
+main,
+div[dir],
+.container {
+  direction: rtl;
+}
+
+/* Ensure all text aligns right by default */
+* {
+  text-align: inherit;
+}
+
+/* Custom Hebrew fonts */
+@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700&display=swap');
+
+.hebrew-font {
+  font-family: 'Heebo', sans-serif;
+}
+
+/* Smooth page transitions to reduce flashing */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Transition classes */
+.page-transition-enter {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+.page-transition-exit {
+  animation: fadeOut 0.2s ease-in forwards;
+}
+
+.step-transition-enter {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+.step-transition-exit {
+  animation: fadeOut 0.2s ease-in forwards;
+}
+
+/* Smooth scroll behavior */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Prevent layout shift during transitions */
+.transition-wrapper {
+  position: relative;
+  min-height: 200px;
+}
+
+.transition-wrapper > * {
+  transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+}
+
+/* Loading skeleton animation */
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    #f0f0f0 0%,
+    #e0e0e0 50%,
+    #f0f0f0 100%
+  );
+  background-size: 2000px 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* PDF-like styling for Hebrew documents */
+.pdf-preview {
+  font-family: 'Calibri', 'Arial', 'David', sans-serif;
+  line-height: 1.5;
+  color: #000;
+  direction: rtl;
+  text-align: right;
+}
+
+.pdf-preview h1 {
+  font-size: 18pt;
+  font-weight: bold;
+  margin-bottom: 12pt;
+  text-align: center;
+}
+
+.pdf-preview h2 {
+  font-size: 16pt;
+  font-weight: bold;
+  margin-bottom: 10pt;
+  text-align: center;
+}
+
+.pdf-preview h3 {
+  font-size: 14pt;
+  font-weight: bold;
+  margin-bottom: 8pt;
+}
+
+.pdf-preview p {
+  margin-bottom: 6pt;
+  font-size: 11pt;
+}
+
+.pdf-preview strong {
+  font-weight: bold;
+}
+
+/* A4 page dimensions - responsive */
+.a4-page {
+  width: 100%;
+  max-width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  background: white;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  padding: 15mm;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .a4-page {
+    padding: 10mm;
+    font-size: 10pt;
+  }
+  
+  .pdf-preview h1 {
+    font-size: 16pt;
+  }
+  
+  .pdf-preview h2 {
+    font-size: 14pt;
+  }
+  
+  .pdf-preview h3 {
+    font-size: 12pt;
+  }
+  
+  .pdf-preview p {
+    font-size: 10pt;
+  }
+}
+
+/* Document sections */
+.document-section {
+  margin-bottom: 15pt;
+  padding-bottom: 10pt;
+}
+
+.document-section h2 {
+  border-bottom: 1pt solid #374151;
+  padding-bottom: 6pt;
+  margin-bottom: 10pt;
+}
+
+/* Tables with proper Hebrew formatting */
+.document-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9pt;
+  margin: 8pt 0;
+}
+
+.document-table th,
+.document-table td {
+  border: 1pt solid #374151;
+  padding: 4pt;
+  text-align: right;
+}
+
+.document-table th {
+  background-color: #f3f4f6;
+  font-weight: bold;
+}
+
+.document-table tbody tr:nth-child(even) {
+  background-color: #f9fafb;
+}
+
+/* Image styling */
+.document-image {
+  border: 1.5pt solid #000;
+  margin: 8pt auto;
+  display: block;
+  max-width: 100%;
+}
+
+.document-image-caption {
+  font-size: 9pt;
+  color: #6b7280;
+  text-align: center;
+  margin-top: 3pt;
+}
+
+/* Signature area */
+.signature-area {
+  border: 2pt dashed #9ca3af;
+  height: 30mm;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 15pt auto;
+  max-width: 100mm;
+}
+
+/* Footer */
+.document-footer {
+  border-top: 1pt solid #d1d5db;
+  padding-top: 8pt;
+  margin-top: 15pt;
+  text-align: center;
+  font-size: 8pt;
+  color: #6b7280;
+}
+
+/* Page numbering */
+.page-number {
+  position: absolute;
+  bottom: 10mm;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9pt;
+  color: #6b7280;
+}
+
+/* Custom components */
+.btn-primary {
+  @apply bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors;
+}
+
+.btn-secondary {
+  @apply bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors;
+}
+
+/* Form styling */
+.form-input {
+  @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500;
+}
+
+.form-label {
+  @apply block text-sm font-medium text-gray-700 mb-2;
+}
+
+/* Document preview styling */
+.document-preview {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e5e7eb;
+}
+
+/* Hebrew text formatting */
+.hebrew-text {
+  direction: rtl;
+  text-align: right;
+  font-family: 'Calibri', 'Arial', 'David', sans-serif;
+}
+
+/* Section numbering */
+.section-number {
+  font-weight: bold;
+  margin-left: 0.5cm;
+}
+
+.subsection-number {
+  font-weight: bold;
+  margin-left: 1cm;
+}
+
+/* Table of contents styling */
+.toc-item {
+  margin-bottom: 4pt;
+  font-size: 11pt;
+}
+
+.toc-item-main {
+  font-weight: bold;
+}
+
+.toc-item-sub {
+  margin-right: 0.5cm;
+  font-size: 10pt;
+}
+
+/* Ensure no horizontal overflow */
+.document-container {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.document-content {
+  width: 100%;
+  max-width: 210mm;
+  margin: 0 auto;
+}

@@ -1,0 +1,6 @@
+# Environment files (contain secrets)
+.env.local
+.env*.local
+
+# Chat traces
+traces/

@@ -1,0 +1,9 @@
+{
+  "scripts": {
+    "setup-vercel-db": "node scripts/setup-vercel-db.js"
+  },
+  "devDependencies": {
+    "@vercel/blob": "^0.23.0"
+  }
+}
+
