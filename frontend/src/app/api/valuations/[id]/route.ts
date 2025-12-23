@@ -15,14 +15,21 @@ export async function GET(
 
     const result = await ShumaDB.getShumaById(params.id, session.user.primaryOrganizationId)
 
-    if (result.error) {
-      return NextResponse.json({ error: result.error }, { status: 404 })
+    if (!result.success || result.error) {
+      console.error('Error fetching shuma:', result.error)
+      return NextResponse.json({ 
+        error: result.error || 'Valuation not found',
+        details: result.error 
+      }, { status: 404 })
     }
 
     return NextResponse.json({ valuation: result.shuma })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching valuation:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: error?.message || String(error)
+    }, { status: 500 })
   }
 }
 

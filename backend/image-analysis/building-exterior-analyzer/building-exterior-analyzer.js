@@ -87,8 +87,23 @@ class BuildingExteriorAnalyzer {
                 throw new Error('Unexpected response format from Gemini API');
             }
             
-            // Parse structured data if possible
-            const structuredData = this.parseStructuredData(analysis);
+            // Try to extract JSON from the response first (if AI provided structured data)
+            let structuredData = null;
+            const jsonMatch = analysis.match(/```json\s*([\s\S]*?)\s*```/);
+            if (jsonMatch) {
+                try {
+                    structuredData = JSON.parse(jsonMatch[1]);
+                    // Remove JSON block from analysis text for cleaner description
+                    analysis = analysis.replace(/```json\s*[\s\S]*?\s*```/g, '').trim();
+                } catch (parseError) {
+                    console.warn('Failed to parse JSON from response, falling back to text parsing:', parseError);
+                }
+            }
+            
+            // If no JSON found, fall back to text parsing
+            if (!structuredData) {
+                structuredData = this.parseStructuredData(analysis);
+            }
 
             return {
                 success: true,
@@ -141,7 +156,22 @@ class BuildingExteriorAnalyzer {
 **דוגמה לסגנון הכתיבה הרצוי**:
 "המבנה המצולם מהווה בניין מגורים בן 6 קומות, הכולל כ-18 יחידות דיור. הבניין נבנה לפי היתר משנת 1994 בסגנון אדריכלי מודרני, עם חיפוי חיצוני בטון וחלונות זכוכית במסגרות אלומיניום. מצב החיצוניות טוב מאוד, עם סימני תחזוקה שוטפת. למבנה מרפסות מרווחות בכיווני אוויר צפון-דרום-מערב. פתרון החניה כולל חנייה תת-קרקעית עם גישה ישירה לבניין..."
 
-אנא ספק תיאור מפורט, מקצועי ורציף בעברית בלבד.`;
+**חשוב מאוד**: בסוף התיאור הטקסטואלי, אנא הוסף גם נתונים מובנים בפורמט JSON בתוך בלוק code:
+
+\`\`\`json
+{
+  "building_type": "apartment_building/villa/commercial/mixed_use/townhouse",
+  "floors": מספר_קומות_או_null,
+  "age": שנת_בנייה_משוערת_או_null,
+  "architectural_style": "modern/classical/bauhaus/mediterranean/minimalist" או null,
+  "condition": "excellent/good/fair/poor" או null,
+  "materials": ["בטון", "אבן", "חיפוי", etc.] או [],
+  "features": ["underground_parking", "elevator", "security", etc.] או [],
+  "parking_type": "private/street/underground/none" או null
+}
+\`\`\`
+
+אנא ספק תיאור מפורט, מקצועי ורציף בעברית בלבד, ואז את הנתונים המובנים ב-JSON.`;
 
         // Add specific focus areas if requested
         if (options.focusAreas && options.focusAreas.length > 0) {

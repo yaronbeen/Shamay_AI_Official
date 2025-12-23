@@ -503,16 +503,26 @@ const CoverPage: React.FC<{ data: ReportData }> = ({ data }) => {
   );
 };
 
-// Page 2 - Client Details - Based on 6216.6.25.pdf structure
+// Page 2 - Opening Letter and Property Summary Table - Based on 6216.6.25.pdf structure
 const ClientDetailsPage: React.FC<{ data: ReportData }> = ({ data }) => {
   const fullAddress = data.address.fullAddressLine || 
     `${data.address.street} ${data.address.buildingNumber}${data.address.neighborhood ? `שכונת ${data.address.neighborhood}` : ''}, ${data.address.city}`;
+  
+  // Use opening date from openingPage or default to reportDate
+  const openingDate = data.openingPage?.openingDate || data.meta.reportDate;
+  
+  // Property summary table data
+  const summaryTable = data.openingPage?.propertySummaryTable || {
+    gush: data.section1.parcel.gush,
+    helka: data.section1.parcel.helka,
+    area: data.section1.parcel.parcelAreaSqm
+  };
 
   return (
     <Page size="A4" style={styles.page}>
       {/* Header with date and reference */}
       <View style={{ position: 'absolute', top: 56.7, right: 56.7, left: 56.7, display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}>
-        <Text style={{ fontSize: 11 }}>תאריך: {data.meta.reportDate}</Text>
+        <Text style={{ fontSize: 11 }}>תאריך: {openingDate}</Text>
         <Text style={{ fontSize: 11 }}>סימנון: {data.meta.referenceNumber}</Text>
       </View>
 
@@ -572,7 +582,7 @@ const ClientDetailsPage: React.FC<{ data: ReportData }> = ({ data }) => {
         מועד הביקור בנכס:
       </Text>
       <Text style={styles.paragraph}>
-        {data.meta.inspectionDate}, על ידי {data.meta.appraiserName}, שמאי מקרקעין. לביקור התלוותה בעלת הזכויות בנכס.
+        {data.meta.inspectionDate}, על ידי {data.meta.appraiserName}{data.meta.appraiserLicenseNumber ? `, שמאי מקרקעין מס' ${data.meta.appraiserLicenseNumber}` : ', שמאי מקרקעין'}. לביקור התלוותה בעלת הזכויות בנכס.
       </Text>
 
       {/* Valuation Date */}
@@ -583,51 +593,21 @@ const ClientDetailsPage: React.FC<{ data: ReportData }> = ({ data }) => {
         {data.meta.valuationDate}, מועד הביקור בנכס.
       </Text>
 
-      {/* Property Details Table */}
+      {/* Property Summary Table - ריכוז פרטי הנכס */}
       <View style={{ marginTop: 20 }}>
-        <Text style={{ ...styles.paragraph, fontWeight: 'bold', marginBottom: 10 }}>
-          פרטי הנכס:
+        <Text style={{ ...styles.paragraph, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' }}>
+          ריכוז פרטי הנכס
         </Text>
         <View style={styles.table}>
-          <View style={styles.tableRow}>
-            <Text style={styles.tableCell}>מהות:</Text>
-            <Text style={styles.tableCell}>דירת מגורים בת {data.section1.property.rooms} חדרים בקומה ה-{data.section1.property.floor} בבניין</Text>
+          <View style={[styles.tableRow, styles.tableHeader]}>
+            <Text style={styles.tableHeaderCell}>גוש</Text>
+            <Text style={styles.tableHeaderCell}>חלקה</Text>
+            <Text style={styles.tableHeaderCell}>שטח</Text>
           </View>
           <View style={styles.tableRow}>
-            <Text style={styles.tableCell}>גוש:</Text>
-            <Text style={styles.tableCell}>{data.section1.parcel.gush}</Text>
-          </View>
-          <View style={styles.tableRow}>
-            <Text style={styles.tableCell}>חלקה:</Text>
-            <Text style={styles.tableCell}>{data.section1.parcel.helka}</Text>
-          </View>
-          {data.section1.property.subParcel && (
-            <View style={styles.tableRow}>
-              <Text style={styles.tableCell}>תת חלקה:</Text>
-              <Text style={styles.tableCell}>{data.section1.property.subParcel}</Text>
-            </View>
-          )}
-          {data.section1.property.attachmentsText && (
-            <View style={styles.tableRow}>
-              <Text style={styles.tableCell}>הצמדות:</Text>
-              <Text style={styles.tableCell}>{data.section1.property.attachmentsText}</Text>
-            </View>
-          )}
-          {data.section1.property.registeredAreaSqm && (
-            <View style={styles.tableRow}>
-              <Text style={styles.tableCell}>שטח דירה רשום:</Text>
-              <Text style={styles.tableCell}>{formatNumber(data.section1.property.registeredAreaSqm)} מ"ר{data.section1.property.balconyAreaSqm ? ` + ${formatNumber(data.section1.property.balconyAreaSqm)} מ"ר מרפסת לא מקורה` : ''}</Text>
-            </View>
-          )}
-          {data.section1.property.builtAreaSqm && (
-            <View style={styles.tableRow}>
-              <Text style={styles.tableCell}>שטח דירה בנוי:</Text>
-              <Text style={styles.tableCell}>כ-{formatNumber(data.section1.property.builtAreaSqm)} מ"ר</Text>
-            </View>
-          )}
-          <View style={styles.tableRow}>
-            <Text style={styles.tableCell}>זכויות:</Text>
-            <Text style={styles.tableCell}>בעלות פרטית</Text>
+            <Text style={styles.tableCell}>{summaryTable.gush || data.section1.parcel.gush || '—'}</Text>
+            <Text style={styles.tableCell}>{summaryTable.helka || data.section1.parcel.helka || '—'}</Text>
+            <Text style={styles.tableCell}>{summaryTable.area ? `${formatNumber(summaryTable.area)} מ"ר` : (data.section1.parcel.parcelAreaSqm ? `${formatNumber(data.section1.parcel.parcelAreaSqm)} מ"ר` : '—')}</Text>
           </View>
         </View>
       </View>
@@ -729,7 +709,7 @@ const Section2: React.FC<{ data: ReportData }> = ({ data }) => (
 
     {data.section2.ownerships && data.section2.ownerships.length > 0 && (
       <View style={{ marginTop: 10 }}>
-        <Text style={styles.h3}>בעלויות</Text>
+        <Text style={styles.subTitle}>בעלויות</Text>
         {data.section2.ownerships.map((owner, idx) => (
           <Text key={idx} style={styles.paragraph}>
             {owner.name}{owner.id ? `, ${owner.id}` : ''}{owner.share ? `, חלק בנכס – ${owner.share}` : ''}
@@ -738,6 +718,38 @@ const Section2: React.FC<{ data: ReportData }> = ({ data }) => (
       </View>
     )}
 
+    {/* זיקות הנאה - 7 זיקות */}
+    {data.section2.easements && data.section2.easements.length > 0 && (
+      <View style={{ marginTop: 15 }}>
+        <Text style={styles.subTitle}>זיקות הנאה</Text>
+        <Text style={styles.paragraph}>
+          על הנכס רשומות זיקות הנאה לציבור בשטחים הבאים:
+        </Text>
+        {data.section2.easements.map((easement, idx) => (
+          <Text key={idx} style={styles.paragraph}>
+            {easement.letter}) {easement.description}{easement.areaSqm ? ` בשטח ${formatNumber(easement.areaSqm)} מ"ר` : ''}
+          </Text>
+        ))}
+      </View>
+    )}
+
+    {/* משכנתאות */}
+    {data.section2.mortgagesText && data.section2.mortgagesText !== 'אין משכנתאות רשומות' && (
+      <View style={{ marginTop: 10 }}>
+        <Text style={styles.subTitle}>משכנתאות</Text>
+        <Text style={styles.paragraph}>{data.section2.mortgagesText}</Text>
+      </View>
+    )}
+
+    {/* הערות */}
+    {data.section2.notesText && data.section2.notesText !== 'אין הערות' && (
+      <View style={{ marginTop: 10 }}>
+        <Text style={styles.subTitle}>הערות</Text>
+        <Text style={styles.paragraph}>{data.section2.notesText}</Text>
+      </View>
+    )}
+
+    {/* מסמכי בית משותף */}
     {data.section2.condoOrder && (
       <View style={{ marginTop: 15 }}>
         <Text style={styles.h3}>2.2 מסמכי בית משותף</Text>
@@ -746,6 +758,18 @@ const Section2: React.FC<{ data: ReportData }> = ({ data }) => (
         </Text>
         {data.section2.condoOrder.buildingDescription && (
           <Text style={styles.paragraph}>{data.section2.condoOrder.buildingDescription}</Text>
+        )}
+        
+        {/* פירוט המבנים */}
+        {data.section2.condoOrder.buildingsInfo && data.section2.condoOrder.buildingsInfo.length > 0 && (
+          <View style={{ marginTop: 10 }}>
+            <Text style={styles.subTitle}>פירוט המבנים בפרויקט:</Text>
+            {data.section2.condoOrder.buildingsInfo.map((building, idx) => (
+              <Text key={idx} style={styles.paragraph}>
+                מבנה {building.buildingNumber}{building.address ? `, ${building.address}` : ''}{building.floors ? `, ${building.floors} קומות` : ''}{building.units ? `, ${building.units} יח"ד` : ''}.
+              </Text>
+            ))}
+          </View>
         )}
         
         {data.section2.condoOrder.sketches && data.section2.condoOrder.sketches.length > 0 && (
@@ -761,9 +785,13 @@ const Section2: React.FC<{ data: ReportData }> = ({ data }) => (
       </View>
     )}
 
-    <Text style={{ marginTop: 20, fontSize: 10, fontStyle: 'italic' }}>
-      {LEGAL_DISCLAIMER_TEXT}
-    </Text>
+    {/* הסתייגות */}
+    <View style={{ marginTop: 20 }}>
+      <Text style={styles.h3}>2.3 הסתייגות</Text>
+      <Text style={{ fontSize: 10, fontStyle: 'italic' }}>
+        {LEGAL_DISCLAIMER_TEXT}
+      </Text>
+    </View>
   </Page>
 );
 
@@ -822,6 +850,27 @@ const Section3: React.FC<{ data: ReportData }> = ({ data }) => (
             <Text style={styles.bulletItem}>• קווי בניין: {data.section3.rightsSummary.buildingLines}</Text>
           )}
         </View>
+        
+        {/* טבלת קווי בניין */}
+        {data.section3.rightsSummary.buildingLinesTable && (
+          <View style={{ marginTop: 15 }}>
+            <Text style={styles.subTitle}>קווי בניין:</Text>
+            <View style={styles.table}>
+              <View style={[styles.tableRow, styles.tableHeader]}>
+                <Text style={styles.tableHeaderCell}>חזית</Text>
+                <Text style={styles.tableHeaderCell}>אחורי</Text>
+                <Text style={styles.tableHeaderCell}>צד 1</Text>
+                <Text style={styles.tableHeaderCell}>צד 2</Text>
+              </View>
+              <View style={styles.tableRow}>
+                <Text style={styles.tableCell}>{data.section3.rightsSummary.buildingLinesTable.front ? `${formatNumber(data.section3.rightsSummary.buildingLinesTable.front)} מ'` : '—'}</Text>
+                <Text style={styles.tableCell}>{data.section3.rightsSummary.buildingLinesTable.back ? `${formatNumber(data.section3.rightsSummary.buildingLinesTable.back)} מ'` : '—'}</Text>
+                <Text style={styles.tableCell}>{data.section3.rightsSummary.buildingLinesTable.side1 ? `${formatNumber(data.section3.rightsSummary.buildingLinesTable.side1)} מ'` : '—'}</Text>
+                <Text style={styles.tableCell}>{data.section3.rightsSummary.buildingLinesTable.side2 ? `${formatNumber(data.section3.rightsSummary.buildingLinesTable.side2)} מ'` : '—'}</Text>
+              </View>
+            </View>
+          </View>
+        )}
       </View>
     )}
 
@@ -843,8 +892,34 @@ const Section3: React.FC<{ data: ReportData }> = ({ data }) => (
           </Text>
         )}
 
+        {/* פירוט שטחי עזר */}
+        {data.section3.auxiliaryAreas && (
+          <View style={{ marginTop: 15 }}>
+            <Text style={styles.subTitle}>שטחי עזר:</Text>
+            {data.section3.auxiliaryAreas.parkingSpaces && (
+              <Text style={styles.paragraph}>
+                • מספר חניות: {formatNumber(data.section3.auxiliaryAreas.parkingSpaces)}
+              </Text>
+            )}
+            {data.section3.auxiliaryAreas.storageRooms && (
+              <Text style={styles.paragraph}>
+                • מספר מחסנים: {formatNumber(data.section3.auxiliaryAreas.storageRooms)}
+              </Text>
+            )}
+            {data.section3.auxiliaryAreas.otherAreas && data.section3.auxiliaryAreas.otherAreas.length > 0 && (
+              <>
+                {data.section3.auxiliaryAreas.otherAreas.map((area, idx) => (
+                  <Text key={idx} style={styles.paragraph}>
+                    • {area.type}{area.areaSqm ? ` בשטח ${formatNumber(area.areaSqm)} מ"ר` : ''}
+                  </Text>
+                ))}
+              </>
+            )}
+          </View>
+        )}
+
         {data.section3.apartmentPlan ? (
-          <View>
+          <View style={{ marginTop: 15 }}>
             {data.section3.apartmentPlan.src ? (
               <>
                 <Image src={data.section3.apartmentPlan.src} style={styles.image} />
@@ -857,7 +932,9 @@ const Section3: React.FC<{ data: ReportData }> = ({ data }) => (
             )}
           </View>
         ) : (
-          <ImagePlaceholder caption="הדבק כאן צילום-מסך תשריט הדירה" />
+          <View style={{ marginTop: 15 }}>
+            <ImagePlaceholder caption="הדבק כאן צילום-מסך תשריט הדירה" />
+          </View>
         )}
       </View>
     )}

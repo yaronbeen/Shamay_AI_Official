@@ -233,6 +233,21 @@ export function convertValuationDataToReportData(
   // Get final value text
   const finalValueText = numberToHebrewWords(totalValue)
 
+  // Get easements (זיקות הנאה) - 7 easements
+  const easements = extracted.easements_list || landRegistry.easements_list || []
+  
+  // Get building lines table
+  const buildingLinesTable = extracted.building_lines_table || rightsSummary.building_lines_table || undefined
+  
+  // Get auxiliary areas
+  const auxiliaryAreas = extracted.auxiliary_areas || undefined
+  
+  // Get buildings info for condo order
+  const buildingsInfo = extracted.buildings_info || sharedBuildingOrder.buildings_info || undefined
+  
+  // Get appraiser license number
+  const appraiserLicenseNumber = valuationData.appraiserLicenseNumber || extracted.appraiser_license_number || undefined
+
   return {
     meta: {
       documentTitle: valuationData.valuationType || 'אומדן שווי זכויות במקרקעין',
@@ -242,7 +257,16 @@ export function convertValuationDataToReportData(
       clientTitle: valuationData.clientTitle,
       inspectionDate: formatDate(valuationData.visitDate || valuationData.valuationDate),
       valuationDate: formatDate(valuationData.valuationDate || valuationData.visitDate),
-      appraiserName: valuationData.shamayName || 'שמאי מקרקעין'
+      appraiserName: valuationData.shamayName || 'שמאי מקרקעין',
+      appraiserLicenseNumber
+    },
+    openingPage: {
+      openingDate: formatDate(valuationData.valuationDate || new Date().toISOString()),
+      propertySummaryTable: {
+        gush: valuationData.gush || landRegistry.gush || extracted.gush || '',
+        helka: valuationData.parcel || landRegistry.chelka || landRegistry.parcel || extracted.parcel || '',
+        area: valuationData.parcelArea || extracted.parcel_area || landRegistry.parcel_area
+      }
     },
     address: {
       street: valuationData.street || '',
@@ -310,6 +334,11 @@ export function convertValuationDataToReportData(
       registryOfficeName: valuationData.registryOffice || landRegistry.registry_office || extracted.registry_office,
       tabuIssueDate: formatDate(valuationData.extractDate || landRegistry.extract_date || extracted.extract_date),
       easementsText: landRegistry.easements || extracted.easements || 'אין זיקות',
+      easements: easements.length > 0 ? easements.map((easement: any, idx: number) => ({
+        letter: easement.letter || ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ז'][idx] || String.fromCharCode(1488 + idx),
+        description: easement.description || easement.text || '',
+        areaSqm: easement.areaSqm || easement.area_sqm || easement.area
+      })) : undefined,
       ownerships: ownerships.length > 0 ? ownerships.map((owner: any) => ({
         name: owner.name || owner.owner_name || '',
         id: owner.id || owner.id_number || '',
@@ -320,6 +349,12 @@ export function convertValuationDataToReportData(
       condoOrder: sharedBuildingOrder.order_date ? {
         orderDate: formatDate(sharedBuildingOrder.order_date),
         buildingDescription: valuationData.buildingDescription || sharedBuildingOrder.building_description,
+        buildingsInfo: buildingsInfo ? buildingsInfo.map((building: any) => ({
+          buildingNumber: building.building_number || building.number || building.buildingNumber || '',
+          address: building.address,
+          floors: building.floors || building.floors_count,
+          units: building.units || building.units_count
+        })) : undefined,
         subParcelDescription: sharedBuildingOrder.sub_parcel_description,
         sketches: [] // TODO: Extract sketches from shared building order
       } : undefined,
@@ -338,7 +373,21 @@ export function convertValuationDataToReportData(
         buildPercentage: rightsSummary.buildPercentage || rightsSummary.build_percentage,
         maxFloors: rightsSummary.maxFloors || rightsSummary.max_floors,
         maxUnits: rightsSummary.maxUnits || rightsSummary.max_units,
-        buildingLines: rightsSummary.buildingLines || rightsSummary.building_lines
+        buildingLines: rightsSummary.buildingLines || rightsSummary.building_lines,
+        buildingLinesTable: buildingLinesTable ? {
+          front: buildingLinesTable.front || buildingLinesTable.חזית,
+          back: buildingLinesTable.back || buildingLinesTable.אחורי,
+          side1: buildingLinesTable.side1 || buildingLinesTable.צד1 || buildingLinesTable.צד_1,
+          side2: buildingLinesTable.side2 || buildingLinesTable.צד2 || buildingLinesTable.צד_2
+        } : undefined
+      } : undefined,
+      auxiliaryAreas: auxiliaryAreas ? {
+        parkingSpaces: auxiliaryAreas.parking_spaces || auxiliaryAreas.parkingSpaces || auxiliaryAreas.חניות,
+        storageRooms: auxiliaryAreas.storage_rooms || auxiliaryAreas.storageRooms || auxiliaryAreas.מחסנים,
+        otherAreas: auxiliaryAreas.other_areas || auxiliaryAreas.otherAreas ? (auxiliaryAreas.other_areas || auxiliaryAreas.otherAreas).map((area: any) => ({
+          type: area.type || area.name || '',
+          areaSqm: area.areaSqm || area.area_sqm || area.area
+        })) : undefined
       } : undefined,
       permits: permits.map((permit: any) => ({
         permitNumber: permit.permit_number || permit.permitNumber || permit.number || '',

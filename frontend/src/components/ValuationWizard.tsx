@@ -36,6 +36,7 @@ export interface ValuationData {
   shamayName: string
   shamaySerialNumber: string
   valuationType?: string
+  appraiserLicenseNumber?: string
   
   // Land Contamination
   landContamination?: boolean
@@ -116,8 +117,9 @@ export interface ValuationData {
     registration_office?: string // Backend snake_case format
     gush?: string | number
     chelka?: string | number
-    subChelka?: string | number
-    sub_chelka?: string | number // Backend snake_case format
+    subParcel?: string | number
+    sub_parcel?: string | number // Backend snake_case format
+    sub_chelka?: string | number // Legacy backend format (deprecated, use sub_parcel)
     ownershipType?: string
     ownership_type?: string // Backend snake_case format
     attachments?: string | Array<{

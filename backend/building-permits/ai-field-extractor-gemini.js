@@ -92,6 +92,45 @@ IMPORTANT DISTINCTION:
 - permitted_description: STRICT - only from "מותר:" sections
 - building_description: FLEXIBLE - can come from any section describing the construction work, including detailed descriptions of floors, areas, units, etc.
 
+BUILDING DESCRIPTION EXTRACTION GUIDANCE:
+- This field is FLEXIBLE and can come from multiple sections in the document
+- Look for detailed descriptions that include:
+  * Number of floors ("קומות", "מפלסים") - e.g., "בן 7 קומות", "7 ק.+ק.+ק.נוספת"
+  * Number of units ("יחידות דיור", "דירות") - e.g., "סה\"כ 28 יח\"ד", "55 דירות"
+  * Areas breakdown:
+    - "שטחי עזר" (auxiliary areas)
+    - "ממ\"דים" (shelters)
+    - "מגורים" (residential areas)
+    - "מרפסות פתוחות" (open balconies)
+    - "הול כניסה וח. מדרגות" (entrance hall and stairwell)
+    - "ח. מכונות" (machine room)
+    - "בריכת מים" (water pool)
+    - "ק.ע. מפולשת" (pierced ground floor)
+  * Building features:
+    - "מעליות" (elevators)
+    - "אנטנה" (antenna)
+    - "מערכת סולרית" (solar system)
+    - "גדרות ופתוח" (fences and development)
+- Can appear in:
+  * The "תיאור הבניין" or "תיאור העבודות" section
+  * The detailed permit conditions
+  * The building specifications table
+  * The "הפכיל" (details) section
+- Extract the COMPLETE description, including all details and specifications
+- If multiple sections exist with building details, combine them into one comprehensive description
+- Include all numeric values (areas, counts) as they appear in the document
+- Preserve Hebrew formatting and terminology exactly as written
+
+PROPERTY IDENTIFIERS (gush/chelka) EXTRACTION:
+- Look for "גוש", "חלקה", "תת חלקה" in:
+  * Document header/title section (most reliable)
+  * Property address section
+  * Plot identification table (if exists)
+- Extract numeric values only (e.g., gush: 9905, chelka: 30, sub_chelka: null or number)
+- Format: Usually appears as "גוש: 9905 חלקה: 30" or in a table format
+- If found in multiple places, prioritize the one from the header/title section
+- If not found, return null (do NOT guess)
+
 CONFIDENCE SCORES:
 For each field, provide a confidence score from 0-1 based on text clarity and certainty.
 Also provide context explaining where/how the information was found.
@@ -186,9 +225,11 @@ CRITICAL EXTRACTION RULES:
 1. PERMIT DATE: Look ONLY at BOTTOM of document for 'מועד קביעת ההיתר' - ignore other dates
 2. COMMITTEE NAME: MUST include specific city name - search entire document if needed
 3. PERMITTED DESCRIPTION: ONLY from sections starting with 'מותר:' - not addresses or conditions
-4. If any field cannot be found with 100% certainty, return null
-5. Return ONLY Hebrew text - no English translations
-6. Do NOT generate or guess any data
+4. BUILDING DESCRIPTION: Extract COMPLETE description from all relevant sections - combine details from multiple sections if needed
+5. PROPERTY IDENTIFIERS: Extract gush/chelka from header/title section - prioritize header over other locations
+6. If any field cannot be found with 100% certainty, return null
+7. Return ONLY Hebrew text - no English translations
+8. Do NOT generate or guess any data
 
 Focus on finding the Hebrew text and extracting the required fields with strict validation.
 

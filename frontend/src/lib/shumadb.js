@@ -277,7 +277,8 @@ class ShumaDBEnhanced {
         valuationData.finalValuation || 0, valuationData.pricePerSqm || 0, valuationData.isComplete || false,
         JSON.stringify(valuationData.uploads || []), JSON.stringify(valuationData.gisAnalysis || {}), JSON.stringify(valuationData.gisScreenshots || {}),
         JSON.stringify(valuationData.garmushkaMeasurements || {}),
-        valuationData.landContamination || false, valuationData.landContaminationNote || ''
+        Boolean(valuationData.landContamination || false), 
+        valuationData.landContaminationNote || ''
       ])
 
       shumaId = result.rows[0].id
@@ -440,15 +441,14 @@ class ShumaDBEnhanced {
           client_title = CASE WHEN $61::text IS NOT NULL THEN $61::text ELSE client_title END,
           client_note = CASE WHEN $62::text IS NOT NULL THEN $62::text ELSE client_note END,
           client_relation = CASE WHEN $63::text IS NOT NULL THEN $63::text ELSE client_relation END,
-          land_contamination = COALESCE($64, land_contamination),
-          land_contamination_note = CASE WHEN $65::text IS NOT NULL THEN $65::text ELSE land_contamination_note END,
+          land_contamination = COALESCE($64::boolean, land_contamination),
+          land_contamination_note = CASE WHEN $65::text IS NOT NULL AND $65::text != '' THEN $65::text ELSE land_contamination_note END,
           updated_at = NOW()
-        WHERE id = $67
+        WHERE id = $66
       `, [
         valuationData.street, valuationData.buildingNumber,
         valuationData.city, valuationData.neighborhood, valuationData.fullAddress, valuationData.rooms || '0.0',
         valuationData.floor, valuationData.airDirections, valuationData.area || 0, valuationData.propertyEssence,
-        valuationData.propertyEssence !== undefined ? (valuationData.propertyEssence || '') : null,
         valuationData.clientName !== undefined ? (valuationData.clientName || '') : (valuationData.client_name !== undefined ? (valuationData.client_name || '') : null),
         formatDateForDB(valuationData.visitDate), formatDateForDB(valuationData.valuationDate),
         valuationData.referenceNumber,
@@ -471,7 +471,8 @@ class ShumaDBEnhanced {
         valuationData.clientTitle ?? null,
         valuationData.clientNote ?? null,
         valuationData.clientRelation ?? null,
-        valuationData.landContamination ?? false, valuationData.landContaminationNote ?? null,
+        Boolean(valuationData.landContamination ?? false), 
+        valuationData.landContaminationNote ?? null,
         shumaId
       ])
       
@@ -1543,6 +1544,7 @@ class ShumaDBEnhanced {
     const client = await db.client()
 
     try {
+      console.log('🔍 [searchShumas] Starting search with:', { organizationId, search, status })
 
       let query = `
         SELECT 
@@ -1595,7 +1597,9 @@ class ShumaDBEnhanced {
 
       query += ` ORDER BY updated_at DESC`
 
+      console.log('🔍 [searchShumas] Executing query with params:', params)
       const result = await client.query(query, params)
+      console.log('✅ [searchShumas] Query successful, found', result.rows.length, 'rows')
 
       return {
         success: true,
@@ -1615,10 +1619,14 @@ class ShumaDBEnhanced {
         }))
       }
     } catch (error) {
-      console.error('Error searching shumas:', error)
+      console.error('❌ [searchShumas] Error searching shumas:', error)
+      console.error('❌ [searchShumas] Error message:', error.message)
+      console.error('❌ [searchShumas] Error stack:', error.stack)
       return { success: false, error: error.message }
     } finally {
-      client.release()
+      if (client && typeof client.release === 'function') {
+        client.release()
+      }
     }
   }
 
