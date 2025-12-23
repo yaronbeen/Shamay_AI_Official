@@ -1,0 +1,212 @@
+{
+  "sessionId": "mock-6216-1766094463518",
+  "startedAt": "2025-12-23T15:15:19.233Z",
+  "traces": [
+    {
+      "traceId": "trace_1766502919234_sd7f14l",
+      "sessionId": "mock-6216-1766094463518",
+      "timestamp": "2025-12-23T15:15:19.234Z",
+      "type": "user_message",
+      "data": {
+        "message": "מה המשמעות של המשכנתא הרשומה?",
+        "attachments": []
+      }
+    },
+    {
+      "traceId": "trace_1766502921627_h1juuy9",
+      "sessionId": "mock-6216-1766094463518",
+      "timestamp": "2025-12-23T15:15:21.627Z",
+      "type": "error",
+      "data": {
+        "error": "401 {\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"invalid x-api-key\"},\"request_id\":\"req_011CWPqaRjmAVpUdJ8CHaytW\"}",
+        "context": {
+          "stack": "Error: 401 {\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"invalid x-api-key\"},\"request_id\":\"req_011CWPqaRjmAVpUdJ8CHaytW\"}\n    at APIError.generate (webpack-internal:///(rsc)/./node_modules/@anthropic-ai/sdk/core/error.mjs:55:20)\n    at Anthropic.makeStatusError (webpack-internal:///(rsc)/./node_modules/@anthropic-ai/sdk/client.mjs:184:70)\n    at Anthropic.makeRequest (webpack-internal:///(rsc)/./node_modules/@anthropic-ai/sdk/client.mjs:342:30)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async eval (webpack-internal:///(rsc)/./src/app/api/session/[sessionId]/chat/route.ts:229:38)"
+        }
+      }
+    },
+    {
+      "traceId": "trace_1766503422669_jpdcywd",
+      "sessionId": "mock-6216-1766094463518",
+      "timestamp": "2025-12-23T15:23:42.669Z",
+      "type": "user_message",
+      "data": {
+        "message": "מה השטח הרשום בטאבו?",
+        "attachments": []
+      }
+    },
+    {
+      "traceId": "trace_1766503425220_kcdw52i",
+      "sessionId": "mock-6216-1766094463518",
+      "timestamp": "2025-12-23T15:23:45.220Z",
+      "type": "error",
+      "data": {
+        "error": "401 {\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"invalid x-api-key\"},\"request_id\":\"req_011CWPrDYemdqFMHBruwCdUN\"}",
+        "context": {
+          "stack": "Error: 401 {\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"invalid x-api-key\"},\"request_id\":\"req_011CWPrDYemdqFMHBruwCdUN\"}\n    at APIError.generate (webpack-internal:///(rsc)/./node_modules/@anthropic-ai/sdk/core/error.mjs:55:20)\n    at Anthropic.makeStatusError (webpack-internal:///(rsc)/./node_modules/@anthropic-ai/sdk/client.mjs:184:70)\n    at Anthropic.makeRequest (webpack-internal:///(rsc)/./node_modules/@anthropic-ai/sdk/client.mjs:342:30)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async eval (webpack-internal:///(rsc)/./src/app/api/session/[sessionId]/chat/route.ts:229:38)"
+        }
+      }
+    },
+    {
+      "traceId": "trace_1766503456160_pgxr7kq",
+      "sessionId": "mock-6216-1766094463518",
+      "timestamp": "2025-12-23T15:24:16.160Z",
+      "type": "user_message",
+      "data": {
+        "message": "מה המשמעות של המשכנתא הרשומה?",
+        "attachments": []
+      }
+    },
+    {
+      "traceId": "trace_1766503458538_xsw5ayc",
+      "sessionId": "mock-6216-1766094463518",
+      "timestamp": "2025-12-23T15:24:18.538Z",
+      "type": "error",
+      "data": {
+        "error": "401 {\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"invalid x-api-key\"},\"request_id\":\"req_011CWPrG18HVMDqQb3quxbTn\"}",
+        "context": {
+          "stack": "Error: 401 {\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"invalid x-api-key\"},\"request_id\":\"req_011CWPrG18HVMDqQb3quxbTn\"}\n    at APIError.generate (webpack-internal:///(rsc)/./node_modules/@anthropic-ai/sdk/core/error.mjs:55:20)\n    at Anthropic.makeStatusError (webpack-internal:///(rsc)/./node_modules/@anthropic-ai/sdk/client.mjs:184:70)\n    at Anthropic.makeRequest (webpack-internal:///(rsc)/./node_modules/@anthropic-ai/sdk/client.mjs:342:30)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async eval (webpack-internal:///(rsc)/./src/app/api/session/[sessionId]/chat/route.ts:229:38)"
+        }
+      }
+    },
+    {
+      "traceId": "trace_1766503564195_yclnubc",
+      "sessionId": "mock-6216-1766094463518",
+      "timestamp": "2025-12-23T15:26:04.195Z",
+      "type": "user_message",
+      "data": {
+        "message": "האם יש הערות אזהרה על הנכס?",
+        "attachments": []
+      }
+    },
+    {
+      "traceId": "trace_1766503584375_h39xgdr",
+      "sessionId": "mock-6216-1766094463518",
+      "timestamp": "2025-12-23T15:26:24.375Z",
+      "type": "assistant_response",
+      "data": {
+        "response": "אני לא יכול לבדוק אזהרות או הערות על הנכס כרגע, מכיוון שלא הועלו מסמכים למערכת.\n\n**כדי לקבל מידע על הערות אזהרה**, אני זקוק למסמכי טאבו (נסח רישום זכויות) שבהם מופיעות ההערות והאזהרות הרשומות על הנכס.\n\n---\n\n### האם תרצה להתחיל בתהליך כתיבת השומה?\n\nאני כאן כדי לעזור לך לכתוב את סעיפי השומה בצורה מקצועית ומודרכת.\n\n**הנכס שלנו:**\n- **כתובת:** הרי הגלעד, רמת גן\n- **זיהוי:** גוש 6109, חלקה 396\n\nנתחיל בסעיף 1.1 - **תיאור הסביבה**.\n\n**שאלות התכיילות לסעיף 1.1:**\n\n1. באיזה אזור/שכונה ברמת גן ממוקם הנכס? (למשל: מרכז העיר, שכונת קריית קריניצי, רמת אפעל וכו')\n\n2. מהו אופי הסביבה הבנויה סביב הנכס? (למשל: בניינים מגורים רב־קומתיים, בתים צמודי קרקע, שילוב מסחר ומגורים)\n\n3. אילו שירותים ותשתיות ציבוריות נמצאים בקרבת הנכס? (למשל: בתי ספר, גנים, קניונים, תחנות תחבורה ציבורית)\n\n4. מהי הנגישות התחבורתית לנכס? (למשל: כבישים ראשיים, תחבורה ציבורית)\n\n5. האם יש מאפיינים סביבתיים מיוחדים? (למשל: פארקים, שטחים פתוחים, קרבה למוסדות מרכזיים)\n\nאנא ענה על השאלות שאתה יודע, ואשאיר את האחרות ריקות."
+      },
+      "metadata": {
+        "model": "claude-sonnet-4-5-20250929",
+        "inputTokens": 8039,
+        "outputTokens": 675,
+        "latencyMs": 20181
+      }
+    },
+    {
+      "traceId": "trace_1766503585076_2n7x1zh",
+      "sessionId": "mock-6216-1766094463518",
+      "timestamp": "2025-12-23T15:26:25.076Z",
+      "type": "user_message",
+      "data": {
+        "message": "מה רמת הביטחון בנתונים שחולצו?",
+        "attachments": []
+      }
+    },
+    {
+      "traceId": "trace_1766503592900_x7vux2n",
+      "sessionId": "mock-6216-1766094463518",
+      "timestamp": "2025-12-23T15:26:32.901Z",
+      "type": "tool_call",
+      "data": {
+        "toolName": "get_validation_status",
+        "input": {
+          "include_warnings": true
+        }
+      },
+      "metadata": {
+        "toolName": "get_validation_status"
+      }
+    },
+    {
+      "traceId": "trace_1766503592911_ku9kzq8",
+      "sessionId": "mock-6216-1766094463518",
+      "timestamp": "2025-12-23T15:26:32.911Z",
+      "type": "tool_result",
+      "data": {
+        "toolName": "get_validation_status",
+        "result": "{\"success\":true,\"issuesCount\":1,\"errors\":[],\"warnings\":[{\"field\":\"documents\",\"type\":\"missing_document\",\"message\":\"נסח טאבו לא הועלה\",\"severity\":\"warning\"}],\"isValid\":true}"
+      },
+      "metadata": {
+        "toolName": "get_validation_status",
+        "latencyMs": 11
+      }
+    },
+    {
+      "traceId": "trace_1766503606496_ofs1l83",
+      "sessionId": "mock-6216-1766094463518",
+      "timestamp": "2025-12-23T15:26:46.496Z",
+      "type": "assistant_response",
+      "data": {
+        "response": "\n[מבצע: בדיקת תקינות...]\nבדיקת רמת הביטחון מראה:\n\n**סטטוס כללי: תקין ✓**\n\n**בעיות שזוהו:**\n- **אזהרה אחת:** נסח טאבו לא הועלה\n\n**משמעות:**\n- אין שגיאות קריטיות בנתונים שחולצו\n- המערכת מזהירה שחסר נסח טאבו, מה שעלול להגביל את המידע הזמין לכתיבת הסעיפים\n\n**מה זה אומר על רמת הביטחון?**\nכרגע אין מסמכים שהוזנו למערכת, ולכן אין נתונים שחולצו לבדיקה. הנתונים היחידים שברשותי הם:\n- כתובת: הרי הגלעד, רמת גן\n- גוש 6109, חלקה 396\n\n**המלצה:**\nכדי לשפר את רמת הביטחון ואיכות השומה, מומלץ להעלות:\n1. נסח טאבו עדכני\n2. היתר בניה (אם רלוונטי)\n3. צו בית משותף (אם מדובר בדירה)\n\nהאם תרצה להעלות מסמכים כעת, או שנמשיך בכתיבת הסעיפים על סמך המידע הקיים ותשובותיך לשאלות?"
+      },
+      "metadata": {
+        "model": "claude-sonnet-4-5-20250929",
+        "inputTokens": 16209,
+        "outputTokens": 495,
+        "latencyMs": 21423
+      }
+    },
+    {
+      "traceId": "trace_1766503710272_zn3rdc5",
+      "sessionId": "mock-6216-1766094463518",
+      "timestamp": "2025-12-23T15:28:30.272Z",
+      "type": "user_message",
+      "data": {
+        "message": "מה רמת הביטחון בנתונים שחולצו?",
+        "attachments": []
+      }
+    },
+    {
+      "traceId": "trace_1766503715808_sfnf5c8",
+      "sessionId": "mock-6216-1766094463518",
+      "timestamp": "2025-12-23T15:28:35.808Z",
+      "type": "tool_call",
+      "data": {
+        "toolName": "get_validation_status",
+        "input": {
+          "include_warnings": true
+        }
+      },
+      "metadata": {
+        "toolName": "get_validation_status"
+      }
+    },
+    {
+      "traceId": "trace_1766503715809_46st80p",
+      "sessionId": "mock-6216-1766094463518",
+      "timestamp": "2025-12-23T15:28:35.809Z",
+      "type": "tool_result",
+      "data": {
+        "toolName": "get_validation_status",
+        "result": "{\"success\":true,\"issuesCount\":1,\"errors\":[],\"warnings\":[{\"field\":\"documents\",\"type\":\"missing_document\",\"message\":\"נסח טאבו לא הועלה\",\"severity\":\"warning\"}],\"isValid\":true}"
+      },
+      "metadata": {
+        "toolName": "get_validation_status",
+        "latencyMs": 1
+      }
+    },
+    {
+      "traceId": "trace_1766503726970_ez8ry9m",
+      "sessionId": "mock-6216-1766094463518",
+      "timestamp": "2025-12-23T15:28:46.970Z",
+      "type": "assistant_response",
+      "data": {
+        "response": "\n[מבצע: בדיקת תקינות...]\nבשלב זה **אין מסמכים שהוזנו למערכת**, ולכן אין נתונים שחולצו לבדיקה.\n\n**סטטוס נוכחי:**\n- ✅ המערכת תקינה ומוכנה לעבודה\n- ⚠️ **חסר**: נסח טאבו (מומלץ להעלאה)\n- אין שגיאות קריטיות\n\n---\n\n### מה כדאי לעשות עכשיו?\n\n1. **להעלות מסמכים** (אופציונלי אך מומלץ):\n   - נסח טאבו עדכני\n   - היתר בניה\n   - צו בית משותף (אם רלוונטי)\n   \n2. **להתחיל בתהליך הכתיבה** על בסיס המידע שברשותך:\n   - כתובת: הרי הגלעד, רמת גן\n   - גוש 6109, חלקה 396\n\n---\n\n**האם תרצה שנתחיל בתהליך כתיבת סעיף 1.1 (תיאור הסביבה)?**  \nאפשר להתחיל גם ללא מסמכים, על בסיס המידע שתמסור בשאלות התכיילות."
+      },
+      "metadata": {
+        "model": "claude-sonnet-4-5-20250929",
+        "inputTokens": 16209,
+        "outputTokens": 451,
+        "latencyMs": 16700
+      }
+    }
+  ],
+  "summary": {
+    "totalMessages": 9,
+    "totalToolCalls": 2,
+    "totalTokens": 42078,
+    "totalLatencyMs": 58316,
+    "errors": 3
+  }
+}
