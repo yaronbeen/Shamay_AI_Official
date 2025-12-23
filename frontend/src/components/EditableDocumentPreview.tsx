@@ -790,7 +790,7 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
     }
   }, [customHtmlOverrides, data, onDataChange])
 
-  const handleExportPDF = useCallback(async () => {
+  const handleExportPDF = useCallback(async (useReactPdf: boolean = false) => {
     const sessionId = (data as any).sessionId
     if (!sessionId) {
       alert('לא ניתן לייצא - חסר מזהה סשן')
@@ -804,7 +804,12 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
         ...customHtmlOverrides
       }
 
-      const response = await fetch(`/api/session/${sessionId}/export-pdf`, {
+      // Choose endpoint based on PDF engine preference
+      const endpoint = useReactPdf 
+        ? `/api/session/${sessionId}/export-pdf-react`
+        : `/api/session/${sessionId}/export-pdf`
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -813,7 +818,8 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
       })
 
       if (!response.ok) {
-        throw new Error('Failed to export PDF')
+        const errorText = await response.text()
+        throw new Error(`Failed to export PDF: ${errorText}`)
       }
 
       const blob = await response.blob()
@@ -826,14 +832,14 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
       
-      alert('✅ PDF הורד בהצלחה!')
+      alert(`✅ PDF הורד בהצלחה! (${useReactPdf ? 'React-PDF' : 'Puppeteer'})`)
     } catch (error) {
       console.error('Error exporting PDF:', error)
-      alert('❌ שגיאה בייצוא PDF')
+      alert(`❌ שגיאה בייצוא PDF: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setIsExporting(false)
     }
-  }, [data])
+  }, [data, customHtmlOverrides])
 
   const handleManualRefresh = useCallback(async () => {
     const sessionId = (data as any).sessionId
@@ -918,25 +924,46 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
         <div className="flex items-center space-x-2 space-x-reverse gap-2">
           {(data as any).sessionId && (
             <>
-              <button
-                onClick={handleExportPDF}
-                disabled={isExporting}
-                className={`px-3 py-2 text-sm rounded-lg font-medium transition-all duration-200 ${
-                  isExporting 
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                    : 'bg-red-500 text-white hover:bg-red-600 shadow-md'
-                }`}
-                title="ייצא PDF של הדוח הערוך"
-              >
-                {isExporting ? (
-                  <>
-                    <span className="inline-block animate-spin mr-1">⟳</span>
-                    מייצא...
-                  </>
-                ) : (
-                  <>ייצא PDF של הדוח הערוך</>
-                )}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleExportPDF(false)}
+                  disabled={isExporting}
+                  className={`px-3 py-2 text-sm rounded-lg font-medium transition-all duration-200 ${
+                    isExporting 
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                      : 'bg-red-500 text-white hover:bg-red-600 shadow-md'
+                  }`}
+                  title="ייצא PDF של הדוח הערוך (Puppeteer - HTML template)"
+                >
+                  {isExporting ? (
+                    <>
+                      <span className="inline-block animate-spin mr-1">⟳</span>
+                      מייצא...
+                    </>
+                  ) : (
+                    <>📄 ייצא PDF (HTML)</>
+                  )}
+                </button>
+                <button
+                  onClick={() => handleExportPDF(true)}
+                  disabled={isExporting}
+                  className={`px-3 py-2 text-sm rounded-lg font-medium transition-all duration-200 ${
+                    isExporting 
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                      : 'bg-blue-500 text-white hover:bg-blue-600 shadow-md'
+                  }`}
+                  title="ייצא PDF של הדוח הערוך (React-PDF - חדש)"
+                >
+                  {isExporting ? (
+                    <>
+                      <span className="inline-block animate-spin mr-1">⟳</span>
+                      מייצא...
+                    </>
+                  ) : (
+                    <>⚡ ייצא PDF (React-PDF)</>
+                  )}
+                </button>
+              </div>
               
             <button
               onClick={handleManualRefresh}

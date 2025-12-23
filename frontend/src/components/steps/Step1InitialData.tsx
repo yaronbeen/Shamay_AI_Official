@@ -10,21 +10,41 @@ interface Step1InitialDataProps {
 
 const DATE_FIELDS = new Set(['valuationDate', 'valuationEffectiveDate'])
 
-const normalizeDateToISO = (dateStr: string) => {
-  if (!dateStr) return ''
+const normalizeDateToISO = (dateInput: string | Date | null | undefined): string => {
+  if (!dateInput) return ''
+  
+  // Handle Date objects
+  if (dateInput instanceof Date) {
+    const year = dateInput.getFullYear()
+    const month = String(dateInput.getMonth() + 1).padStart(2, '0')
+    const day = String(dateInput.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+  
+  // Handle strings
+  const dateStr = String(dateInput)
   if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
     return dateStr
   }
+  
+  // Handle ISO date strings with time (YYYY-MM-DDTHH:mm:ss)
+  const isoMatch = dateStr.match(/^(\d{4}-\d{2}-\d{2})/)
+  if (isoMatch) {
+    return isoMatch[1]
+  }
+  
   const dotMatch = dateStr.match(/^(\d{2})\.(\d{2})\.(\d{4})$/)
   if (dotMatch) {
     const [, day, month, year] = dotMatch
     return `${year}-${month}-${day}`
   }
+  
   const slashMatch = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
   if (slashMatch) {
     const [, day, month, year] = slashMatch
     return `${year}-${month}-${day}`
   }
+  
   return ''
 }
 
@@ -35,7 +55,10 @@ const formatDateForDisplay = (dateStr: string) => {
   return `${day}/${month}/${year}`
 }
 
+const LAST_ADDRESS_KEY = 'shamay_last_address'
+
 export function Step1InitialData({ data, updateData, onValidationChange }: Step1InitialDataProps) {
+  const isInitialLoad = useRef(true)
   const [formData, setFormData] = useState({
     // סוג שומה ומועד כתיבתה
     valuationType: data.valuationType || '',
@@ -43,6 +66,8 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
     
     // זהות מזמין השומה והקשר שלו לנכס
     clientName: data.clientName || '',
+    clientTitle: (data as any).clientTitle || '',
+    clientNote: (data as any).clientNote || '',
     clientRelation: data.clientRelation || '',
     
     // המועד הקובע לשומה
@@ -57,54 +82,156 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
     // תיאור הנכס והסביבה (basic info only - detailed analysis will be done by AI in Step 3)
     rooms: (data.rooms !== null && data.rooms !== undefined && data.rooms !== 0 && data.rooms !== '') ? data.rooms : '',
     floor: (data.floor !== null && data.floor !== undefined && data.floor !== 0 && data.floor !== '') ? data.floor : '',
+    airDirections: data.airDirections || '',
     area: (data.area !== null && data.area !== undefined && data.area !== 0 && data.area !== '') ? data.area : '',
+    
+    // זיהום קרקע
+    landContamination: (data as any).landContamination || false,
+    landContaminationNote: (data as any).landContaminationNote || '',
     
     // פרטי שמאי
     shamayName: data.shamayName || '',
     shamaySerialNumber: data.shamaySerialNumber || ''
   })
 
-  console.log('Validation check:',  data )
+  // פונקציה לפרסור כתובת מלאה לחלקים
+  function parseAddress(address: string): { street: string; buildingNumber: string; neighborhood: string; city: string } {
+    // נסה לפרק כתובת ישראלית טיפוסית
+    // פורמטים נפוצים: "רחוב הרצל 15, תל אביב" או "הרצל 15 תל אביב"
+    const parts = {
+      street: '',
+      buildingNumber: '',
+      neighborhood: '',
+      city: ''
+    }
+    
+    // חיפוש מספר בניין
+    const buildingMatch = address.match(/(\d+)/)
+    if (buildingMatch) {
+      parts.buildingNumber = buildingMatch[1]
+      const beforeNumber = address.substring(0, buildingMatch.index).trim()
+      parts.street = beforeNumber.replace(/^רחוב\s*/i, '').trim()
+    } else {
+      // אין מספר בניין, הכל זה רחוב
+      parts.street = address.split(',')[0].trim().replace(/^רחוב\s*/i, '')
+    }
+    
+    // חיפוש עיר (אחרי פסיק או בסוף)
+    const cityMatch = address.match(/,\s*([^,]+)$/) || address.match(/\s+([א-ת]+)$/)
+    if (cityMatch) {
+      parts.city = cityMatch[1].trim()
+    }
+    
+    return parts
+  }
+
+  // טען כתובת אחרונה רק אם אין נתונים מהדיבי (רק פעם אחת)
+  // CRITICAL: רק אם אין נתונים מהדיבי - לא לטעון מ-localStorage אם יש נתונים מהדיבי
+  useEffect(() => {
+    // בדוק אם יש נתונים מהדיבי - אם יש, אל תטען מ-localStorage
+    const hasDataFromDB = data.street || data.city || data.buildingNumber || data.neighborhood
+    if (!hasDataFromDB && typeof window !== 'undefined') {
+      const lastAddress = localStorage.getItem(LAST_ADDRESS_KEY)
+      if (lastAddress) {
+        // נסה לפרק את הכתובת לחלקים
+        const addressParts = parseAddress(lastAddress)
+        if (addressParts.street || addressParts.city) {
+          // עדכן את formData ישירות
+          setFormData(prev => ({
+            ...prev,
+            street: addressParts.street || prev.street,
+            city: addressParts.city || prev.city,
+            buildingNumber: addressParts.buildingNumber || prev.buildingNumber,
+            neighborhood: addressParts.neighborhood || prev.neighborhood
+          }))
+          // עדכן גם את data דרך updateData
+          updateData({
+            street: addressParts.street || '',
+            city: addressParts.city || '',
+            buildingNumber: addressParts.buildingNumber || '',
+            neighborhood: addressParts.neighborhood || ''
+          } as any, { skipAutoSave: true } as any)
+        }
+      }
+    }
+  }, []) // רק פעם אחת בטעינה ראשונית
+
+  // שמור כתובת כשמשתנה
+  useEffect(() => {
+    if (formData.street && formData.city && typeof window !== 'undefined') {
+      const fullAddress = `${formData.street} ${formData.buildingNumber || ''} ${formData.neighborhood || ''} ${formData.city}`.trim()
+      if (fullAddress) {
+        localStorage.setItem(LAST_ADDRESS_KEY, fullAddress)
+      }
+    }
+  }, [formData.street, formData.city, formData.buildingNumber, formData.neighborhood])
 
   // Sync local formData with incoming data prop when data changes
+  // Update formData when data prop changes (e.g., after loading from DB)
   useEffect(() => {
-    console.log('🔄 Step1 - Data prop changed:', data)
-    console.log('🔄 Step1 - Specific fields:', {
-      clientName: data.clientName,
-      street: data.street,
-      shamayName: data.shamayName,
-      valuationType: data.valuationType
-    })
+    // Check if data has meaningful values (not just empty strings)
+    const hasData = data.valuationType || data.clientName || data.street || data.city || 
+                    (data as any).clientTitle || data.valuationDate || data.valuationEffectiveDate
     
-    // Always sync the form data with the incoming data prop
-    setFormData({
-      // סוג שומה ומועד כתיבתה
-      valuationType: data.valuationType || '',
-      valuationDate: normalizeDateToISO(data.valuationDate) || '',
-      
-      // זהות מזמין השומה והקשר שלו לנכס
-      clientName: data.clientName || '',
-      clientRelation: data.clientRelation || '',
-      
-      // המועד הקובע לשומה
-      valuationEffectiveDate: normalizeDateToISO(data.valuationEffectiveDate) || '',
-      
-      // זיהוי הנכס
-      street: data.street || '',
-      buildingNumber: data.buildingNumber || '',
-      neighborhood: data.neighborhood || '',
-      city: data.city || '',
-      
-      // תיאור הנכס והסביבה (basic info only - detailed analysis will be done by AI in Step 3)
-      rooms: (data.rooms !== null && data.rooms !== undefined && data.rooms !== 0 && data.rooms !== '') ? data.rooms : '',
-      floor: (data.floor !== null && data.floor !== undefined && data.floor !== 0 && data.floor !== '') ? data.floor : '',
-      area: (data.area !== null && data.area !== undefined && data.area !== 0 && data.area !== '') ? data.area : '',
-      
-      // פרטי שמאי
-      shamayName: data.shamayName || '',
-      shamaySerialNumber: data.shamaySerialNumber || ''
-    })
-  }, [data])
+    if (hasData) {
+      // Data has values - update formData to match
+      setFormData({
+        // סוג שומה ומועד כתיבתה
+        valuationType: data.valuationType ?? '',
+        valuationDate: normalizeDateToISO(data.valuationDate) || '',
+        
+        // זהות מזמין השומה והקשר שלו לנכס
+        clientName: data.clientName || '',
+        clientTitle: (data as any).clientTitle ?? '',
+        clientNote: (data as any).clientNote ?? '',
+        clientRelation: data.clientRelation ?? '',
+        
+        // המועד הקובע לשומה
+        valuationEffectiveDate: normalizeDateToISO(data.valuationEffectiveDate) || '',
+        
+        // זיהוי הנכס
+        street: data.street || '',
+        buildingNumber: data.buildingNumber || '',
+        neighborhood: data.neighborhood || '',
+        city: data.city || '',
+        
+        // תיאור הנכס והסביבה (basic info only - detailed analysis will be done by AI in Step 3)
+        rooms: (data.rooms !== null && data.rooms !== undefined && data.rooms !== 0 && data.rooms !== '') ? data.rooms : '',
+        floor: (data.floor !== null && data.floor !== undefined && data.floor !== 0 && data.floor !== '') ? data.floor : '',
+        airDirections: data.airDirections || '',
+        area: (data.area !== null && data.area !== undefined && data.area !== 0 && data.area !== '') ? data.area : '',
+        
+        // זיהום קרקע
+        landContamination: (data as any).landContamination ?? false,
+        landContaminationNote: (data as any).landContaminationNote ?? '',
+        
+        // פרטי שמאי
+        shamayName: data.shamayName || '',
+        shamaySerialNumber: data.shamaySerialNumber || ''
+      })
+      isInitialLoad.current = false
+    }
+  }, [
+    data.valuationType,
+    data.valuationDate,
+    data.valuationEffectiveDate,
+    data.clientName,
+    (data as any).clientTitle,
+    (data as any).clientNote,
+    data.clientRelation,
+    data.street,
+    data.buildingNumber,
+    data.neighborhood,
+    data.city,
+    data.rooms,
+    data.floor,
+    data.airDirections,
+    data.area,
+    (data as any).landContamination,
+    (data as any).landContaminationNote,
+    data.shamayName,
+    data.shamaySerialNumber
+  ])
 
   const validateForm = useCallback(() => {
     const isValid = formData.valuationType.trim() !== '' && 
@@ -114,11 +241,10 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                    formData.city.trim() !== '' && 
                    formData.rooms > 0 && 
                    formData.floor > 0 && 
-                   formData.area > 0 && 
+                   // שטח יבוא מהטאבו - לא נדרש כאן
                    formData.shamayName.trim() !== '' && 
                    formData.shamaySerialNumber.trim() !== ''
     
-    console.log('Validation check:', { isValid, formData })
     return isValid
   }, [formData])
 
@@ -136,28 +262,27 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
   }, [formData]) // Only depend on formData, not onValidationChange or validateForm
 
   const updateField = useCallback((field: string, value: any) => {
-    console.log(`🔄 Step1 - Updating field: ${field} = ${value}`)
     setFormData(prev => {
       const newData = { ...prev, [field]: value }
 
-      const payload: Record<string, any> = { ...newData }
-      // For date fields, the value is already in ISO format from the date input
-      // No need to normalize again
+      // Ensure all Step1 fields are included, even if empty
+      const payload: Record<string, any> = {
+        ...newData,
+        valuationType: newData.valuationType ?? '',
+        clientTitle: newData.clientTitle ?? '',
+        clientNote: newData.clientNote ?? '',
+        clientRelation: newData.clientRelation ?? '',
+        valuationEffectiveDate: newData.valuationEffectiveDate ?? ''
+      }
       
       // Critical fields that should save immediately:
-      // - valuationType, valuationDate (required for document generation)
-      const criticalFields = ['valuationType', 'valuationDate']
+      // - valuationType, valuationDate, valuationEffectiveDate (required for document generation)
+      const criticalFields = ['valuationType', 'valuationDate', 'valuationEffectiveDate']
       const shouldSaveImmediately = criticalFields.includes(field)
       
       // Skip auto-save for text inputs - only save on step navigation or explicit save
       // BUT save immediately for critical fields
       updateData(payload as any, { skipAutoSave: !shouldSaveImmediately } as any)
-      
-      if (shouldSaveImmediately) {
-        console.log(`💾 Step1 - Critical field ${field} saved immediately`)
-      } else {
-        console.log(`✅ Step1 - Updated data (no auto-save):`, newData)
-      }
       
       return newData
     })
@@ -187,16 +312,17 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
               </label>
               <select
                 name="valuationType"
-                value={formData.valuationType}
+                value={formData.valuationType || ''}
                 onChange={(e) => updateField('valuationType', e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 dir="rtl"
               >
                 <option value="">בחר סוג שומה</option>
+                <option value="שומת מקרקעין">שומת מקרקעין</option>
                 <option value="שווי שוק">שווי שוק</option>
                 <option value="שווי השקעה">שווי השקעה</option>
                 <option value="שווי ביטוח">שווי ביטוח</option>
-                <option value="שווי מס">שווי מס"</option>
+                <option value="שווי מס">שווי מס</option>
                 <option value="שווי הפקעה">שווי הפקעה</option>
               </select>
             </div>
@@ -209,7 +335,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 type="date"
                 name="valuationDate"
                 autoComplete="off"
-                value={formData.valuationDate}
+                value={formData.valuationDate || ''}
                 onChange={(e) => updateField('valuationDate', e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
@@ -222,6 +348,21 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
           <h3 className="text-lg font-semibold text-gray-900 mb-4">זהות מזמין השומה והקשר שלו לנכס</h3>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                תואר (אופציונלי)
+              </label>
+              <input
+                type="text"
+                name="clientTitle"
+                value={(formData as any).clientTitle || ''}
+                onChange={(e) => updateField('clientTitle', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="למשל: עו&quot;ד, כונס נכסים"
+                dir="rtl"
+              />
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
                 שם מלא *
@@ -240,22 +381,38 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                הערה נוספת (אופציונלי)
+              </label>
+              <input
+                type="text"
+                name="clientNote"
+                value={(formData as any).clientNote || ''}
+                onChange={(e) => updateField('clientNote', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="למשל: א.נ."
+                dir="rtl"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
                 הקשר לנכס
               </label>
               <select
                 name="clientRelation"
-                value={formData.clientRelation}
+                value={formData.clientRelation || ''}
                 onChange={(e) => updateField('clientRelation', e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 dir="rtl"
               >
                 <option value="">בחר הקשר לנכס</option>
-                <option value="owner">בעלים</option>
-                <option value="buyer">רוכש פוטנציאלי</option>
-                <option value="seller">מוכר</option>
-                <option value="bank">בנק</option>
-                <option value="court">בית משפט</option>
-                <option value="other">אחר</option>
+                <option value="בעלים">בעלים</option>
+                <option value="לקוח">לקוח</option>
+                <option value="רוכש פוטנציאלי">רוכש פוטנציאלי</option>
+                <option value="מוכר">מוכר</option>
+                <option value="בנק">בנק</option>
+                <option value="בית משפט">בית משפט</option>
+                <option value="אחר">אחר</option>
               </select>
             </div>
           </div>
@@ -274,7 +431,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
               type="date"
               name="valuationEffectiveDate"
               autoComplete="off"
-              value={formData.valuationEffectiveDate}
+              value={formData.valuationEffectiveDate || ''}
               onChange={(e) => updateField('valuationEffectiveDate', e.target.value)}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
@@ -351,13 +508,54 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
             </div>
 
           </div>
+          
+          {/* גוש, חלקה ותת-חלקה - מוצגים אם נשלפו מטאבו */}
+          {(data.gush || data.parcel || data.subParcel) && (
+            <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm font-medium text-blue-900 mb-3 text-right">
+                📋 פרטי רישום מקרקעין (נשלף מטאבו)
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {data.gush && (
+                  <div>
+                    <label className="block text-xs font-medium text-blue-700 mb-1 text-right">
+                      גוש
+                    </label>
+                    <div className="px-3 py-2 bg-white border border-blue-200 rounded text-right text-sm text-gray-700">
+                      {data.gush}
+                    </div>
+                  </div>
+                )}
+                {data.parcel && (
+                  <div>
+                    <label className="block text-xs font-medium text-blue-700 mb-1 text-right">
+                      חלקה
+                    </label>
+                    <div className="px-3 py-2 bg-white border border-blue-200 rounded text-right text-sm text-gray-700">
+                      {data.parcel}
+                    </div>
+                  </div>
+                )}
+                {data.subParcel && (
+                  <div>
+                    <label className="block text-xs font-medium text-blue-700 mb-1 text-right">
+                      תת-חלקה
+                    </label>
+                    <div className="px-3 py-2 bg-white border border-blue-200 rounded text-right text-sm text-gray-700">
+                      {data.subParcel}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* תיאור הנכס והסביבה */}
         <div className="bg-white p-6 rounded-lg border border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">תיאור הנכס והסביבה</h3>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
                 מספר חדרים *
@@ -400,23 +598,77 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
             
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                שטח (מ"ר) *
+                כיווני אוויר (אופציונלי)
               </label>
               <input
                 type="number"
-                name="area"
+                name="airDirections"
                 autoComplete="off"
-                min="0"
-                step="0.1"
-                value={formData.area === '' || formData.area === 0 ? '' : formData.area}
+                min="1"
+                max="4"
+                value={(formData as any).airDirections === '' || (formData as any).airDirections === 0 ? '' : (formData as any).airDirections}
                 onChange={(e) => {
-                  const val = e.target.value === '' ? '' : parseFloat(e.target.value)
-                  updateField('area', val)
+                  const val = e.target.value === '' ? '' : parseInt(e.target.value)
+                  updateField('airDirections', val)
                 }}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="הזן שטח"
+                placeholder="למשל: 3"
               />
+              <p className="text-xs text-gray-500 mt-1 text-right">מספר כיווני האוויר (1-4)</p>
             </div>
+            
+          </div>
+          
+          {/* הודעה על שטח אם נשלף מטאבו */}
+          {/* {data.area && data.area > 0 && (
+            <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-900 text-right">
+                📋 שטח הנכס: <strong>{data.area} מ"ר</strong> (נשלף מטאבו)
+              </p>
+            </div>
+          )} */}
+        </div>
+
+        {/* זיהום קרקע */}
+        <div className="bg-white p-6 rounded-lg border border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">זיהום קרקע</h3>
+          
+          <div className="space-y-4">
+            <div className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                id="landContamination"
+                checked={(formData as any).landContamination || false}
+                onChange={(e) => {
+                  updateField('landContamination', e.target.checked)
+                  if (!e.target.checked) {
+                    updateField('landContaminationNote', '')
+                  }
+                }}
+                className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              />
+              <label htmlFor="landContamination" className="text-sm font-medium text-gray-700 text-right flex-1">
+                הובאה לידיעתך סיבה לחשד לקיומם של חומרים מסוכנים או מזהמים?
+              </label>
+            </div>
+            
+            {(formData as any).landContamination && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                  פרט את החשד או המידע שהובא לידיעתך *
+                </label>
+                <textarea
+                  name="landContaminationNote"
+                  value={(formData as any).landContaminationNote || ''}
+                  onChange={(e) => updateField('landContaminationNote', e.target.value)}
+                  rows={3}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="הזן פרטים על החשד או המידע שהובא לידיעתך"
+                  dir="rtl"
+                  required={(formData as any).landContamination}
+                />
+              </div>
+            )}
           </div>
         </div>
 

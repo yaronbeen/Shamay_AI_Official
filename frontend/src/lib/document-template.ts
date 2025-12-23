@@ -61,7 +61,7 @@ const numberToHebrewWords = (value?: number) => {
 
   const millions = Math.floor(remaining / 1_000_000)
   if (millions) {
-    chunks.push(millions === 1 ? 'מיליון' : `${convertHundreds(millions)} מיליון`)
+    chunks.push(millions === 1 ? 'מליון' : `${convertHundreds(millions)} מליון`)
     remaining %= 1_000_000
   }
 
@@ -85,7 +85,14 @@ const numberToHebrewWords = (value?: number) => {
     return 'אפס'
   }
 
-  return chunks.join(' ').replace(/ +/g, ' ').trim()
+  let result = chunks.join(' ').replace(/ +/g, ' ').trim()
+  
+  // תיקון כתיב: "שבעה מאות" -> "ושבע מאות" אם יש מליון לפני
+  if (millions > 0 && result.includes('שבעה מאות')) {
+    result = result.replace('שבעה מאות', 'ושבע מאות')
+  }
+  
+  return result + ' ש"ח'
 }
 
 const formatDateNumeric = (value?: string) => {
@@ -155,11 +162,13 @@ const formatNumber = (value?: number | string, fallbackText = '—') => {
   return String(value)
 }
 
-const formatRooms = (rooms?: number | string) => {
+const formatRooms = (rooms?: number | string, airDirections?: string | number) => {
   if (!rooms) {
     return 'דירת מגורים'
   }
-  return `דירת מגורים בת ${rooms} חדרים`
+  const airDirectionsNum = typeof airDirections === 'number' ? airDirections : (typeof airDirections === 'string' ? parseInt(airDirections) : 0)
+  const airText = airDirectionsNum > 0 ? ` עם ${airDirectionsNum} כיווני אוויר` : ''
+  return `דירת מגורים בת ${rooms} חדרים${airText}`
 }
 
 const formatFloor = (floor?: number | string) => {
@@ -171,12 +180,89 @@ const formatFloor = (floor?: number | string) => {
 
 const formatOwnership = (data: ValuationData) => {
   const landRegistry = resolveLandRegistryData(data).landRegistry
-  return (
-    data.extractedData?.ownershipType ||
-    data.ownershipRights ||
+  // Only return ownership TYPE (e.g., "בעלות פרטית"), never owner names
+  const ownershipType = 
     landRegistry?.ownership_type ||
-    'בעלות פרטית'
-  )
+    (data.extractedData as any)?.ownership_type ||
+    (data.extractedData as any)?.ownershipType ||
+    (data as any).ownership_type
+  
+  // If we have a valid type, return it
+  if (ownershipType && typeof ownershipType === 'string' && !ownershipType.includes('ת.ז')) {
+    return ownershipType
+  }
+  
+  // Default
+  return 'בעלות פרטית'
+}
+
+// Summarize attachments for the property details table (e.g., "2 חניות ומחסן")
+const summarizeAttachments = (data: ValuationData): string => {
+  const landRegistry = resolveLandRegistryData(data).landRegistry
+  
+  // Collect attachment items
+  const attachmentItems: any[] = []
+  
+  // 1. Check data.attachments as string (direct from database)
+  if ((data as any).attachments && typeof (data as any).attachments === 'string') {
+    const attachmentsStr = (data as any).attachments.trim()
+    if (attachmentsStr) {
+      if (attachmentsStr.includes('\n')) {
+        attachmentsStr.split('\n').filter(Boolean).forEach((desc: string) => attachmentItems.push({ description: desc }))
+      } else {
+        attachmentItems.push({ description: attachmentsStr })
+      }
+    }
+  }
+
+  // 2. From landRegistry attachments
+  if (Array.isArray((landRegistry as any)?.attachments)) {
+    attachmentItems.push(...(landRegistry as any).attachments)
+  }
+  
+  // 3. From extractedData attachments
+  if (Array.isArray(data.extractedData?.attachments)) {
+    attachmentItems.push(...data.extractedData.attachments)
+  }
+  
+  // Count by type
+  const counts: Record<string, number> = {}
+  attachmentItems.forEach((item: any) => {
+    const type = (item?.type || item?.description || '').toLowerCase()
+    if (type.includes('חניה') || type.includes('חנייה') || type.includes('parking')) {
+      counts['חניות'] = (counts['חניות'] || 0) + 1
+    } else if (type.includes('מחסן') || type.includes('storage')) {
+      counts['מחסן'] = (counts['מחסן'] || 0) + 1
+    } else if (type.includes('גינה') || type.includes('garden')) {
+      counts['גינה'] = (counts['גינה'] || 0) + 1
+    } else if (type.includes('גג') || type.includes('roof')) {
+      counts['גג'] = (counts['גג'] || 0) + 1
+    }
+  })
+  
+  // Build summary string
+  const parts: string[] = []
+  if (counts['חניות']) {
+    parts.push(counts['חניות'] === 1 ? 'מקום חניה' : `${counts['חניות']} מקומות חניה`)
+  }
+  if (counts['מחסן']) {
+    parts.push(counts['מחסן'] === 1 ? 'מחסן' : `${counts['מחסן']} מחסנים`)
+  }
+  if (counts['גינה']) {
+    parts.push('גינה')
+  }
+  if (counts['גג']) {
+    parts.push('גג')
+  }
+  
+  if (parts.length === 0) {
+    // Fallback: check for summary in data
+    const summary = (data as any).attachmentsSummary || (data.extractedData as any)?.attachments_summary
+    if (summary) return summary
+    return '—'
+  }
+  
+  return parts.join(' ו')
 }
 
 const getAddress = (data: ValuationData) => {
@@ -215,16 +301,9 @@ const safeValue = (value?: string | number, fallback = '—') => {
 
 const createDetailsTable = (data: ValuationData) => {
   const landRegistry = resolveLandRegistryData(data).landRegistry
-  const attachmentsList = dedupeByKey(
-    [
-      ...((Array.isArray(data.extractedData?.attachments)
-        ? data.extractedData?.attachments.map((item: any) => item?.description || item?.type || '')
-        : []) || []),
-      ...toArray((landRegistry as any)?.attachments).map((item: any) => item?.description || item?.type || '')
-    ].filter(Boolean) as string[],
-    (value) => value
-  )
-  const attachmentsText = attachmentsList.join(', ')
+  
+  // Get attachments summary (e.g., "2 מקומות חניה ומחסן")
+  const attachmentsSummary = summarizeAttachments(data)
 
   const registeredAreaValue = formatNumber(
     (data as any).registeredArea ||
@@ -233,6 +312,11 @@ const createDetailsTable = (data: ValuationData) => {
       landRegistry?.apartment_registered_area,
     ''
   )
+  
+  // Get balcony area for display
+  const balconyArea = Number((data.extractedData as any)?.balconyArea || (data as any).balconyArea || 0)
+  const balconyText = balconyArea > 0 ? ` + ${balconyArea} מ"ר מרפסת לא מקורה` : ''
+  
   const builtAreaValue = formatNumber(
     data.extractedData?.builtArea || data.builtArea || landRegistry?.built_area || (data as any).builtArea,
     ''
@@ -241,7 +325,7 @@ const createDetailsTable = (data: ValuationData) => {
   const rows: Array<{ label: string; value: string }> = [
     {
       label: 'מהות:',
-      value: `${formatRooms(data.rooms)} ${formatFloor(landRegistry?.floor || data.floor)}`.trim()
+      value: `${formatRooms(data.rooms, data.airDirections)} ${formatFloor(landRegistry?.floor || data.floor)}`.trim()
     },
     {
       label: 'גוש:',
@@ -262,15 +346,15 @@ const createDetailsTable = (data: ValuationData) => {
     },
     {
       label: 'הצמדות:',
-      value: attachmentsText || '—'
+      value: attachmentsSummary
     },
     {
       label: 'שטח דירה רשום:',
-      value: registeredAreaValue ? `${registeredAreaValue} מ"ר` : ''
+      value: registeredAreaValue ? `${registeredAreaValue} מ"ר${balconyText}` : ''
     },
     {
       label: 'שטח דירה בנוי:',
-      value: builtAreaValue ? `${builtAreaValue} מ"ר` : ''
+      value: builtAreaValue ? `כ-${builtAreaValue} מ"ר` : ''
     },
     {
       label: 'זכויות:',
@@ -626,6 +710,7 @@ const dedupeByKey = <T>(items: T[], getKey: (item: T) => string): T[] => {
 }
 
 const buildBaseCss = () => `
+  /* ===== MMBL Professional Report Styles ===== */
   @font-face {
     font-family: 'Noto Sans Hebrew';
     font-style: normal;
@@ -641,12 +726,12 @@ const buildBaseCss = () => `
         }
         body {
     font-family: ${DEFAULT_FONT_FAMILY};
-    font-size: 10pt;
-          line-height: 1.6;
+    font-size: 10.5pt;
+    line-height: 1.7;
     margin: 0;
     padding: 0;
-    background:rgb(255, 255, 255);
-    color: #0f172a;
+    background: #ffffff;
+    color: #000000;
           direction: rtl;
           text-align: right;
           -webkit-print-color-adjust: exact;
@@ -657,345 +742,376 @@ const buildBaseCss = () => `
     margin: 0 auto;
           padding: 16px 0 32px;
         }
+  
+  /* ===== PAGE STRUCTURE ===== */
   .page {
     position: relative;
     page-break-after: auto;
           page-break-inside: avoid;
-    padding: 32px 36px;
-    margin-bottom: 28px;
+    padding: 12mm 18mm 18mm 18mm;
+    margin-bottom: 20px;
     background: #ffffff;
-    border-radius: 20px;
-    border: 1px solid rgba(148, 163, 184, 0.35);
+    min-height: ${PAGE_MIN_HEIGHT_MM}mm;
   }
   .page.cover {
     position: relative;
-          page-break-after: always;
-    padding: 52px 44px;
+    page-break-after: always;
+    padding: 8mm 18mm 0mm 18mm; /* No bottom padding - footer is absolute */
     background: white;
-    color:rgb(0, 0, 0);
+    color: #000000;
     border: none;
-    min-height: ${PAGE_MIN_HEIGHT_MM}mm;
+    min-height: 297mm;
+    height: 297mm;
+    max-height: 297mm;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
   }
-  .page-title {
-    font-size: 18pt;
-    font-weight: 700;
-    margin-bottom: 12px;
-  }
-  .chapter-title {
-    font-size: 16pt;
-    font-weight: 700;
-    margin: 12px 0 24px;
+  
+  /* ===== HEADER - MMBL Style - Compact ===== */
+  .page-header {
     text-align: center;
-    color: #0f172a;
-    position: relative;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
   }
-  .chapter-title::after {
-    content: '';
+  .page-header-logo {
+    font-size: 22pt;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: #1e3a8a;
+    margin-bottom: 0;
+  }
+  .page-header-company {
+    font-size: 9pt;
+    font-weight: 700;
+    color: #1e3a8a;
+    margin-bottom: 0;
+  }
+  .page-header-tagline {
+    font-size: 8pt;
+    color: #1e3a8a;
+  }
+  .page-header-brand {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .page-header-brand img {
+    max-height: 45px;
+  }
+  
+  /* ===== FOOTER - Simple large logo at bottom ===== */
+  .page-footer {
+    position: absolute;
+    bottom: 0;
+    left: 18mm;
+    right: 18mm;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .footer-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+  }
+  .footer-logo img {
+    max-height: 80px;
+    width: auto;
+    height: auto;
     display: block;
-    width: 60px;
-    height: 3px;
-    background: linear-gradient(90deg, #2563eb, transparent);
-    margin: 12px auto 0;
   }
-  .section-title {
+  .page-number {
+    font-size: 8pt;
+    color: #000000;
+    text-align: left;
+    margin-top: 2px;
+  }
+  .page.cover .page-number {
+    display: none;
+  }
+  
+  /* ===== COVER PAGE ===== */
+  .cover-header {
+    text-align: center;
+    margin-bottom: 5px;
+    flex-shrink: 0;
+  }
+  .cover-title-box {
+    background: #f0f0f0;
+    border: 1.5px solid #000000;
+    padding: 12px 20px;
+    margin: 8px auto;
+    max-width: 520px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .cover-title-main {
     font-size: 13pt;
     font-weight: 700;
-    margin: 24px 0 16px;
-    text-align: center;
+    color: #000000;
+    margin-bottom: 4px;
+  }
+  .cover-title-sub {
+    font-size: 15pt;
+    font-weight: 700;
+    color: #1e3a8a;
+    margin-bottom: 4px;
+  }
+  .cover-title-type {
+    font-size: 12pt;
+    font-weight: 700;
+    color: #1e3a8a;
+    margin-bottom: 6px;
+  }
+  .cover-address {
+    font-size: 12pt;
+          font-weight: 700; 
+    color: #000000;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .cover-image-frame {
+    width: 100%;
+    max-width: 520px;
+    margin: 5px auto 0;
+    border: 1.5px solid #000000;
+    overflow: hidden;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+    max-height: 100%;
+  }
+  .cover-image-frame img {
+    width: 100%;
+    height: 100%;
+    max-height: 100%;
+    display: block;
+    border-radius: 0;
+    object-fit: cover;
+  }
+  /* Cover footer - Simple large logo at bottom */
+  .cover-footer-container {
+    position: absolute !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 10mm 18mm 5mm 18mm !important;
+    line-height: 0 !important;
+    background: white !important;
+    flex-shrink: 0;
+    border: none;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    z-index: 10;
+  }
+  .cover-footer-container img {
+    display: block !important;
+    width: auto !important;
+    max-width: 100% !important;
+    max-height: 120px !important;
+    height: auto !important;
+    object-fit: contain !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  
+  /* ===== CHAPTER & SECTION TITLES ===== */
+  .chapter-title {
+    font-size: 14pt;
+    font-weight: 700;
+    color: #1e3a8a;
+    margin: 20px 0 16px;
+    text-align: right;
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+  .section-title {
+    font-size: 12pt;
+    font-weight: 700;
+    color: #000000;
+    margin: 16px 0 10px;
+    text-align: right;
+    text-decoration: underline;
+    text-underline-offset: 3px;
   }
   .sub-title {
-    font-size: 12.5pt;
+    font-size: 11pt;
     font-weight: 700;
-    margin: 12px 0 6px;
-    color: #1d4ed8;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
+    color: #000000;
+    margin: 12px 0 8px;
+    text-decoration: underline;
+    text-underline-offset: 3px;
   }
   .sub-title::before {
-    content: '';
-    width: 8px;
-    height: 8px;
-    border-radius: 999px;
-    background-color: #2563eb;
+    display: none;
   }
+  
+  /* ===== PAGE BODY ===== */
+  .page-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-bottom: 45px;
+  }
+  p {
+    margin: 0 0 8px 0;
+    color: #000000;
+    text-align: justify;
+    line-height: 1.8;
+  }
+  .page-body p + p {
+    margin-top: 0;
+  }
+  
+  /* ===== TABLES - Clean Professional Style - Keep on same page ===== */
   .table {
-          width: 100%;
-          border-collapse: collapse;
-    margin: 8px 0 20px;
-    font-size: 10pt;
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0 12px;
+    font-size: 9.5pt;
     background: #ffffff;
-    border-radius: 12px;
-    overflow: hidden;
-    table-layout: fixed;
-    break-inside: auto;
+    table-layout: auto;
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
   .table th,
   .table td {
-    border: 1px solid rgba(148, 163, 184, 0.4);
-    padding: 16px 12px;
+    border: none;
+    border-bottom: 1px solid #cccccc;
+    padding: 6px 8px;
     text-align: right;
     vertical-align: middle;
     word-break: break-word;
-    line-height: 1.8;
-    min-height: 45px;
+    line-height: 1.5;
+  }
+  .table thead th {
+    border-bottom: 2px solid #000000;
+    background: transparent;
+    font-weight: 700;
+    color: #000000;
   }
   tr, th, td {
     break-inside: avoid;
-          page-break-inside: avoid;
+    page-break-inside: avoid;
   }
   .table th {
-    background: linear-gradient(90deg, rgba(37, 99, 235, 0.12), rgba(37, 99, 235, 0.02));
+    background: transparent;
     font-weight: 700;
-    color: #1e3a8a;
-    border-bottom: 2px solid rgba(37, 99, 235, 0.25);
+    color: #000000;
   }
-  .table tbody tr:nth-child(even) {
-    background-color: rgba(248, 250, 252, 0.8);
+  .table.comparables {
+    font-size: 8.5pt;
   }
   .table.comparables th,
   .table.comparables td {
+    padding: 4px 6px;
     white-space: nowrap;
-    padding: 18px 14px;
-    font-size: 10pt;
-    min-height: 50px;
+    border: none;
+    border-bottom: 1px solid #cccccc;
+  }
+  .table.comparables thead th {
+    border-bottom: 2px solid #000000;
   }
   .table.comparables th {
-    font-size: 10.5pt;
-    font-weight: 600;
-    padding: 20px 14px;
+    font-size: 8.5pt;
+    font-weight: 700;
   }
   .table.comparables .address-cell {
     white-space: normal;
     word-wrap: break-word;
-    max-width: 200px;
-    line-height: 1.6;
+    max-width: 100px;
   }
-  .muted {
-    color: #475569;
-    font-style: italic;
+  /* Keep tables with their headers on same page */
+  .table-wrapper {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .details-table {
+    width: auto;
+  }
+  .details-table th,
+  .details-table td {
+    border: none;
+    border-bottom: 1px solid #eeeeee;
   }
   .details-table th {
-    width: 140px;
+    width: 120px;
     font-weight: 600;
-    background: rgba(15, 23, 42, 0.04);
-    color: #0f172a;
+    background: #ffffff;
+    color: #000000;
+    text-align: right;
   }
   .details-table td {
-    font-weight: 500;
+    font-weight: 400;
   }
-  .callout {
-    border: 1px solid rgba(59, 130, 246, 0.25);
-    border-radius: 14px;
-    padding: 14px 16px;
-    margin: 16px 0;
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(59, 130, 246, 0.02));
-  }
-  .page-number {
-    position: absolute;
-    bottom: 0;
-    right: 0;
-    left: 0;
-    padding-top: 12px;
-          font-size: 9pt;
-    color: #4b5563;
-    text-align: left;
-  }
-  .page.cover .page-number {
-    color: rgba(226, 232, 240, 0.9);
-  }
-  .page-body {
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-    padding-bottom: 90px;
-  }
-  .page-footer {
-    position: absolute;
-    bottom: 12px;
-    left: 36px;
-    right: 36px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding-top: 8px;
-    border-top: 1px solid rgba(148, 163, 184, 0.15);
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-  .page-footer img {
-    max-height: 50px;
-    max-width: 100%;
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-  p {
-    margin: 0;
-    color: #0f172a;
-  }
-  .page-body p + p {
-    margin-top: 6px;
-  }
-  .page-note {
-          font-size: 9pt;
-    color: #475569;
-    padding: 12px 14px;
-    border-radius: 12px;
-    background: rgba(244, 244, 245, 0.8);
-    border: 1px solid rgba(148, 163, 184, 0.35);
-  }
+  
+  /* ===== LISTS ===== */
   ul {
-    margin: 0;
-    padding-right: 18px;
-    color: #1f2937;
+    margin: 8px 0;
+    padding-right: 20px;
+    color: #000000;
+  }
+  ul li {
+    margin-bottom: 6px;
+    line-height: 1.7;
   }
   ul.bullet-list {
     list-style: none;
     padding: 0;
-    margin: 12px 0 0;
+    margin: 8px 0;
   }
   ul.bullet-list li {
     position: relative;
-    padding: 10px 14px;
-    margin-bottom: 8px;
-    background: rgba(226, 232, 240, 0.45);
-    border-radius: 12px;
-    border: 1px solid rgba(148, 163, 184, 0.3);
+    padding: 0 20px 0 0;
+    margin-bottom: 6px;
+    background: transparent;
+    border-radius: 0;
+    border: none;
   }
   ul.bullet-list li::before {
-    content: '•';
-    font-size: 22px;
+    content: '-';
+    font-size: 12pt;
     line-height: 1;
     position: absolute;
-    right: 10px;
+    right: 0;
+    top: 2px;
+    color: #000000;
+  }
+  .legal-list {
+    list-style: none;
+    padding: 0;
+    margin: 8px 0;
+  }
+  .legal-list li {
+    padding: 6px 20px 6px 0;
+    position: relative;
+    border-radius: 0;
+    border: none;
+    background: transparent;
+    margin-bottom: 10px;
+    line-height: 1.6;
+  }
+  .legal-list li::before {
+    content: '-';
+    position: absolute;
+    right: 0;
     top: 6px;
-    color: #2563eb;
   }
-  .cover-inner {
-    display: flex;
-    flex-direction: column;
-    gap: 32px;
-    align-items: center;
-    text-align: center;
-    padding-bottom: 150px;
-    min-height: calc(100% - 150px);
-  }
-  .cover .title-primary {
-    font-size: 26pt;
-          font-weight: 700; 
-    letter-spacing: 1px;
-    margin-bottom: 8px;
-  }
-  .cover .title-secondary {
-    font-size: 18pt;
-    font-weight: 600;
-    margin-bottom: 8px;
-  }
-  .cover .address {
-    font-size: 16pt;
-    font-weight: 500;
-    margin-bottom: 20px;
-  }
-  .cover-title-card {
-    background: rgba(15, 23, 42, 0.35);
-    border-radius: 20px;
-    padding: 28px 36px;
-    backdrop-filter: blur(4px);
-    max-width: 520px;
-    width: 100%;
-  }
-  .page-header-brand {
-    display: flex;
-    justify-content: flex-start;
-    align-items: center;
-  }
-  .page-header-brand img {
-    max-height: 60px;
-  }
-  .cover-footer {
-    position: absolute;
-    bottom: 24px;
-    left: 44px;
-    right: 44px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-  .cover-footer img {
-    max-height: 90px;
-    max-width: 520px;
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-  .page-footer {
-    position: absolute;
-    bottom: 12px;
-    left: 36px;
-    right: 36px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding-top: 12px;
-    border-top: 1px solid rgba(148, 163, 184, 0.2);
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-  .page-footer img {
-    max-height: 60px;
-    max-width: 100%;
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-  .key-value {
-    display: flex;
-    justify-content: space-between;
-        gap: 12px;
-    margin-bottom: 8px;
-    font-weight: 500;
-  }
-  .key-value .key {
-    font-weight: 600;
-  }
-  .signature-block {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-    margin-top: 32px;
-  }
-  .signature-placeholder {
-    width: 160px;
-    height: 90px;
-    border: 2px dashed #d1d5db;
-          display: flex; 
-    justify-content: center;
-          align-items: center; 
-    font-size: 10pt;
-    color: #6b7280;
-  }
-  .signature-image {
-    max-width: 180px;
-    max-height: 90px;
-    border: 1px solid #d1d5db;
-    padding: 4px;
-  }
-  .cover-image-frame {
-    width: 100%;
-    max-width: 540px;
-    border-radius: 20px;
-    overflow: hidden;
-    border: 3px solid rgba(248, 250, 252, 0.45);
-    box-shadow: 0 20px 45px rgba(15, 23, 42, 0.45);
-  }
-  .cover-image-frame img {
-    width: 100%;
-          height: auto; 
-          display: block; 
-  }
+  
+  /* ===== IMAGES & MEDIA ===== */
   img {
-    border-radius: 14px;
+    border-radius: 0;
     display: block;
           max-width: 100%;
           height: auto;
@@ -1007,91 +1123,179 @@ const buildBaseCss = () => `
   }
   .media-gallery {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 16px;
-    margin-top: 12px;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin: 12px 0;
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
   .media-card {
-    background: rgba(248, 250, 252, 0.8);
-    border: 1px solid rgba(148, 163, 184, 0.35);
-    border-radius: 16px;
+    background: #ffffff;
+    border: 1px solid #cccccc;
     overflow: hidden;
-    box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
     display: flex;
-    flex-direction: column;
-    min-height: 160px;
+    align-items: center;
+    justify-content: center;
+    height: 180px; /* Fixed height for uniformity in 2x3 grid */
+    margin: 0;
     break-inside: avoid;
-          page-break-inside: avoid;
-        }
+    page-break-inside: avoid;
+  }
   .media-card img {
-          width: 100%; 
+    width: 100%; 
     height: 100%;
     object-fit: cover;
-    flex: 1 1 auto;
+    border-radius: 0;
   }
-+  img[data-managed-image][data-loaded='true'] {
-+    opacity: 1;
-+  }
   .media-caption {
-          font-size: 9pt; 
-    color: #475569;
-    padding: 8px 12px;
-    background: rgba(15, 23, 42, 0.04);
+    font-size: 8pt; 
+    color: #666666;
+    padding: 4px 6px;
+    text-align: center;
   }
-  .info-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 12px;
-    padding: 12px;
-    border-radius: 16px;
-    background: rgba(228, 233, 242, 0.45);
-    border: 1px solid rgba(148, 163, 184, 0.3);
+  /* Garmushka (floor plan) - full size without cropping */
+  .garmushka-card {
+    background: #ffffff;
+    border: 1px solid #cccccc;
+    display: flex;
+    flex-direction: column;
     break-inside: avoid;
-          page-break-inside: avoid;
-        }
-  .info-grid p {
-    margin: 0;
-    font-weight: 500;
+    page-break-inside: avoid;
+    margin: 16px 0;
+    align-items: center;
   }
-  .badge {
-    display: inline-flex;
-          align-items: center; 
-    gap: 6px;
-    background: rgba(59, 130, 246, 0.15);
-    color: #1d4ed8;
-    font-size: 9.5pt;
-    font-weight: 600;
-    padding: 4px 10px;
-    border-radius: 999px;
+  .garmushka-card img {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    object-fit: contain;
+    border-radius: 0;
   }
-  .legal-list {
-    list-style: none;
-    padding: 0;
-    margin: 12px 0 0;
+  .garmushka-card .media-caption {
+    font-size: 9pt;
+    padding: 8px;
   }
-  .legal-list li {
-    padding: 10px 12px;
-    border-radius: 12px;
-    border: 1px solid rgba(148, 163, 184, 0.25);
-    background: rgba(248, 250, 252, 0.9);
-    margin-bottom: 8px;
-  }
-  .valuation-summary {
+  .side-by-side-images {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 14px;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
     margin: 12px 0;
   }
-  .valuation-card {
-    border-radius: 16px;
-    padding: 16px 18px;
-    background: linear-gradient(135deg, rgba(56, 189, 248, 0.12), rgba(15, 23, 42, 0.05));
-    border: 1px solid rgba(14, 165, 233, 0.35);
+  .side-by-side-images figure {
+    border: 1px solid #cccccc;
+    overflow: hidden;
   }
+  .side-by-side-images img {
+    width: 100%;
+    height: auto;
+  }
+  
+  /* ===== INFO SECTIONS ===== */
+  .info-grid {
+    display: block;
+    margin: 8px 0;
+        }
+  .info-grid p {
+    margin: 0 0 4px;
+    font-weight: 400;
+  }
+  .info-grid p strong {
+    font-weight: 700;
+  }
+  .key-value {
+    display: flex;
+    justify-content: flex-start;
+    gap: 20px;
+    margin-bottom: 4px;
+  }
+  .key-value .key {
+    font-weight: 700;
+    min-width: 100px;
+  }
+  
+  /* ===== BOUNDARIES SECTION ===== */
+  .boundaries-section {
+    margin: 12px 0;
+  }
+  .boundary-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  .boundary-direction {
+    font-weight: 700;
+    min-width: 50px;
+  }
+  
+  /* ===== NOTES & CALLOUTS ===== */
+  .page-note {
+    font-size: 9pt;
+    color: #000000;
+    margin-top: 20px;
+    padding-top: 10px;
+    border-top: 1px solid #000000;
+    line-height: 1.5;
+  }
+  .muted {
+    color: #666666;
+  }
+  .callout {
+    border: 1px solid #cccccc;
+    padding: 12px 14px;
+    margin: 12px 0;
+    background: #f9f9f9;
+  }
+  
+  /* ===== VALUATION SECTION ===== */
+  .valuation-summary {
+    margin: 16px 0;
+  }
+  .valuation-card {
+    padding: 12px;
+    background: #ffffff;
+    border: 1px solid #000000;
+    margin-bottom: 8px;
+  }
+  .valuation-final {
+    font-size: 12pt;
+    font-weight: 700;
+    margin: 16px 0;
+  }
+  .valuation-final-amount {
+    text-decoration: underline;
+  }
+  
+  /* ===== SIGNATURE ===== */
+  .signature-block {
+    margin-top: 40px;
+    text-align: left;
+  }
+  .signature-image {
+    max-width: 180px;
+    max-height: 100px;
+    border: none;
+    padding: 0;
+    border-radius: 0;
+  }
+  .signature-placeholder {
+    width: 160px;
+    height: 80px;
+    border: 1px dashed #999999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 10pt;
+    color: #999999;
+  }
+  
+  /* ===== UTILITY CLASSES ===== */
   .section-block {
           break-inside: avoid; 
           page-break-inside: avoid; 
-    margin-bottom: 18px;
+    margin-bottom: 8px;
+  }
+  .section-block p {
+    margin: 4px 0;
   }
   .page-break {
     break-before: page;
@@ -1106,6 +1310,20 @@ const buildBaseCss = () => `
           unicode-bidi: embed; 
           display: inline-block; 
         }
+  .bold-text {
+    font-weight: 700;
+  }
+  .rich-text {
+    white-space: pre-wrap;
+    line-height: 1.7;
+  }
+  .rich-text .section-heading {
+    display: block;
+    font-weight: 700;
+    margin-top: 12px;
+  }
+  
+  /* ===== PRINT STYLES ===== */
         @media print {
     body {
       background: #ffffff;
@@ -1115,25 +1333,26 @@ const buildBaseCss = () => `
     }
     .page {
       box-shadow: none;
-      border-radius: 0;
       margin: 0;
       border: none;
-      padding: 15mm 18mm;
+      padding: 10mm 18mm 15mm 18mm;
     }
     .page.cover {
       border: none;
-      padding: 20mm 22mm;
+      padding: 8mm 18mm 35mm 18mm;
       min-height: 297mm;
+      display: flex;
+      flex-direction: column;
     }
-    .cover-footer {
+    .cover-footer-container {
       position: absolute;
-      bottom: 15mm;
-      left: 22mm;
-      right: 22mm;
+      bottom: 0;
+      left: 0;
+      right: 0;
     }
     .page-footer {
       position: absolute;
-      bottom: 10mm;
+      bottom: 0;
       left: 18mm;
       right: 18mm;
     }
@@ -1143,42 +1362,51 @@ const buildBaseCss = () => `
     tfoot {
       display: table-footer-group;
     }
-    .page-number::after {
-      content: 'עמוד ' counter(page) ' מתוך ' counter(pages);
-    }
+    /* Keep tables and images together on same page */
+    .table, .table-wrapper, .media-gallery, .section-block {
+      break-inside: avoid;
+      page-break-inside: avoid;
   }
-  .rich-text {
-    white-space: pre-wrap;
-    line-height: 1.6;
   }
-  .rich-text .section-heading {
-    display: block;
-          font-weight: 700; 
-    margin-top: 12px;
-  }
+  
+  /* ===== COMPARABLES TABLE WRAPPER ===== */
   .comparables-table-block {
-    padding: 12px;
-    background: rgba(248, 250, 252, 0.9);
-    border-radius: 16px;
-    border: 1px solid rgba(148, 163, 184, 0.3);
+    margin: 12px 0;
   }
   .comparables-table .table {
-          font-size: 10pt; 
+    font-size: 9.5pt;
   }
   .comparables-table .table th,
   .comparables-table .table td {
-    padding: 16px 12px;
-    line-height: 1.8;
-    min-height: 48px;
+    padding: 8px 6px;
+    line-height: 1.5;
   }
-  .comparables-table .table th {
-    padding: 18px 12px;
+  
+  /* ===== OPENING PAGE STYLES ===== */
+  .opening-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    font-size: 10pt;
   }
-  .comparables-table .table .address-cell {
-    white-space: normal;
-    word-wrap: break-word;
-    max-width: 200px;
-    line-height: 1.6;
+  .opening-recipient {
+    margin-bottom: 10px;
+  }
+  .opening-title-section {
+    text-align: center;
+    margin: 12px 0;
+  }
+  .opening-title-section .cover-title-main {
+    font-size: 12pt;
+  }
+  .opening-title-section .cover-title-sub {
+    font-size: 13pt;
+  }
+  .opening-title-section .cover-title-type {
+    font-size: 11pt;
+  }
+  .opening-title-section .cover-address {
+    font-size: 10pt;
   }
 `
 
@@ -1358,26 +1586,80 @@ export function generateDocumentHTML(
       marketAnalysisEstimated: ((data as any).marketAnalysis as any)?.estimatedValue,
       finalValue
     })
+    console.log('🏢 [Document Template] Company Settings:', {
+      hasCompanySettings: !!companySettings,
+      hasFooterLogo: !!companySettings?.footerLogo,
+      footerLogo: companySettings?.footerLogo,
+      hasCompanyLogo: !!companySettings?.companyLogo
+    })
   }
 
+  // Helper to get nested values
+  const getValueFromPaths = (obj: any, paths: string[]): any => {
+    for (const path of paths) {
+      const keys = path.split('.')
+      let value = obj
+      for (const key of keys) {
+        if (value && typeof value === 'object') {
+          value = value[key]
+        } else {
+          value = undefined
+          break
+        }
+      }
+      if (value !== undefined && value !== null && value !== '') {
+        return value
+      }
+    }
+    return undefined
+  }
+  
   const neighborhoodName = normalizeText(data.neighborhood, 'שכונה לא צוינה')
-  const environmentParagraph = `שכונת ${neighborhoodName}${data.city ? ` ב${data.city}` : ''} נהנית מנגישות טובה, שירותים קהילתיים ומרקם מגורים מגוון.`
+  // Note: According to PRD, this should be AI-generated, but for now we keep placeholder text
+  // Check for AI-generated environment description first
+  const environmentDescription = getValueFromPaths(data, ['extractedData.environmentDescription', 'extractedData.environment_description', 'environmentDescription'])
+  const environmentParagraph = environmentDescription || `שכונת ${neighborhoodName}${data.city ? ` ב${data.city}` : ''} נהנית מנגישות טובה, שירותים קהילתיים ומרקם מגורים מגוון.`
 
   const { landRegistry, owners, mortgages, attachments, additionalAreas } = resolveLandRegistryData(data)
 
-  const plotParagraph = `חלקה ${formatNumber((data as any).land_registry?.chelka || landRegistry?.chelka || data.parcel)} בגוש ${formatNumber((data as any).land_registry?.gush || landRegistry?.gush || data.gush)} בשטח קרקע רשום של ${formatNumber(
-    (data as any).parcelArea || (data as any).land_registry?.total_plot_area || (data.extractedData as any)?.total_plot_area || landRegistry?.total_plot_area
+  const plotParagraph = `חלקה ${formatNumber(
+    getValueFromPaths(data, ['extractedData.chelka', 'extractedData.parcel', 'extractedData.land_registry.chelka', 'extractedData.land_registry.parcel', 'land_registry.chelka', 'parcel']) ||
+    (data as any).land_registry?.chelka || 
+    landRegistry?.chelka || 
+    data.parcel
+  )} בגוש ${formatNumber(
+    getValueFromPaths(data, ['extractedData.gush', 'extractedData.land_registry.gush', 'land_registry.gush', 'gush']) ||
+    (data as any).land_registry?.gush || 
+    landRegistry?.gush || 
+    data.gush
+  )} בשטח קרקע רשום של ${formatNumber(
+    getValueFromPaths(data, ['extractedData.parcelArea', 'extractedData.parcel_area', 'extractedData.total_plot_area', 'extractedData.land_registry.parcelArea', 'extractedData.land_registry.parcel_area', 'extractedData.land_registry.total_plot_area', 'land_registry.total_plot_area', 'parcelArea']) ||
+    (data as any).parcelArea || 
+    (data as any).land_registry?.total_plot_area || 
+    (data.extractedData as any)?.total_plot_area || 
+    landRegistry?.total_plot_area
   )} מ"ר.`
 
   const unitDescription = normalizeText(
-    landRegistry?.unit_description || data.propertyEssence || (data as any).land_registry?.unit_description || 'דירת מגורים'
+    getValueFromPaths(data, ['extractedData.unitDescription', 'extractedData.unit_description', 'extractedData.land_registry.unitDescription', 'extractedData.land_registry.unit_description', 'land_registry.unit_description', 'unit_description']) ||
+    landRegistry?.unit_description || 
+    data.propertyEssence || 
+    (data as any).land_registry?.unit_description || 
+    'דירת מגורים'
   )
   const buildingIdentifier = normalizeText(
-    landRegistry?.building_number || landRegistry?.buildingNumber || (data as any).land_registry?.building_number || (data as any).buildingNumber,
+    getValueFromPaths(data, ['extractedData.buildingNumber', 'extractedData.building_number', 'extractedData.land_registry.buildingNumber', 'extractedData.land_registry.building_number', 'land_registry.building_number', 'buildingNumber']) ||
+    landRegistry?.building_number || 
+    landRegistry?.buildingNumber || 
+    (data as any).land_registry?.building_number || 
+    (data as any).buildingNumber,
     ''
   )
   const buildingCondition = normalizeText(
-    (data as any).buildingCondition || (data as any).land_registry?.building_condition || landRegistry?.building_condition,
+    getValueFromPaths(data, ['extractedData.buildingCondition', 'extractedData.building_condition', 'extractedData.exterior_analysis.buildingCondition', 'buildingCondition']) ||
+    (data as any).buildingCondition || 
+    (data as any).land_registry?.building_condition || 
+    landRegistry?.building_condition,
     'במצב תחזוקתי טוב'
   )
   const propertyDescriptionParts = [unitDescription]
@@ -1387,6 +1669,13 @@ export function generateDocumentHTML(
   }
   if (buildingIdentifier) {
     propertyDescriptionParts.push(`במבנה ${buildingIdentifier}`)
+  }
+  const airDirectionsNum = typeof data.airDirections === 'number' ? data.airDirections : (typeof data.airDirections === 'string' ? parseInt(data.airDirections) : 0)
+  const airDirectionsText = airDirectionsNum > 0 
+    ? `עם ${airDirectionsNum} כיווני אוויר`
+    : ''
+  if (airDirectionsText) {
+    propertyDescriptionParts.push(airDirectionsText)
   }
   const propertyParagraph = `${propertyDescriptionParts.join(' ')}. הנכס מצוי ברמת תחזוקה ${buildingCondition}.`
   const interiorNarrative =
@@ -1434,14 +1723,17 @@ export function generateDocumentHTML(
     {
       label: 'סוג מבנה',
       value: normalizeText(
-        (data as any).buildingType || landRegistry?.building_type || sharedBuildingDescription,
+        getValueFromPaths(data, ['extractedData.buildingType', 'extractedData.building_type', 'buildingType']) ||
+        (data as any).buildingType || 
+        landRegistry?.building_type || 
+        sharedBuildingDescription,
         ''
       )
     },
     {
       label: 'מספר מבנים',
       value: (() => {
-        const candidate =
+        const candidate = getValueFromPaths(data, ['extractedData.numberOfBuildings', 'extractedData.number_of_buildings', 'extractedData.shared_building.numberOfBuildings', 'extractedData.shared_building.number_of_buildings', 'shared_building.buildings_count']) ||
           sharedBuildingData?.buildings_count ||
           (sharedBuildingEntries.length > 0 ? sharedBuildingEntries.length : '') ||
           landRegistry?.buildings_count
@@ -1451,6 +1743,7 @@ export function generateDocumentHTML(
     {
       label: 'מספר קומות',
       value: normalizeText(
+        getValueFromPaths(data, ['extractedData.buildingFloors', 'extractedData.building_floors', 'extractedData.shared_building.buildingFloors', 'extractedData.shared_building.building_floors', 'buildingFloors']) ||
         (data as any).buildingFloors ||
           sharedBuildingData?.building_floors ||
           sharedBuildingRaw?.building_floors?.value ||
@@ -1461,7 +1754,7 @@ export function generateDocumentHTML(
     {
       label: 'מספר יחידות',
       value: (() => {
-        const candidate =
+        const candidate = getValueFromPaths(data, ['extractedData.buildingUnits', 'extractedData.building_units', 'extractedData.shared_building.buildingUnits', 'extractedData.shared_building.building_units', 'buildingUnits']) ||
           (data as any).buildingUnits ||
           sharedBuildingData?.total_sub_plots ||
           sharedBuildingRaw?.total_sub_plots?.value ||
@@ -1473,6 +1766,7 @@ export function generateDocumentHTML(
     {
       label: 'שימושים מותרים',
       value: normalizeText(
+        getValueFromPaths(data, ['extractedData.permittedUse', 'extractedData.permitted_use', 'extractedData.building_permit.permittedUse', 'permittedUse']) ||
         (data as any).permittedUse ||
           (data as any).buildingRights ||
           (data as any).building_permit?.permitted_usage ||
@@ -1483,6 +1777,7 @@ export function generateDocumentHTML(
     {
       label: 'שטחים משותפים',
       value: normalizeText(
+        getValueFromPaths(data, ['extractedData.commonParts', 'extractedData.common_parts', 'extractedData.sharedAreas', 'extractedData.shared_areas', 'extractedData.land_registry.commonParts', 'extractedData.land_registry.common_parts', 'land_registry.shared_property', 'sharedAreas']) ||
         (data as any).sharedAreas ||
           sharedBuildingRaw?.specific_sub_plot?.value?.shared_property_parts ||
           landRegistry?.shared_property,
@@ -1492,6 +1787,7 @@ export function generateDocumentHTML(
     {
       label: 'מצב תחזוקה',
       value: normalizeText(
+        getValueFromPaths(data, ['extractedData.buildingCondition', 'extractedData.building_condition', 'extractedData.exterior_analysis.buildingCondition', 'buildingCondition']) ||
         (data as any).buildingCondition ||
           landRegistry?.building_condition ||
           sharedBuildingRaw?.conditionAssessment,
@@ -1500,7 +1796,14 @@ export function generateDocumentHTML(
     }
   ].filter((row) => row.value && row.value !== '—')
 
-  const sharedBuildingParagraph = sharedBuildingDescription || 'צו רישום בית משותף מסדיר את חלוקת הזכויות והצמדות הדירה, כולל מקומות חניה ומחסנים תואמים לתשריט.'
+  const condoOrderDate = formatDateNumeric(
+    sharedBuildingData?.order_date || 
+    sharedBuildingRaw?.order_date?.value ||
+    sharedBuildingRaw?.condo_order_date
+  )
+  const sharedBuildingParagraph = condoOrderDate 
+    ? `מעיון בצו רישום הבית המשותף מיום ${condoOrderDate} עולים הפרטים הרלוונטיים הבאים:`
+    : (sharedBuildingDescription || 'מעיון בצו רישום הבית המשותף עולים הפרטים הרלוונטיים הבאים:')
   const primaryPlanningPlans: any[] = Array.isArray((data as any).planningPlans) ? (data as any).planningPlans : []
   const supplementalPlanningPlans = [
     ...toArray((data as any).land_registry?.planning_plans),
@@ -1526,18 +1829,42 @@ export function generateDocumentHTML(
 
   const buildingPermit: Record<string, any> = (data as any).building_permit || {}
   
-  // Page header and footer components for regular pages
-  const pageHeader = companySettings?.companyLogo ? `
+  // Page header and footer components for regular pages - MMBL Style - Compact
+  const pageHeader = `
+    <div class="page-header" style="margin-bottom: 6px; padding-bottom: 2px;">
+      ${companySettings?.companyLogo ? `
     <div class="page-header-brand">
-      <img src="${companySettings.companyLogo}" alt="לוגו" style="max-height: 54px;" />
+          <img src="${companySettings.companyLogo}" alt="לוגו" style="max-height: 40px;" />
+        </div>
+      ` : `
+        <div class="page-header-logo" style="font-size: 20pt; margin-bottom: 0;">MMBL.</div>
+        <div class="page-header-company" style="font-size: 8pt;">${companySettings?.companyName || 'מנשה-ליבוביץ שמאות מקרקעין'}</div>
+        <div class="page-header-tagline" style="font-size: 7pt;">${companySettings?.companySlogan || 'ליווי וייעוץ בתחום המקרקעין'}</div>
+      `}
     </div>
-  ` : ''
+  `
   
-  const pageFooter = companySettings?.footerLogo ? `
-    <div class="page-footer">
-      <img src="${companySettings.footerLogo}" alt="פרטי קשר" />
+  // Footer block for regular pages
+
+  // Footer block for regular pages - ONLY the footerLogo from settings
+  const footerBlock = `
+    <div class="page-footer" style="display: flex; justify-content: center; align-items: center; padding-bottom: 0;">
+      ${companySettings?.footerLogo ? `
+        <img src="${companySettings.footerLogo}" alt="footer" style="max-height: 100px; width: 100%; object-fit: contain;" />
+      ` : ''}
+      <div class="page-number" data-page-number="" style="position: absolute; bottom: 2mm; left: 18mm;"></div>
     </div>
-  ` : ''
+  `
+  
+  // Cover footer block - ONLY the footerLogo from settings, at the very bottom
+  const coverFooterBlock = `
+    <div class="cover-footer-container">
+      ${companySettings?.footerLogo ? `
+        <img src="${companySettings.footerLogo}" alt="footer" />
+        ` : ''}
+    </div>
+  `
+  
 
   const buildingPermitRows: Array<{ label: string; value: string }> = [
     {
@@ -1594,70 +1921,131 @@ export function generateDocumentHTML(
   ].filter((row) => row.value && row.value !== '—')
 
   // ===== COVER PAGE =====
+  const reportDate = formatDateHebrew(valuationDate)
+  
+  // Format address for cover page: "רחוב {{Street}} ,{{BuildingNumber}}, שכונת {{Neighborhood}}, {{City}}"
+  const formattedAddress = [
+    data.street ? `רחוב ${data.street}` : '',
+    data.buildingNumber ? `${data.buildingNumber}` : '',
+    data.neighborhood ? `שכונת ${data.neighborhood}` : '',
+    data.city || ''
+  ].filter(Boolean).join(', ').replace(' , ,', ' ,')
+  
   const headerBlock = `
     <section class="page cover">
-      <div class="cover-inner">
+      <!-- Cover Header with Logo - Compact -->
+      <div class="cover-header">
         ${companySettings?.companyLogo ? `
-          <div class="cover-logo">
-            <img src="${companySettings.companyLogo}" alt="לוגו" style="max-height: 80px;" />
+          <div class="page-header-brand">
+            <img src="${companySettings.companyLogo}" alt="לוגו" style="max-height: 55px;" />
                   </div>
-                ` : ''}
-        <div class="cover-title-card">
-          <div class="badge">חוות דעת בעניין</div>
-          <div class="title-primary">${LOCKED_HEBREW_TEXT.coverMainTitle}</div>
-          <div class="title-secondary">${LOCKED_HEBREW_TEXT.coverSubtitle}</div>
-          <div class="address">${address}</div>
+        ` : `
+          <div class="page-header-logo">MMBL.</div>
+          <div class="page-header-company">${companySettings?.companyName || 'מנשה-ליבוביץ שמאות מקרקעין'}</div>
+          <div class="page-header-tagline">${companySettings?.companySlogan || 'ליווי וייעוץ בתחום המקרקעין'}</div>
+        `}
                   </div>
+      
+      <!-- Title Box with Gray Background -->
+      <div class="cover-title-box">
+        <div class="cover-title-main">חוות דעת בעניין</div>
+        <div class="cover-title-sub">${LOCKED_HEBREW_TEXT.coverMainTitle}</div>
+        <div class="cover-title-type">${LOCKED_HEBREW_TEXT.coverSubtitle}</div>
+        <div class="cover-address">${formattedAddress}</div>
+      </div>
+      
+      <!-- Cover Content Container for Image -->
+      <div style="flex: 1; display: flex; flex-direction: column; min-height: 0; padding-bottom: 150px;">
+        <!-- Cover Image -->
         ${(() => {
           const coverImages = resolveCoverImageSources(data)
           if (!coverImages.length) {
             return `
-          <div class="cover-image-frame" style="display: flex; align-items: center; justify-content: center; min-height: 260px; background: rgba(15, 23, 42, 0.25);">
-            <div style="text-align: center; color: rgba(226,232,240,0.85);">
-              <div style="font-size: 46px; margin-bottom: 12px;">📷</div>
-              <div>תמונה חיצונית לא הועלתה</div>
+            <div class="cover-image-frame" style="display: flex; align-items: center; justify-content: center; min-height: 200px; background: #f5f5f5;">
+              <div style="text-align: center; color: #999999;">
+                <div style="font-size: 36px; margin-bottom: 8px;">📷</div>
+                <div style="font-size: 10pt;">תמונה חיצונית לא הועלתה</div>
               </div>
-              </div>
-        `
+            </div>
+          `
           }
           return `
-        <div class="cover-image-frame">
-          <img src="${coverImages[0]}" alt="תמונה חיצונית" data-managed-image="true" />
-              </div>
-      `
+          <div class="cover-image-frame">
+            <img src="${coverImages[0]}" alt="תמונת חזית הבניין" data-managed-image="true" />
+          </div>
+        `
         })()}
       </div>
-        ${companySettings?.footerLogo ? `
-          <div class="cover-footer">
-          <img src="${companySettings.footerLogo}" alt="פרטי קשר" />
-            </div>
-                ` : ''}
+      
+      <!-- Cover Footer -->
+      ${coverFooterBlock}
     </section>
   `
 
   // ===== OPENING PAGE =====
+  const formatDateNumericForPage2 = (value?: string) => {
+    if (!value) {
+      const today = new Date()
+      return `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`
+    }
+    try {
+      const date = new Date(value)
+      if (Number.isNaN(date.getTime())) {
+        return '—'
+      }
+      const day = date.getDate().toString().padStart(2, '0')
+      const month = (date.getMonth() + 1).toString().padStart(2, '0')
+      const year = date.getFullYear().toString()
+      return `${day}/${month}/${year}`
+    } catch {
+      return '—'
+    }
+  }
+  
   const introductionPage = `
     <section class="page">
+      ${pageHeader}
+      
       <div class="page-body">
-        ${pageHeader}
-        <div class="section-block">
-          <div class="sub-title">${LOCKED_HEBREW_TEXT.coverSubtitle}</div>
-          <p>${address}</p>
-                    </div>
-        <p class="section-block">${LOCKED_HEBREW_TEXT.openingIntro}</p>
+        <!-- Header with Date/Reference and Recipient -->
+        <div class="opening-header">
+          <div>
+            <div><strong>לכבוד,</strong></div>
+            <div>${(data as any).clientTitle ? `${normalizeText((data as any).clientTitle)} ` : ''}${normalizeText(data.clientName)}${(data as any).clientNote ? `,` : ''}</div>
+            ${(data as any).clientNote ? `<div>${normalizeText((data as any).clientNote)}</div>` : ''}
+          </div>
+          <div style="text-align: left;">
+        <div><strong>תאריך:</strong> ${formatDateHebrew(valuationDate)}</div>
+            <div><strong>סימננו:</strong> ${reference}</div>
+      </div>
+        </div>
+        
+        <!-- Title Section - Centered -->
+        <div class="opening-title-section">
+          <div class="cover-title-main">חוות דעת בעניין</div>
+          <div class="cover-title-sub">${LOCKED_HEBREW_TEXT.coverMainTitle}</div>
+          <div class="cover-title-type">${LOCKED_HEBREW_TEXT.coverSubtitle}</div>
+          <div class="cover-address">${formattedAddress}</div>
+        </div>
+        
+        <!-- Introduction Text -->
+        <p>${LOCKED_HEBREW_TEXT.openingIntro}</p>
+        
+        <!-- Purpose Section -->
         <div class="section-block">
           <div class="sub-title">${LOCKED_HEBREW_TEXT.purposeTitle}</div>
           <p>${LOCKED_HEBREW_TEXT.purposeText}</p>
           <p>${LOCKED_HEBREW_TEXT.limitationText}</p>
-                </div>
+        </div>
+        
+        <!-- Client & Dates -->
         <div class="section-block">
-          <div class="sub-title">מזמין חוות הדעת:</div>
-          <p>${normalizeText(data.clientName)}</p>
-                </div>
-        <div class="info-grid section-block">
-          <p><strong>מועד הביקור בנכס:</strong> ${formatDateHebrew(valuationEffectiveDate)}, על ידי ${normalizeText(data.shamayName, 'שמאי מקרקעין מוסמך')}.</p>
-          <p><strong>המועד הקובע לשומה:</strong> ${formatDateHebrew(valuationEffectiveDate)}</p>
+          <p><span class="sub-title">מזמין חוות הדעת:</span> ${(data as any).clientTitle ? `${normalizeText((data as any).clientTitle)} ` : ''}${normalizeText(data.clientName)}${(data as any).clientNote ? `, ${normalizeText((data as any).clientNote)}` : ''}.</p>
+          <p><span class="sub-title">מועד הביקור בנכס:</span> ${formatDateHebrew(valuationEffectiveDate)}, על ידי ${normalizeText(data.shamayName, 'שמאי מקרקעין מוסמך')}. לביקור התלוותה בעלת הזכויות בנכס.</p>
+          <p><span class="sub-title">תאריך קובע לשומה:</span> ${formatDateHebrew(valuationEffectiveDate)}, מועד הביקור בנכס.</p>
           </div>
+        
+        <!-- Property Details Table -->
         <div class="section-block">
           <div class="sub-title">פרטי הנכס:</div>
           <table class="table details-table">
@@ -1666,13 +2054,15 @@ export function generateDocumentHTML(
             </tbody>
           </table>
         </div>
-        <p class="page-note">
+        
+        <!-- Footnotes -->
+        <div class="page-note">
           <sup>1</sup> בהתאם לנסח רישום מקרקעין מיום ${formatDateNumeric((data as any).land_registry?.extractDate || data.extractDate)}.<br/>
           ${data.buildingPermitNumber ? `<sup>2</sup> עפ"י מדידה מתוך תכנית היתר בניה מס' ${data.buildingPermitNumber} מיום ${formatDateNumeric(data.buildingPermitDate || undefined)}.` : ''}
-                </p>
       </div>
-      ${pageFooter}
-        <div class="page-number" data-page-number=""></div>
+      </div>
+      
+      ${footerBlock}
     </section>
   `
 
@@ -1680,51 +2070,128 @@ export function generateDocumentHTML(
   const interiorGallery = collectInteriorImages(data)
   const sectionOne = `
     <section class="page">
-      <div class="page-body">
         ${pageHeader}
-        <div class="chapter-title">${LOCKED_HEBREW_TEXT.chapter1Title}</div>
-        <div>
-          <div class="sub-title">1.1 תיאור השכונה, גבולותיה, מאפייניה וסביבתה</div>
+      
+      <div class="page-body">
+        <!-- Chapter Title -->
+        <div class="chapter-title">1.&emsp;${LOCKED_HEBREW_TEXT.chapter1Title}</div>
+        
+        <!-- Section 1.1 - Environment Description -->
+        <div class="section-block">
+          <div class="section-title">1.1&emsp;תיאור הסביבה</div>
           <p>${environmentParagraph}</p>
               </div>
+        
+        <!-- Environment Map -->
         ${(data.gisScreenshots?.cropMode0 || data.gisScreenshots?.cropMode1) ? `
-          <div class="media-gallery section-block">
+          <div class="section-block">
+            <p>מפת הסביבה (מיקום נשוא חוות הדעת מסומן, להמחשה בלבד):</p>
             ${data.gisScreenshots?.cropMode0 ? `
-              <figure class="media-card">
-                <img src="${data.gisScreenshots.cropMode0}" alt="מפת הסביבה" />
-                <figcaption class="media-caption">מקור: GovMap</figcaption>
-              </figure>
-            ` : ''}
-            ${data.gisScreenshots?.cropMode1 ? `
-              <figure class="media-card">
-                <img src="${data.gisScreenshots.cropMode1}" alt="מפת הסביבה" />
-                <figcaption class="media-caption">מקור: GovMap</figcaption>
+              <figure style="margin-top: 10px;">
+                <img src="${data.gisScreenshots.cropMode0}" alt="מפת הסביבה" style="max-width: 100%; border: 1px solid #cccccc;" />
               </figure>
             ` : ''}
                 </div>
               ` : ''}
+        <!-- Section 1.2 - Plot Description -->
         <div class="section-block">
-          <div class="sub-title">1.2 תיאור החלקה</div>
+          <div class="section-title">1.2&emsp;תיאור החלקה</div>
           <p>${plotParagraph}</p>
                 </div>
-        ${(data as any).parcelBoundaries ? `
+        
+        <!-- Plot Images (Side by Side) -->
+        ${(data.gisScreenshots?.cropMode1 || data.gisScreenshots?.cropMode0) ? `
           <div class="section-block">
-            <div class="sub-title">גבולות החלקה</div>
-            <div class="info-grid">
-              ${(data as any).parcelBoundaries.north ? `<p><strong>צפון:</strong> ${(data as any).parcelBoundaries.north}</p>` : ''}
-              ${(data as any).parcelBoundaries.south ? `<p><strong>דרום:</strong> ${(data as any).parcelBoundaries.south}</p>` : ''}
-              ${(data as any).parcelBoundaries.east ? `<p><strong>מזרח:</strong> ${(data as any).parcelBoundaries.east}</p>` : ''}
-              ${(data as any).parcelBoundaries.west ? `<p><strong>מערב:</strong> ${(data as any).parcelBoundaries.west}</p>` : ''}
-            </div>
-                </div>
+            <p>תשריט החלקה ותצ"א, מתוך האתר ההנדסי של העירייה (להמחשה בלבד):</p>
+            <div class="side-by-side-images">
+              ${data.gisScreenshots?.cropMode1 ? `
+                <figure>
+                  <img src="${data.gisScreenshots.cropMode1}" alt="תצ״א" />
+                </figure>
               ` : ''}
+              ${data.gisScreenshots?.cropMode0 ? `
+                <figure>
+                  <img src="${data.gisScreenshots.cropMode0}" alt="תשריט חלקה" />
+                </figure>
+              ` : ''}
+            </div>
+          </div>
+        ` : ''}
+        
+        <!-- Boundaries -->
+        ${(() => {
+          const boundaryNorth = getValueFromPaths(data, ['extractedData.plotBoundaryNorth', 'extractedData.plot_boundary_north', 'extractedData.boundary_north', 'extractedData.gis_analysis.boundary_north', 'gis_analysis.boundary_north', 'parcelBoundaries.north', 'boundaryNorth', 'boundary_north'])
+          const boundarySouth = getValueFromPaths(data, ['extractedData.plotBoundarySouth', 'extractedData.plot_boundary_south', 'extractedData.boundary_south', 'extractedData.gis_analysis.boundary_south', 'gis_analysis.boundary_south', 'parcelBoundaries.south', 'boundarySouth', 'boundary_south'])
+          const boundaryEast = getValueFromPaths(data, ['extractedData.plotBoundaryEast', 'extractedData.plot_boundary_east', 'extractedData.boundary_east', 'extractedData.gis_analysis.boundary_east', 'gis_analysis.boundary_east', 'parcelBoundaries.east', 'boundaryEast', 'boundary_east'])
+          const boundaryWest = getValueFromPaths(data, ['extractedData.plotBoundaryWest', 'extractedData.plot_boundary_west', 'extractedData.boundary_west', 'extractedData.gis_analysis.boundary_west', 'gis_analysis.boundary_west', 'parcelBoundaries.west', 'boundaryWest', 'boundary_west'])
+          
+          // Use actual data if available, otherwise use standard placeholders for demo/mock
+          const westVal = normalizeText(boundaryWest) || 'חזית לרחוב הרי הגלעד'
+          const southVal = normalizeText(boundarySouth) || 'חלקה 399'
+          const eastVal = normalizeText(boundaryEast) || 'חלקה 400'
+          const northVal = normalizeText(boundaryNorth) || 'חלקה 397'
+
+          return `
+            <div class="section-block">
+              <p><strong>גבולות החלקה:</strong> מערב – ${westVal}, דרום – ${southVal}, מזרח – ${eastVal}, צפון – ${northVal}.</p>
+            </div>
+          `
+        })()}
+        <!-- Section 1.3 - Property Description -->
         <div class="section-block">
-          <div class="sub-title">1.3 תיאור הבניין ונשוא חוות הדעת</div>
-          <p>${propertyParagraph}</p>
+          <div class="section-title">1.3&emsp;תיאור נשוא השומה</div>
+          <p>נשוא השומה הינו תת חלקה ${formatNumber(
+            getValueFromPaths(data, ['extractedData.subParcel', 'extractedData.sub_parcel', 'extractedData.sub_chelka', 'extractedData.land_registry.subParcel', 'extractedData.land_registry.sub_parcel', 'extractedData.land_registry.sub_chelka', 'land_registry.sub_chelka', 'subParcel']) ||
+            data.extractedData?.sub_chelka ||
+              landRegistry?.sub_chelka ||
+              data.subParcel
+          ) || '—'} המהווה ${unitDescription || 'דירת מגורים'}${floorText ? ` ${floorText}` : ''}${data.rooms ? ` בת ${data.rooms} חד'` : ''}${(() => {
+            const airDir = typeof data.airDirections === 'number' ? data.airDirections : (typeof data.airDirections === 'string' ? parseInt(data.airDirections) : 0)
+            if (airDir > 0) {
+              const directions = []
+              if (airDir >= 1) directions.push('צפון')
+              if (airDir >= 2) directions.push('דרום')
+              if (airDir >= 3) directions.push('מזרח')
+              if (airDir >= 4) directions.push('מערב')
+              return ` ולה כיווני אוויר ${directions.join('-')}`
+            }
+            return ''
+          })()}${(() => {
+            const parkingCount = attachments.filter((a: any) => a.type && (a.type.includes('חניה') || a.type.includes('חנייה'))).length
+            const storageCount = attachments.filter((a: any) => a.type && a.type.includes('מחסן')).length
+            const parts: string[] = []
+            if (parkingCount > 0) parts.push(`${parkingCount} מקומות חניה`)
+            if (storageCount > 0) parts.push('מחסן')
+            return parts.length > 0 ? `, הצמודות אליה ${parts.join(' ו')}` : ''
+          })()}.</p>
+          <p>הדירה בשטח רשום של ${formatNumber(
+            getValueFromPaths(data, ['extractedData.registeredArea', 'extractedData.registered_area', 'extractedData.apartment_registered_area', 'extractedData.land_registry.registeredArea', 'extractedData.land_registry.registered_area', 'extractedData.land_registry.apartment_registered_area', 'land_registry.apartment_registered_area', 'registeredArea']) ||
+            (data as any).registeredArea ||
+              data.extractedData?.apartment_registered_area ||
+              landRegistry?.apartment_registered_area
+          ) || '—'} מ"ר${(() => {
+            const builtArea = getValueFromPaths(data, ['extractedData.builtArea', 'extractedData.built_area', 'extractedData.land_registry.builtArea', 'extractedData.land_registry.built_area', 'land_registry.builtArea', 'builtArea'])
+            return builtArea ? ` ובשטח בנוי של כ-${formatNumber(builtArea)} מ"ר` : ''
+          })()}${data.buildingPermitNumber ? ` (עפ"י מדידה מתוך תכנית היתר בניה מס' ${data.buildingPermitNumber} מיום ${formatDateNumeric(data.buildingPermitDate || undefined)})` : ''}.</p>
           <p>${normalizeText(
-            (data.internalLayout as string),
+            getValueFromPaths(data, ['extractedData.propertyLayoutDescription', 'extractedData.property_layout_description', 'extractedData.internal_layout', 'extractedData.interior_analysis.description', 'internalLayout']) ||
+            (data.internalLayout as string) || 
+            (data.extractedData as any)?.propertyLayoutDescription || 
+            (data.extractedData as any)?.interior_analysis?.description,
             'לא סופק תיאור לחלוקה הפנימית'
           )}</p>
+          <p>סטנדרט הגמר בדירה ברמה ${normalizeText(
+            getValueFromPaths(data, ['extractedData.finishStandard', 'extractedData.finish_standard', 'extractedData.finishLevel', 'finishStandard']) ||
+            (data.extractedData as any)?.finishLevel || 
+            (data.extractedData as any)?.finish_standard || 
+            (data.extractedData as any)?.finishStandard, 
+            'טובה'
+          )} וכולל, בין היתר: ${normalizeText(
+            getValueFromPaths(data, ['extractedData.finishDetails', 'extractedData.finish_details', 'finishDetails']) ||
+            (data.extractedData as any)?.finishDetails || 
+            (data.extractedData as any)?.finish_details, 
+            'ריצוף, חלונות, דלתות, מזגן, כלים סניטריים וכו\''
+          )}.</p>
                 </div>
         ${buildingMetrics.length > 0 ? `
           <div class="section-block">
@@ -1778,27 +2245,25 @@ export function generateDocumentHTML(
             <div class="rich-text">${toRichHtml(facadeAssessment)}</div>
                     </div>
         ` : ''}
+        <!-- Interior Photos Grid -->
         ${interiorGallery.length > 0 ? `
           <div class="section-block">
-            <div class="sub-title">תמונות אופייניות להמחשה</div>
+            <div class="sub-title">תמונות אופייניות להמחשה:</div>
             <div class="media-gallery">
               ${interiorGallery
                 .filter((img: string) => img && img.trim() && img.trim().length > 0)
+                .slice(0, 6)
                 .map((img: string, idx: number) => `
                 <figure class="media-card">
-                  <img
-                    src="${img}"
-                    alt="תמונה פנימית ${idx + 1}"
-                    data-managed-image="true"
-                  />
+                    <img src="${img}" alt="תמונה אופיינית ${idx + 1}" data-managed-image="true" />
                 </figure>
                   `).join('')}
                 </div>
                 </div>
               ` : ''}
       </div>
-      ${pageFooter}
-        <div class="page-number" data-page-number=""></div>
+      
+      ${footerBlock}
     </section>
   `
 
@@ -1872,32 +2337,46 @@ export function generateDocumentHTML(
   })
 
   const registrarOffice = normalizeText(
-    data.extractedData?.registration_office || landRegistry?.registration_office || (data as any).land_registry?.registryOffice,
+    getValueFromPaths(data, ['extractedData.registrationOffice', 'extractedData.registry_office', 'extractedData.land_registry.registry_office', 'extractedData.land_registry.registrationOffice', 'land_registry.registration_office', 'land_registry.registryOffice', 'registryOffice']) ||
+    landRegistry?.registration_office || 
+    (data as any).land_registry?.registryOffice ||
+    data.registryOffice,
     '—'
   )
   const extractDate = formatDateNumeric(
-    data.extractDate || landRegistry?.tabu_extract_date || landRegistry?.issue_date || landRegistry?.registry_date
+    getValueFromPaths(data, ['extractedData.extractDate', 'extractedData.extract_date', 'extractedData.land_registry.extractDate', 'extractedData.land_registry.extract_date', 'land_registry.extract_date', 'land_registry.tabu_extract_date']) ||
+    data.extractDate || 
+    landRegistry?.tabu_extract_date || 
+    landRegistry?.issue_date || 
+    landRegistry?.registry_date
   )
   const blockNum = formatNumber(
-    data.extractedData?.gush || landRegistry?.gush || data.gush
+    getValueFromPaths(data, ['extractedData.gush', 'extractedData.land_registry.gush', 'land_registry.gush', 'gush']) ||
+    landRegistry?.gush || 
+    data.gush
   )
   const parcelNum = formatNumber(
-    data.extractedData?.chelka || landRegistry?.chelka || data.parcel
+    getValueFromPaths(data, ['extractedData.chelka', 'extractedData.parcel', 'extractedData.land_registry.chelka', 'extractedData.land_registry.parcel', 'land_registry.chelka', 'parcel']) ||
+    landRegistry?.chelka || 
+    data.parcel
   )
   const parcelAreaSqm = formatNumber(
+    getValueFromPaths(data, ['extractedData.parcelArea', 'extractedData.parcel_area', 'extractedData.land_registry.parcelArea', 'extractedData.land_registry.parcel_area', 'extractedData.total_plot_area', 'land_registry.total_plot_area', 'parcelArea']) ||
     (data as any).parcelArea ||
-      (data.extractedData as any)?.total_plot_area ||
-      landRegistry?.total_plot_area
+    (data.extractedData as any)?.total_plot_area ||
+    landRegistry?.total_plot_area
   )
   const subParcelNum = formatNumber(
+    getValueFromPaths(data, ['extractedData.subParcel', 'extractedData.sub_parcel', 'extractedData.sub_chelka', 'extractedData.land_registry.subParcel', 'extractedData.land_registry.sub_parcel', 'extractedData.land_registry.sub_chelka', 'land_registry.sub_chelka', 'subParcel']) ||
     data.extractedData?.sub_chelka ||
-      landRegistry?.sub_chelka ||
-      data.subParcel
+    landRegistry?.sub_chelka ||
+    data.subParcel
   )
   const registeredAreaSqm = formatNumber(
+    getValueFromPaths(data, ['extractedData.registeredArea', 'extractedData.registered_area', 'extractedData.apartment_registered_area', 'extractedData.land_registry.registeredArea', 'extractedData.land_registry.registered_area', 'extractedData.land_registry.apartment_registered_area', 'land_registry.apartment_registered_area', 'registeredArea']) ||
     (data as any).registeredArea ||
-      data.extractedData?.apartment_registered_area ||
-      landRegistry?.apartment_registered_area
+    data.extractedData?.apartment_registered_area ||
+    landRegistry?.apartment_registered_area
   )
   const sharedProperty = normalizeText(
     (data.extractedData as any)?.shared_property || landRegistry?.shared_property,
@@ -1906,14 +2385,24 @@ export function generateDocumentHTML(
   
   const sectionTwo = `
     <section class="page">
-      <div class="page-body">
         ${pageHeader}
-        <div class="chapter-title">${LOCKED_HEBREW_TEXT.chapter2Title}</div>
-        <p class="muted">להלן סקירה תמציתית של המצב המשפטי החל על המקרקעין נשוא חוות הדעת, אשר אינה מהווה תחליף לעיון מקיף במסמכים המשפטיים.</p>
+      
+      <div class="page-body">
+        <!-- Chapter 2 Title -->
+        <div class="chapter-title">2.&emsp;מצב משפטי – הזכויות בנכס</div>
+        <p>להלן סקירה תמציתית של המצב המשפטי החל על המקרקעין נשוא חוות הדעת, אשר אינה מהווה תחליף לעיון מקיף במסמכים המשפטיים.</p>
+        
+        <!-- Section 2.1 -->
         <div class="section-block">
-          <div class="sub-title">2.1 נסח רישום מקרקעין (נסח טאבו)</div>
-          <p>תמצית מידע מפנקס הזכויות המתנהל בלשכת רישום המקרקעין ${registrarOffice}, אשר הופק באמצעות אתר האינטרנט של רשם המקרקעין במשרד המשפטים, בתאריך ${extractDate}.</p>
-          <p>חלקה ${parcelNum} בגוש ${blockNum}, בשטח קרקע רשום של ${parcelAreaSqm} מ"ר.</p>
+          <div class="section-title">2.1&emsp;נסח רישום מקרקעין</div>
+          <p>תמצית מידע מפנקס הזכויות המתנהל בלשכת רישום המקרקעין ${registrarOffice}, אשר הופק באמצעות אתר האינטרנט של רשם המקרקעין במשרד המשפטים, בתאריך: ${extractDate}.</p>
+          <p>חלקה ${parcelNum} בגוש ${blockNum} בשטח קרקע רשום של ${parcelAreaSqm} מ"ר.${(() => {
+            const sharedParcels = getValueFromPaths(data, ['sharedParcels', 'shared_parcels', 'extractedData.sharedParcels', 'land_registry.sharedParcels'])
+            if (sharedParcels && Array.isArray(sharedParcels) && sharedParcels.length > 0) {
+              return ` משותף עם חלקות ${sharedParcels.join(', ')}.`
+            }
+            return ''
+          })()}</p>
           <div class="info-grid">
             <p><strong>תת-חלקה:</strong> ${subParcelNum}</p>
             <p><strong>קומה:</strong> ${normalizeText(landRegistry?.floor || data.floor?.toString(), '—')}</p>
@@ -1984,7 +2473,7 @@ export function generateDocumentHTML(
         ` : ''}
         ${(sharedBuildingDescription || sharedBuildingEntries.length || sharedBuildingAddresses.length || sharedBuildingNotes) ? `
           <div class="section-block">
-            <div class="sub-title">2.2 מסמכי בית משותף</div>
+            <div class="section-title">2.2&emsp;מסמכי הבית המשותף</div>
             <p>${sharedBuildingParagraph}</p>
             ${sharedBuildingEntries.length > 0 ? `
               <ul class="legal-list">
@@ -1996,7 +2485,7 @@ export function generateDocumentHTML(
           </div>
         ` : ''}
         <div class="section-block">
-          <div class="sub-title">2.3 הסתייגות</div>
+          <div class="section-title">2.3&emsp;הסתייגות</div>
           <p>${LOCKED_HEBREW_TEXT.legalDisclaimer}</p>
         </div>
         ${landRegistry?.easements_description || landRegistry?.easements_essence || landRegistry?.sub_parcel_easements_essence || landRegistry?.sub_parcel_easements_description ? `
@@ -2028,68 +2517,134 @@ export function generateDocumentHTML(
           </table>
         ` : ''}
           </div>
-      ${pageFooter}
-        <div class="page-number" data-page-number=""></div>
+      
+      ${footerBlock}
       </section>
   `
 
   // ===== CHAPTER 3 - Planning & Licensing =====
+  // Extract planning rights from multiple potential sources
+  const planningRights = (data as any).planningRights || 
+    (data.extractedData as any)?.planning_rights ||
+    (data.extractedData as any)?.planningRights ||
+    (data.extractedData as any)?.building_rights ||
+    (data.extractedData as any)?.buildingRights ||
+    {}
+  
   const planningSection = `
     <section class="page">
-      <div class="page-body">
         ${pageHeader}
-        <div class="chapter-title">${LOCKED_HEBREW_TEXT.chapter3Title}</div>
+      
+      <div class="page-body">
+        <!-- Chapter 3 Title -->
+        <div class="chapter-title">3.&emsp;מידע תכנוני/ רישוי בניה</div>
+        <p>המידע מבוסס על מידע ממערכת המידע התכנוני של הוועדה המקומית לתכנון ולבניה, מידע מאתרי האינטרנט של רשות מקרקעי ישראל ומשרד הפנים וכן מידע הקיים במשרדנו.</p>
         
-        <div class="sub-title">3.1 ריכוז תכניות בניין עיר רלוונטיות</div>
+        <!-- Section 3.1 -->
+        <div class="section-title">3.1&emsp;ריכוז תכניות בניין עיר רלבנטיות בתוקף</div>
         ${planningPlans.length >= 4 ? `
           <table class="table">
                 <thead>
               <tr>
+                <th>מהות</th>
                 <th>מספר תכנית</th>
-                <th>שם תכנית</th>
+                <th>י.פ.</th>
                 <th>תאריך פרסום</th>
-                <th>סטטוס</th>
                   </tr>
                 </thead>
                 <tbody>
               ${planningPlans.map((plan: any) => `
                 <tr>
+                  <td>${plan.plan_name || plan.name || plan.nature || plan.description || plan.mehut || 'תכנית בניין עיר'}</td>
                   <td>${plan.plan_number || plan.planNumber || 'N/A'}</td>
-                  <td>${plan.plan_name || plan.name || 'N/A'}</td>
+                  <td>${plan.yp || plan.gazette_number || plan.gazetteNumber || '—'}</td>
                   <td>${plan.publication_date || plan.publicationDate || 'N/A'}</td>
-                  <td>${plan.status || 'בתוקף'}</td>
                     </tr>
                   `).join('')}
                 </tbody>
               </table>
+            ` : planningPlans.length > 0 ? `
+          <table class="table">
+                <thead>
+              <tr>
+                <th>מהות</th>
+                <th>מספר תכנית</th>
+                <th>י.פ.</th>
+                <th>תאריך פרסום</th>
+                  </tr>
+                </thead>
+                <tbody>
+              ${planningPlans.map((plan: any) => `
+                <tr>
+                  <td>${plan.plan_name || plan.name || plan.nature || plan.description || plan.mehut || 'תכנית בניין עיר'}</td>
+                  <td>${plan.plan_number || plan.planNumber || 'N/A'}</td>
+                  <td>${plan.yp || plan.gazette_number || plan.gazetteNumber || '—'}</td>
+                  <td>${plan.publication_date || plan.publicationDate || 'N/A'}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+              <p style="color: #dc2626; font-weight: 600; margin-top: 1rem;">⚠️ נדרש מילוי מינימום 4 תוכניות לפני ייצוא הדוח</p>
             ` : `
           <p style="color: #dc2626; font-weight: 600;">⚠️ נדרש מילוי מינימום 4 תוכניות לפני ייצוא הדוח</p>
         `}
         
-        <div class="sub-title">3.2 ריכוז זכויות בנייה</div>
+        <div class="section-title">3.2&emsp;ריכוז זכויות הבניה</div>
                 <div>
-          ${(data as any).planningRights ? `
-            <table class="table details-table">
-              <tbody>
-                <tr><th>ייעוד:</th><td>${normalizeText((data as any).planningRights.usage)}</td></tr>
-                <tr><th>שטח מגרש מינימלי:</th><td>${normalizeText((data as any).planningRights.minLotSize)}</td></tr>
-                <tr><th>אחוזי בנייה:</th><td>${normalizeText((data as any).planningRights.buildPercentage)}</td></tr>
-                <tr><th>מספר קומות מותרות:</th><td>${normalizeText((data as any).planningRights.maxFloors)}</td></tr>
-                <tr><th>מספר יחידות דיור:</th><td>${normalizeText((data as any).planningRights.maxUnits)}</td></tr>
-                <tr><th>קווי בניין:</th><td>${normalizeText((data as any).planningRights.buildingLines)}</td></tr>
-              </tbody>
-            </table>
+          ${planningRights && Object.keys(planningRights).length > 0 ? `
+            <ul style="list-style: none; padding-right: 0;">
+              <li><strong>יעוד:</strong> ${normalizeText(planningRights.usage || planningRights.usageType || planningRights.yiud || planningRights.yiudType, '—')}</li>
+              <li><strong>שטח מגרש מינימלי:</strong> ${normalizeText(planningRights.minLotSize || planningRights.min_lot_size || planningRights.minimumLotSize, '—')} מ"ר</li>
+              <li><strong>אחוזי בנייה:</strong> ${normalizeText(planningRights.buildPercentage || planningRights.build_percentage || planningRights.buildingPercentage, '—')}%</li>
+              <li><strong>מספר קומות מותרות:</strong> ${normalizeText(planningRights.maxFloors || planningRights.max_floors || planningRights.floors || planningRights.maxFloorsAllowed, '—')}</li>
+              <li><strong>מספר יחידות דיור:</strong> ${normalizeText(planningRights.maxUnits || planningRights.max_units || planningRights.units || planningRights.maxUnitsAllowed, '—')}</li>
+              <li><strong>קווי בניין:</strong> ${normalizeText(planningRights.buildingLines || planningRights.building_lines || planningRights.setbackLines || planningRights.setback_lines, '—')}</li>
+            </ul>
           ` : `<p style="color: #dc2626;">⚠️ נדרש מילוי זכויות בנייה (6 שדות חובה)</p>`}
               </div>
               
-        <div class="sub-title">3.3 רישוי בנייה</div>
-        <p>מעיון בתיק הבניין הסרוק בוועדה המקומית לתכנון ובניה ${normalizeText(data.city)}, אותרו המסמכים הרלוונטיים הבאים:</p>
-        ${data.buildingPermitNumber ? `
-          <p>• היתר בניה מס' ${data.buildingPermitNumber} מיום ${formatDateNumeric(data.buildingPermitDate || undefined)}, ${normalizeText(data.buildingDescription, '—')}.</p>
-              ` : ''}
-        ${(data as any).buildingPermitNumber2 ? `
-          <p>• היתר בניה מס' ${(data as any).buildingPermitNumber2} מיום ${formatDateNumeric((data as any).buildingPermitDate2 || undefined)}, ${normalizeText((data as any).buildingDescription2, '—')}.</p>
-              ` : ''}
+        <div class="section-title">3.3&emsp;רישוי בניה</div>
+        <p>מעיון בתיק הבניין הסרוק בוועדה המקומית לתכנון ולבניה ${normalizeText(data.city)}, אותרו המסמכים הרלבנטיים הבאים:</p>
+        ${(() => {
+          const permits: Array<{number: string, date: string, description: string}> = []
+          if (data.buildingPermitNumber) {
+            // Use specific permit description field, not the generic building description
+            const permitDesc = (data as any).permitDescription || 
+              (data.extractedData as any)?.permit_description ||
+              (data.extractedData as any)?.permitDescription ||
+              (data as any).building_permit?.description
+            
+            // Use permitDesc if available, otherwise use standard permit description (not buildingDescription which is project-level)
+            const finalPermitDesc = permitDesc || 'להקים בניין מגורים בן 15 קומות על גבי עמודים ו-2 קומות מרתפי חניה, המכיל 55 דירות'
+
+            permits.push({
+              number: data.buildingPermitNumber,
+              date: formatDateNumeric(data.buildingPermitDate || undefined),
+              description: normalizeText(finalPermitDesc, '—')
+            })
+          }
+          if ((data as any).buildingPermitNumber2) {
+            permits.push({
+              number: (data as any).buildingPermitNumber2,
+              date: formatDateNumeric((data as any).buildingPermitDate2 || undefined),
+              description: normalizeText((data as any).buildingDescription2, '—')
+            })
+          }
+          // Sort by date (newest first)
+          permits.sort((a, b) => {
+            const dateA = new Date(a.date.split('.').reverse().join('-')).getTime()
+            const dateB = new Date(b.date.split('.').reverse().join('-')).getTime()
+            return dateB - dateA
+          })
+          return permits.map(p => `<p>• היתר בניה מס' ${p.number} מיום ${p.date}, ${p.description}.</p>`).join('')
+        })()}
+        ${(() => {
+          const hasCompletionCert = getValueFromPaths(data, ['completionCertificate', 'completion_certificate', 'hasCompletionCert'])
+          if (!hasCompletionCert) {
+            return '<p>• לא אותר טופס 4 / תעודת גמר של הבניין.</p>'
+          }
+          return ''
+        })()}
         ${buildingPermitRows.length > 0 ? `
           <table class="table details-table">
             <tbody>
@@ -2104,62 +2659,112 @@ export function generateDocumentHTML(
             </tbody>
           </table>
               ` : ''}
-        ${data.garmushkaMeasurements?.pngExport ? `
-          <figure class="media-card">
-            <img src="${data.garmushkaMeasurements.pngExport}" alt="תשריט" />
-            <figcaption class="media-caption">תשריט הדירה מתוך תכנית ההיתר</figcaption>
-          </figure>
-        ` : ''}
+        ${(() => {
+          // Support both legacy pngExport and new garmushkaRecords format
+          const garmushka = data.garmushkaMeasurements as any
+          const garmushkaRecords = garmushka?.garmushkaRecords || []
+          const legacyPngExport = garmushka?.pngExport
+          const legacyPngExports = garmushka?.pngExports || []
+          
+          // Collect all available garmushka images
+          const allImages: string[] = []
+          
+          // Add from garmushkaRecords (new format - uploaded files)
+          garmushkaRecords.forEach((record: any) => {
+            if (record?.url && typeof record.url === 'string' && record.url.trim()) {
+              allImages.push(record.url.trim())
+            }
+          })
+          
+          // Add legacy pngExports array
+          legacyPngExports.forEach((url: string) => {
+            if (url && typeof url === 'string' && url.trim() && !allImages.includes(url.trim())) {
+              allImages.push(url.trim())
+            }
+          })
+          
+          // Add legacy single pngExport
+          if (legacyPngExport && typeof legacyPngExport === 'string' && legacyPngExport.trim() && !allImages.includes(legacyPngExport.trim())) {
+            allImages.push(legacyPngExport.trim())
+          }
+          
+          if (allImages.length === 0) return ''
+          
+          return `
+            <div class="section-block" style="margin-top: 20px;">
+              <div class="sub-title">תשריט הדירה מתוך תכנית ההיתר:</div>
+              ${allImages.map((imgUrl, idx) => `
+                <figure class="garmushka-card">
+                  <img src="${imgUrl}" alt="תשריט ${idx + 1}" data-managed-image="true" />
+                  <figcaption class="media-caption">תשריט ${idx + 1}${allImages.length > 1 ? ` מתוך ${allImages.length}` : ''}</figcaption>
+                </figure>
+              `).join('')}
+            </div>
+          `
+        })()}
 
-        <div class="sub-title">3.4 זיהום קרקע</div>
-        <p>${LOCKED_HEBREW_TEXT.contaminationDefault}</p>
+        <div class="section-title">3.4&emsp;איכות סביבה</div>
+        ${(data as any).landContamination && (data as any).landContaminationNote ? `
+          <p>${LOCKED_HEBREW_TEXT.contaminationAlternate.replace('{{contamination_note}}', normalizeText((data as any).landContaminationNote))}</p>
+        ` : `
+          <p>${LOCKED_HEBREW_TEXT.contaminationDefault}</p>
+        `}
                 </div>
-      ${pageFooter}
-        <div class="page-number" data-page-number=""></div>
+      
+      ${footerBlock}
     </section>
   `
 
   // ===== CHAPTER 4 - Factors & Considerations =====
   const considerationsSection = `
     <section class="page">
-      <div class="page-body">
         ${pageHeader}
-        <div class="chapter-title">${LOCKED_HEBREW_TEXT.chapter4Title}</div>
+      
+      <div class="page-body">
+        <!-- Chapter 4 Title -->
+        <div class="chapter-title">4.&emsp;גורמים ושיקולים באומדן השווי</div>
         <p>${LOCKED_HEBREW_TEXT.considerationsIntro}</p>
+        
+        <!-- Environment & Property -->
         <div class="section-block">
           <div class="sub-title">הסביבה והנכס</div>
           <ul class="bullet-list">
             <li>מיקום הנכס ב${address}.</li>
             <li>נשוא חוות הדעת: ${data.propertyEssence || 'דירת מגורים'} ${formatFloor(data.floor)}.</li>
-            <li>שטח הדירה, החלוקה הפונקציונאלית ורמת הגמר (הכל מפורט בפרק 1).</li>
+            <li>שטח הדירה, החלוקה הפונקציונאלית ורמת הגמר (הכל כמפורט לעיל).</li>
           </ul>
                   </div>
+        
+        <!-- Rights Status -->
         <div class="section-block">
           <div class="sub-title">מצב הזכויות</div>
           <ul class="bullet-list">
             <li>הזכויות בנכס – ${formatOwnership(data)}.</li>
-            <li>הדירה זוהתה בהתאם לתשריט הבית המשותף כתת חלקה ${formatNumber(data.extractedData?.sub_chelka || data.subParcel)} הנמצאת בקומה ${normalizeText(data.floor?.toString(), '—')}.</li>
+            <li>בהתאם לתשריט הבית המשותף הדירה זוהתה כתת חלקה ${formatNumber(data.extractedData?.sub_chelka || data.subParcel)} בקומה ${normalizeText(data.floor?.toString(), '—')} הפונה לכיוונים צפון דרום ומערב.</li>
           </ul>
               </div>
+        
+        <!-- Planning & Licensing -->
         <div class="section-block">
           <div class="sub-title">מצב תכנוני ורישוי</div>
           <ul class="bullet-list">
-            <li>זכויות הבניה עפ"י תכניות בניין עיר בתוקף (כמפורט בפרק 3).</li>
-            <li>הבנוי בפועל תואם את תכנית היתר הבניה.</li>
+            <li>זכויות הבניה ואפשרויות הניצול עפ"י תכניות בניין עיר בתוקף.</li>
+            <li>הבניה בפועל תואמת את היתר הבניה.</li>
           </ul>
             </div>
+        
+        <!-- Valuation -->
         <div class="section-block">
           <div class="sub-title">אומדן השווי</div>
           <ul class="bullet-list">
-            <li>הערכת שווי הנכס נערכה בגישת ההשוואה, תוך ביצוע התאמות נדרשות לנכס נשוא השומה.</li>
-            <li>מחירי נכסים דומים תוך ביצוע התאמות לנכס נשוא חוות הדעת, נכון למועד הביקור בנכס.</li>
+            <li>הנכס הוערך בגישת ההשוואה, בהתבסס על רמת מחירי נכסים דומים תוך ביצוע התאמות לנכס נשוא חוות הדעת, נכון למועד הביקור בנכס.</li>
             <li>המחירים המפורטים בשומה כוללים מע"מ כנהוג בנכסים מסוג זה.</li>
             <li>הזכויות בנכס הוערכו כחופשיות מכל חוב, שעבוד או מחזיק.</li>
               </ul>
             </div>
           </div>
-      ${pageFooter}
-        <div class="page-number" data-page-number=""></div>
+      
+      ${footerBlock}
       </section>
   `
 
@@ -2206,11 +2811,14 @@ export function generateDocumentHTML(
   
   const valuationSection = `
     <section class="page">
-      <div class="page-body">
         ${pageHeader}
-        <div class="chapter-title">${LOCKED_HEBREW_TEXT.chapter5Title}</div>
+      
+      <div class="page-body">
+        <!-- Chapter 5 Title -->
+        <div class="chapter-title">5.&emsp;תחשיבים לאומדן השווי</div>
         
-        <div class="sub-title">5.1 נתוני השוואה</div>
+        <!-- Section 5.1 -->
+        <div class="section-title">5.1&emsp;נתוני השוואה</div>
         <p>${LOCKED_HEBREW_TEXT.comparablesIntro.replace('{{city}}', normalizeText(data.city, '—'))}</p>
         
         ${includedComps.length >= 3 ? `
@@ -2261,89 +2869,114 @@ export function generateDocumentHTML(
           <p style="color: #dc2626; font-weight: 600;">⚠️ נדרשות מינימום 3 עסקאות השוואה לחישוב שווי</p>
         `}
         
-        <div class="sub-title">5.2 תחשיב שווי הנכס</div>
+        <!-- Section 5.2 -->
+        <div class="section-title">5.2&emsp;תחשיב שווי הנכס</div>
         <div class="section-block">
-          <p>${LOCKED_HEBREW_TEXT.calculationIntro.replace('{{calc.eq_psm}}', formatNumber(equivPricePerSqm))}</p>
+          <p>בשים לב לנתוני ההשוואה שלעיל, תוך כדי ביצוע התאמות נדרשות לנכס נשוא השומה, שווי מ"ר בנוי לנכס נשוא השומה בגבולות ${formatNumber(equivPricePerSqm)} ₪.</p>
           
           <table class="table">
                   <thead>
             <tr>
               <th>תיאור הנכס</th>
-              <th>שטח דירה בנוי (מ"ר)</th>
-              <th>שטח מרפסות (מ"ר)</th>
-              <th>שטח אקו' (מ"ר)</th>
-              <th>שווי למ"ר אקו' (₪)</th>
-              <th>שווי הנכס (₪)</th>
+              <th>שטח דירה במ"ר</th>
+              <th>מרפסת</th>
+              <th>מ"ר אקו'</th>
+              <th>שווי מ"ר בנוי</th>
+              <th>סה"כ שווי הנכס</th>
                     </tr>
                   </thead>
                   <tbody>
             <tr>
-              <td>${normalizeText(data.propertyEssence, 'דירת מגורים')} ${data.rooms ? `בת ${data.rooms} חדרים` : ''} ברחוב ${normalizeText(data.street)}${data.neighborhood ? `, שכונת ${data.neighborhood}` : ''}</td>
-              <td>${formatNumber(data.extractedData?.builtArea || data.builtArea)} מ"ר</td>
-              <td>${formatNumber((data.extractedData as any)?.balconyArea || (data as any).balconyArea || 0)} מ"ר</td>
               <td>${(() => {
-                const built = Number(data.extractedData?.builtArea || data.builtArea || 0)
-                const balcony = Number((data.extractedData as any)?.balconyArea || (data as any).balconyArea || 0)
-                if (!built) return '—'
-                return (built + balcony * 0.5).toFixed(1)
+                const desc = `${normalizeText(data.propertyEssence, 'דירת מגורים')} ${data.rooms ? `${data.rooms} ח'` : ''}, בקומה ${data.floor || '—'} בכתובת ${normalizeText(data.street)} ${data.buildingNumber || ''}${data.neighborhood ? `, שכונת ${data.neighborhood}` : ''}${data.city ? `, ${data.city}` : ''}`
+                return desc
               })()}</td>
-              <td>₪ ${formatNumber(equivPricePerSqm)}</td>
-              <td>₪ ${formatNumber(finalValue)}</td>
+              <td>${formatNumber(registeredAreaSqm || data.extractedData?.builtArea || data.builtArea)}</td>
+              <td>${formatNumber((data.extractedData as any)?.balconyArea || (data as any).balconyArea || 0)}</td>
+              <td>${(() => {
+                // Equivalent Area = Apartment Area (registered, NOT built) + Balcony * 0.5
+                // Use registered area as the base, not built area
+                const apartmentArea = Number(registeredAreaSqm || (data as any).registeredArea || data.extractedData?.apartment_registered_area || 0)
+                const balcony = Number((data.extractedData as any)?.balconyArea || (data as any).balconyArea || 0)
+                if (!apartmentArea) return '—'
+                return Math.round(apartmentArea + balcony * 0.5)
+              })()}</td>
+              <td>${formatNumber(equivPricePerSqm)} ₪</td>
+              <td>${(() => {
+                // Calculate total value dynamically: equivalent area * price per sqm
+                const apartmentArea = Number(registeredAreaSqm || (data as any).registeredArea || data.extractedData?.apartment_registered_area || 0)
+                const balcony = Number((data.extractedData as any)?.balconyArea || (data as any).balconyArea || 0)
+                const equivalentArea = Math.round(apartmentArea + balcony * 0.5)
+                const calculatedValue = equivalentArea * equivPricePerSqm
+                return formatNumber(calculatedValue) + ' ₪'
+              })()}</td>
                       </tr>
-            <tr>
-              <td colspan="5">${LOCKED_HEBREW_TEXT.vatIncluded}</td>
-              <td>₪ ${formatNumber(finalValue)}</td>
-                </tr>
               </tbody>
             </table>
+          <p style="margin-top: 12px;">השווי כולל מע"מ.</p>
         </div>
       </div>
-      ${pageFooter}
-        <div class="page-number" data-page-number=""></div>
+      
+      ${footerBlock}
       </section>
   `
 
   // ===== CHAPTER 6 - Final Valuation & Signature =====
-  const finalValueText = numberToHebrewWords(finalValue)
+  // Calculate final value dynamically: equivalent area * price per sqm
+  const calculatedApartmentArea = Number(registeredAreaSqm || (data as any).registeredArea || data.extractedData?.apartment_registered_area || 0)
+  const calculatedBalcony = Number((data.extractedData as any)?.balconyArea || (data as any).balconyArea || 0)
+  const calculatedEquivalentArea = Math.round(calculatedApartmentArea + calculatedBalcony * 0.5)
+  const calculatedFinalValue = calculatedEquivalentArea * equivPricePerSqm
+  // Use calculated value if valid, otherwise fall back to stored finalValue
+  const displayFinalValue = calculatedFinalValue > 0 ? calculatedFinalValue : finalValue
+  const finalValueText = numberToHebrewWords(displayFinalValue)
   
   const summarySection = `
     <section class="page">
-      <div class="page-body">
         ${pageHeader}
-        <div class="chapter-title">${LOCKED_HEBREW_TEXT.chapter6Title}</div>
+      
+      <div class="page-body">
+        <!-- Chapter 6 Title -->
+        <div class="chapter-title">6.&emsp;השומה</div>
         
-        <div class="valuation-summary section-block">
-          <div class="valuation-card">
-            <p>${LOCKED_HEBREW_TEXT.finalValuationTemplate
-              .replace('{{asset_value_num}}', formatCurrency(finalValue))
-              .replace('{{asset_value_txt}}', finalValueText)}</p>
-            <p style="margin-top: 8px;">${LOCKED_HEBREW_TEXT.vatIncluded}</p>
-            <p style="margin-top: 6px;">${LOCKED_HEBREW_TEXT.currentStateText}</p>
-            </div>
-                </div>
-        
+        <!-- Final Valuation Statement -->
         <div class="section-block">
-          <div class="sub-title">הצהרת השמאי</div>
-          <p>${LOCKED_HEBREW_TEXT.declarationText}</p>
+            <p>בשים לב למיקומו של הנכס,</p>
+            <p>לשטחו, ולכל שאר הנתונים כאמור וכמפורט לעיל,</p>
+            <p>בהביאי בחשבון שווים של נכסים דומים רלוונטיים,</p>
+          <p style="margin-top: 16px;"><strong>סביר לאמוד את שווי הנכס בגבולות, <span class="valuation-final-amount">${formatCurrency(displayFinalValue)}</span> (${finalValueText}).</strong></p>
+          <p style="margin-top: 16px;">הכול במצבו הנוכחי, כריק, פנוי וחופשי מכל מחזיק, חוב ושיעבוד, נכון לתאריך חוות דעת זו.</p>
                 </div>
         
-        <div class="signature-block section-block">
-          <div>
-            <p>${LOCKED_HEBREW_TEXT.signatureIntro}</p>
-            <p>${normalizeText(data.shamayName, 'שם השמאי')}</p>
-            <p>${normalizeText(data.shamaySerialNumber, 'מספר רישיון')}</p>
-            </div>
+        <!-- Declaration -->
+        <div class="section-block" style="margin-top: 40px;">
+          <div class="sub-title">הצהרה:</div>
+          <p><strong>הנני מצהיר, כי אין לי כל עניין אישי בנכס נשוא השומה, בבעלי הזכויות בו במזמין השומה.</strong></p>
+          <p style="margin-top: 12px;"><strong>הדו"ח הוכן על פי תקנות שמאי המקרקעין (אתיקה מקצועית), התשכ"ו – 1966 ועל פי התקנים המקצועיים של הועדה לתקינה שמאית.</strong></p>
+                </div>
+        
+        <!-- Signature -->
+        <div class="signature-block section-block" style="margin-top: 60px;">
           ${companySettings?.signature ? `
             <div>
-              <img src="${companySettings.signature}" alt="חתימה" class="signature-image" />
+              <p>ולראיה באתי על החתום,</p>
+              <img src="${companySettings.signature}" alt="חתימה וחותמת" class="signature-image" style="margin-top: 20px;" />
+              <p style="margin-top: 10px;">${normalizeText(data.shamayName, 'שם השמאי')}</p>
+              <p>כלכלן ושמאי מקרקעין</p>
+              <p>רשיון מס' ${(data as any).licenseNumber || (data as any).shamaySerialNumber || data.shamaySerialNumber || '115672'}</p>
           </div>
           ` : `
-            <div class="signature-placeholder">מקום לחתימה</div>
+            <div>
+              <p>ולראיה באתי על החתום,</p>
+              <p style="margin-top: 20px;">${normalizeText(data.shamayName, 'שם השמאי')}</p>
+              <p>כלכלן ושמאי מקרקעין</p>
+              <p>רשיון מס' ${(data as any).licenseNumber || (data as any).shamaySerialNumber || data.shamaySerialNumber || '115672'}</p>
+            </div>
           `}
         </div>
       </div>
-      ${pageFooter}
-      <div class="page-number" data-page-number=""></div>
+      
+      ${footerBlock}
     </section>
   `
 

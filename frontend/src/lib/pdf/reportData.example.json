@@ -1,0 +1,255 @@
+{
+  "meta": {
+    "documentTitle": "אומדן שווי זכויות במקרקעין",
+    "reportDate": "02 יוני 2025",
+    "referenceNumber": "1000_רחוב הרצל 12 תל אביב",
+    "clientName": "יוסי כהן",
+    "inspectionDate": "15.05.2025",
+    "valuationDate": "15.05.2025",
+    "appraiserName": "מני מנשה"
+  },
+  "address": {
+    "street": "רחוב הרצל",
+    "buildingNumber": "12",
+    "neighborhood": "נווה צדק",
+    "city": "תל אביב",
+    "fullAddressLine": "רחוב הרצל 12, שכונת נווה צדק, תל אביב"
+  },
+  "cover": {
+    "coverImage": {
+      "src": "data:image/jpeg;base64,...",
+      "caption": "תמונת חזית הבניין"
+    },
+    "logo": {
+      "src": "data:image/png;base64,..."
+    }
+  },
+  "section1": {
+    "environmentDescription": "הנכס ממוקם ברחוב הרצל 12 בשכונת נווה צדק בתל אביב, שכונה בעלת אופי ייחודי המשלבת מבנים היסטוריים עם בנייה מודרנית. השכונה נמצאת בסמוך לחוף הים, ומהווה מוקד תיירותי ותרבותי. התחבורה הציבורית נגישה מאוד עם קווי אוטובוס רבים ותחנת רכבת בקרבת מקום. באזור קיימים מוסדות חינוך, מסחר, תרבות ופנאי המספקים איכות חיים גבוהה לתושבים.",
+    "environmentMap": {
+      "src": "data:image/png;base64,...",
+      "caption": "מפת סביבה - GOVMAP"
+    },
+    "parcel": {
+      "gush": "6434",
+      "helka": "618",
+      "parcelAreaSqm": 1413,
+      "buildingYear": 1996,
+      "buildingFloors": 6,
+      "buildingUnits": 24,
+      "numberOfBuildings": 1,
+      "parcelShape": "מלבנית",
+      "parcelSurface": "מישורית",
+      "parcelSketch": {
+        "src": "data:image/png;base64,...",
+        "caption": "תשריט חלקה ותצ\"א משנת 2024"
+      },
+      "boundaries": {
+        "west": "רחוב הרצל",
+        "east": "רחוב רוטשילד",
+        "north": "רחוב שלוש",
+        "south": "רחוב יהודה הלוי"
+      }
+    },
+    "property": {
+      "subParcel": "11",
+      "rooms": 4,
+      "floor": 6,
+      "airDirections": "צפון-דרום-מערב",
+      "registeredAreaSqm": 142.3,
+      "builtAreaSqm": 164,
+      "balconyAreaSqm": 40.8,
+      "attachmentsText": "חניה ומרפסת",
+      "internalLayoutAndFinish": "הדירה בחלוקה פנימית: סלון מרכזי, 3 חדרי שינה, מטבח מאובזר, 2 חדרי רחצה. סטנדרט הגמר בדירה ברמה גבוהה וכולל: ריצוף פרקט בחדרים, אריחי קרמיקה במטבח ובחדרי רחצה, חלונות אלומיניום כפולים, מזגן מרכזי, ארונות מובנים.",
+      "photos": [
+        {
+          "src": "data:image/jpeg;base64,...",
+          "caption": "סלון"
+        },
+        {
+          "src": "data:image/jpeg;base64,...",
+          "caption": "מטבח"
+        },
+        {
+          "src": "data:image/jpeg;base64,...",
+          "caption": "חדר שינה ראשי"
+        },
+        {
+          "src": "data:image/jpeg;base64,...",
+          "caption": "מרפסת"
+        }
+      ]
+    }
+  },
+  "section2": {
+    "registryOfficeName": "תל אביב-יפו",
+    "tabuIssueDate": "30.4.2025",
+    "easementsText": "אין זיקות",
+    "ownerships": [
+      {
+        "name": "יוסי כהן",
+        "id": "ת.ז. 123456789",
+        "share": "1/1"
+      }
+    ],
+    "mortgagesText": "אין משכנתאות רשומות",
+    "notesText": "אין הערות",
+    "condoOrder": {
+      "orderDate": "8.12.2003",
+      "buildingDescription": "הבית מורכב ממבנה אחד בן 3 כניסות, 6 קומות + קומת גג, 24 יחידות דיור",
+      "subParcelDescription": "תת חלקה 11, דירה בקומה 6 בשטח של 142.3 מ\"ר. חלק ברכוש המשותף – 12/195",
+      "sketches": [
+        {
+          "src": "data:image/png;base64,...",
+          "caption": "תשריט קומת קרקע (חניה)"
+        },
+        {
+          "src": "data:image/png;base64,...",
+          "caption": "תשריט קומה 6 (נשוא חו\"ד בצבע אדום)"
+        }
+      ]
+    },
+    "legalDisclaimerText": "אין בתיאור המצב המשפטי כדי להוות חוות דעת משפטן. במידה וקיימים מסמכים שלא הובאו לידיעתו, ייתכן ויהיה בהם כדי לשנות את ההערכה."
+  },
+  "section3": {
+    "plansTable": [
+      {
+        "planId": "תב\"ע 1000",
+        "planName": "תכנית בניין עיר כללית",
+        "publishDate": "15.01.2000",
+        "status": "בתוקף"
+      },
+      {
+        "planId": "תב\"ע 2000",
+        "planName": "תכנית מפורטת מרכז העיר",
+        "publishDate": "20.03.2010",
+        "status": "בתוקף"
+      },
+      {
+        "planId": "תב\"ע 3000",
+        "planName": "תכנית שימור נווה צדק",
+        "publishDate": "10.05.2015",
+        "status": "בתוקף"
+      },
+      {
+        "planId": "תב\"ע 4000",
+        "planName": "תכנית פיתוח תחבורה",
+        "publishDate": "05.08.2020",
+        "status": "בתוקף"
+      }
+    ],
+    "rightsSummary": {
+      "designation": "מגורים",
+      "minLotSizeSqm": 985,
+      "buildPercentage": 150,
+      "maxFloors": 5,
+      "maxUnits": 12,
+      "buildingLines": "קדמי – 5 מ', צידי – 4 מ', אחורי – 6 מ'"
+    },
+    "permits": [
+      {
+        "permitNumber": "4567",
+        "permitDate": "12.2.1999",
+        "description": "הקמת מבנה מגורים בן 6 קומות"
+      },
+      {
+        "permitNumber": "7890",
+        "permitDate": "15.5.2005",
+        "description": "הוספת מרפסות ושיפוץ חזית"
+      }
+    ],
+    "completionCertificate": {
+      "date": "20.6.2000",
+      "address": "רחוב הרצל 12, תל אביב",
+      "text": "תעודת גמר מאשרת כי הבניין הוקם בהתאם לתנאי ההיתר העדכני"
+    },
+    "planImage": {
+      "src": "data:image/png;base64,...",
+      "caption": "קטע מתכנית 990"
+    },
+    "apartmentPlan": {
+      "src": "data:image/png;base64,...",
+      "caption": "תשריט הדירה מתוך תכנית היתר הבניה"
+    },
+    "environmentQualityText": "בחוות דעת זו לא הובאו לידיעת הח\"מ ולא הייתה לח\"מ סיבה לחשד לקיומם של חומרים מסוכנים או מזהמים. קיומם של חומרים מסוכנים/מזהמים יכול להשפיע על שווי הנכס ו/או לגרור עלויות טיפול ו/או מיגון. השווי בהערכה זו מבוסס על ההנחה כי אין חומרים מזהמים קיימים בנכס או בסביבתו אשר יכולים להשפיע על שווי הנכס."
+  },
+  "section4": {
+    "introText": "באומדן שווי הנכס הובאו בחשבון, בין היתר, הגורמים והשיקולים הבאים:",
+    "bullets": {
+      "environmentAndAsset": [
+        "מיקום הנכס ברחוב הרצל 12 בתל אביב, בשכונת נווה צדק.",
+        "נשוא חוות הדעת: דירת מגורים בת 4 חדרים עם 3 כיווני אוויר בקומה 6.",
+        "שטח הדירה, החלוקה הפונקציונאלית ורמת הגמר (הכל מפורט בפרק 1)."
+      ],
+      "rightsStatus": [
+        "הזכויות בנכס – בעלות פרטית.",
+        "הדירה זוהתה בהתאם לתשריט הבית המשותף כתת חלקה 11 הנמצאת בקומה 6."
+      ],
+      "planningAndPermits": [
+        "זכויות הבניה עפ\"י תכניות בניין עיר בתוקף (כמפורט בפרק 3).",
+        "היתר בניה מס' 4567 מיום 12.2.1999.",
+        "הבנוי בפועל תואם את תכנית היתר הבניה."
+      ],
+      "valuation": [
+        "הערכת שווי הנכס נערכה בגישת ההשוואה, תוך ביצוע התאמות נדרשות לנכס נשוא השומה.",
+        "מחירי נכסים דומים תוך ביצוע התאמות לנכס נשוא חוות הדעת, נכון למועד הביקור בנכס.",
+        "המחירים המפורטים בשומה כוללים מע\"מ כנהוג בנכסים מסוג זה.",
+        "הזכויות בנכס הוערכו כחופשיות מכל חוב, שעבוד או מחזיק."
+      ]
+    }
+  },
+  "section5": {
+    "comparablesTable": [
+      {
+        "saleDate": "15.03.2025",
+        "address": "רחוב הרצל 10",
+        "gushHelka": "6434/617",
+        "rooms": 4,
+        "floor": 5,
+        "areaSqm": 160,
+        "buildYear": 1995,
+        "priceIls": 5600000,
+        "pricePerSqmIls": 35000
+      },
+      {
+        "saleDate": "20.02.2025",
+        "address": "רחוב שלוש 8",
+        "gushHelka": "6434/619",
+        "rooms": 4,
+        "floor": 4,
+        "areaSqm": 155,
+        "buildYear": 1998,
+        "priceIls": 5425000,
+        "pricePerSqmIls": 35000
+      },
+      {
+        "saleDate": "10.01.2025",
+        "address": "רחוב רוטשילד 15",
+        "gushHelka": "6434/620",
+        "rooms": 4,
+        "floor": 6,
+        "areaSqm": 168,
+        "buildYear": 1996,
+        "priceIls": 5880000,
+        "pricePerSqmIls": 35000
+      }
+    ],
+    "valuationCalc": {
+      "pricePerBuiltSqmIls": 35000,
+      "description": "דירת 4 חדרים, בקומה 6, עם 3 כיווני אוויר",
+      "builtAreaSqm": 164,
+      "balconyAreaSqm": 40.8,
+      "equityAreaSqm": 184.4,
+      "totalValueIls": 6454000,
+      "includesVat": true
+    }
+  },
+  "section6": {
+    "finalValueIls": 6454000,
+    "finalValueText": "שישה מיליון ארבע מאות חמישים וארבעה אלף שקל",
+    "freeFromDebtsText": "הכול במצבו הנוכחי, כריק, פנוי וחופשי מכל מחזיק, חוב ושיעבוד, נכון לתאריך חוות-דעת זו.",
+    "declarationText": "הננו מצהירים, כי אין לנו כל עניין אישי בנכס נשוא השומה, בבעלי הזכויות בו במזמין השומה.",
+    "standardsText": "הדו\"ח הוכן על פי תקנות שמאי המקרקעין (אתיקה מקצועית), התשכ\"ו – 1966 ועל פי התקנים המקצועיים של הועדה לתקינה שמאית."
+  }
+}
+

@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useCallback, useRef, useEffect } from 'react'
-import { Upload, FileText, Image, CheckCircle, AlertCircle, X, Eye, Star, Loader2, AlertTriangle } from 'lucide-react'
+import { Upload, FileText, Image, CheckCircle, AlertCircle, X, Eye, Star, Loader2, AlertTriangle, Brain } from 'lucide-react'
 import { DataSource } from '../ui/DataSource'
 
 interface DocumentUpload {
@@ -346,6 +346,12 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
 
       for (const task of tasks) {
         setProcessingStage(task.label)
+        setProcessingProgress(prev => {
+          const baseProgress = 15
+          const currentTaskProgress = completedTasks * progressAllocation
+          return Math.min(75, Math.round(baseProgress + currentTaskProgress))
+        })
+        
         try {
           const value = await task.run()
           results.push({ type: task.type, status: 'fulfilled', value })
@@ -1583,25 +1589,63 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
             </div>
           )}
           
-          {/* Processing State */}
+          {/* Processing State - Enhanced Spinner */}
           {isProcessing && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-xl p-8 shadow-lg">
               <div className="text-center">
-                <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-blue-900 mb-2">מעבד מסמכים...</h3>
-                <p className="text-blue-700 text-sm">
+                {/* Animated Spinner */}
+                <div className="relative inline-block mb-6">
+                  <div className="w-20 h-20 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Brain className="w-8 h-8 text-blue-600 animate-pulse" />
+                  </div>
+                </div>
+                
+                <h3 className="text-xl font-bold text-blue-900 mb-3">מעבד מסמכים עם AI...</h3>
+                <p className="text-blue-800 text-base font-medium mb-6">
                   {processingStage || 'מנתח מסמכים ומחלץ נתונים באמצעות AI'}
                 </p>
-                <div className="w-full bg-blue-100 h-2 rounded-full overflow-hidden mt-4">
+                
+                {/* Enhanced Progress Bar */}
+                <div className="w-full bg-blue-100 h-3 rounded-full overflow-hidden shadow-inner mb-2">
                   <div
-                    className="h-full bg-blue-500 transition-all duration-500"
+                    className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 transition-all duration-700 ease-out relative overflow-hidden"
                     style={{ width: `${Math.min(100, Math.max(0, processingProgress))}%` }}
-                  />
+                  >
+                    {/* Shimmer effect */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-30 animate-shimmer"></div>
+                  </div>
                 </div>
-                <p className="text-xs text-blue-600 mt-2">{Math.min(100, Math.max(0, processingProgress))}%</p>
-                <div className="mt-4 text-sm text-blue-600">
-                  <p>⏱️ זה עשוי לקחת מספר דקות</p>
-                  <p>💰 עלות: ~$0.50-2.00 למסמך</p>
+                
+                {/* Progress Percentage */}
+                <div className="flex items-center justify-center gap-2 mb-6">
+                  <div className="text-2xl font-bold text-blue-700">
+                    {Math.min(100, Math.max(0, Math.round(processingProgress)))}
+                  </div>
+                  <div className="text-sm text-blue-600">%</div>
+                </div>
+                
+                {/* Info Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                  <div className="bg-white/70 rounded-lg p-4 border border-blue-200">
+                    <div className="flex items-center gap-2 text-blue-700">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                      <span className="text-sm font-medium">⏱️ זה עשוי לקחת מספר דקות</span>
+                    </div>
+                  </div>
+                  <div className="bg-white/70 rounded-lg p-4 border border-blue-200">
+                    <div className="flex items-center gap-2 text-blue-700">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                      <span className="text-sm font-medium">💰 עלות: ~$0.50-2.00 למסמך</span>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Tips */}
+                <div className="mt-6 pt-6 border-t border-blue-200">
+                  <p className="text-xs text-blue-600 italic">
+                    💡 טיפ: תוכל להמשיך לעבוד על שומות אחרות בזמן שהעיבוד מתבצע
+                  </p>
                 </div>
               </div>
             </div>

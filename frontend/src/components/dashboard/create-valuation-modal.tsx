@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,15 +11,32 @@ interface CreateValuationModalProps {
   onOpenChange: (open: boolean) => void
 }
 
+const LAST_ADDRESS_KEY = 'shamay_last_address'
+
 export function CreateValuationModal({ open, onOpenChange }: CreateValuationModalProps) {
   const [formData, setFormData] = useState({
     title: '',
     addressFull: '',
-    block: '',
-    parcel: '',
-    subparcel: '',
+    // גוש, חלקה ותת-חלקה ימולאו אוטומטית מנתוני הטאבו
   })
   const [isLoading, setIsLoading] = useState(false)
+
+  // טען כתובת אחרונה כשהמודאל נפתח
+  useEffect(() => {
+    if (open) {
+      const lastAddress = localStorage.getItem(LAST_ADDRESS_KEY)
+      if (lastAddress) {
+        setFormData(prev => ({ ...prev, addressFull: lastAddress }))
+      }
+    }
+  }, [open])
+
+  // נקה את הטופס כשהמודאל נסגר
+  useEffect(() => {
+    if (!open) {
+      setFormData({ title: '', addressFull: '' })
+    }
+  }, [open])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -51,6 +68,12 @@ export function CreateValuationModal({ open, onOpenChange }: CreateValuationModa
       
       if (response.ok) {
         const { valuation } = await response.json()
+        
+        // שמור את הכתובת ב-localStorage לשימוש עתידי
+        if (formData.addressFull) {
+          localStorage.setItem(LAST_ADDRESS_KEY, formData.addressFull)
+        }
+        
         onOpenChange(false)
         // Navigate to the wizard with the session ID
         window.location.href = `/wizard?sessionId=${sessionId}`
@@ -80,40 +103,18 @@ export function CreateValuationModal({ open, onOpenChange }: CreateValuationModa
           </div>
           
           <div>
-            <Label htmlFor="addressFull">כתובת מלאה</Label>
+            <Label htmlFor="addressFull">כתובת מלאה *</Label>
             <Input
               id="addressFull"
               value={formData.addressFull}
               onChange={(e) => setFormData(prev => ({ ...prev, addressFull: e.target.value }))}
               required
+              placeholder="לדוגמה: רחוב הרצל 15, תל אביב"
+              dir="rtl"
             />
-          </div>
-          
-          <div className="grid grid-cols-3 gap-2">
-            <div>
-              <Label htmlFor="block">גוש</Label>
-              <Input
-                id="block"
-                value={formData.block}
-                onChange={(e) => setFormData(prev => ({ ...prev, block: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label htmlFor="parcel">חלקה</Label>
-              <Input
-                id="parcel"
-                value={formData.parcel}
-                onChange={(e) => setFormData(prev => ({ ...prev, parcel: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label htmlFor="subparcel">תת</Label>
-              <Input
-                id="subparcel"
-                value={formData.subparcel}
-                onChange={(e) => setFormData(prev => ({ ...prev, subparcel: e.target.value }))}
-              />
-            </div>
+            <p className="text-xs text-gray-500 mt-1 text-right">
+              💡 גוש, חלקה ותת-חלקה ימולאו אוטומטית לאחר העלאת נסח הטאבו בשלב 2
+            </p>
           </div>
           
           <div className="flex justify-end gap-2">

@@ -210,6 +210,8 @@ const GISMapCaptureEditor: React.FC<MapCaptureEditorProps> = ({
       <AddressSearchPanel
         sessionId={sessionId}
         initialAddress={initialAddress}
+        initialStreet={initialAddress?.split(' ')[0]} // Extract street from address if available
+        initialCity={initialAddress?.split(',').pop()?.trim()} // Extract city from address if available
         onAddressFound={handleAddressSearch}
         onError={(error) => {
           showMessage(error.message, 'error')

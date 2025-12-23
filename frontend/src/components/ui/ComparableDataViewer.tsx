@@ -102,11 +102,48 @@ export default function ComparableDataViewer({
     }
   }, [wasRestored])
 
-  // Extract property data from ValuationData
+  // Extract property data from ValuationData - try multiple sources
   const propertyBlock = useMemo(() => {
-    // Try to extract block number from land registry data
+    // Try multiple sources for gush (block number)
+    // 1. Direct from data.gush
+    if (data.gush) return String(data.gush).trim()
+    
+    // 2. From extractedData
+    const extractedData = (data as any).extractedData
+    if (extractedData?.gush) return String(extractedData.gush).trim()
+    
+    // 3. From land registry object
     const landRegistry = (data as any).landRegistry
-    if (landRegistry?.gush) return String(landRegistry.gush)
+    if (landRegistry?.gush) return String(landRegistry.gush).trim()
+    
+    // 4. From land_registry nested object
+    const landRegistryNested = (data as any).land_registry
+    if (landRegistryNested?.gush) return String(landRegistryNested.gush).trim()
+    
+    return ''
+  }, [data])
+  
+  // Extract parcel (chelka) from ValuationData - try multiple sources
+  const propertyParcel = useMemo(() => {
+    // Try multiple sources for parcel (chelka)
+    // 1. Direct from data.parcel
+    if (data.parcel) return String(data.parcel).trim()
+    
+    // 2. From extractedData
+    const extractedData = (data as any).extractedData
+    if (extractedData?.parcel) return String(extractedData.parcel).trim()
+    if (extractedData?.chelka) return String(extractedData.chelka).trim()
+    
+    // 3. From land registry object
+    const landRegistry = (data as any).landRegistry
+    if (landRegistry?.parcel) return String(landRegistry.parcel).trim()
+    if (landRegistry?.chelka) return String(landRegistry.chelka).trim()
+    
+    // 4. From land_registry nested object
+    const landRegistryNested = (data as any).land_registry
+    if (landRegistryNested?.parcel) return String(landRegistryNested.parcel).trim()
+    if (landRegistryNested?.chelka) return String(landRegistryNested.chelka).trim()
+    
     return ''
   }, [data])
 
@@ -247,12 +284,26 @@ export default function ComparableDataViewer({
     return () => clearTimeout(timer)
   }, [searchTransactions])
 
-  // Initial load based on property data
+  // Initial load based on property data - update filters when data changes
   useEffect(() => {
     if (propertyBlock) {
-      setFilters(prev => ({ ...prev, blockNumber: propertyBlock }))
+      setFilters(prev => {
+        // Only update if the block number is different and not empty
+        if (prev.blockNumber !== propertyBlock && propertyBlock.trim() !== '') {
+          return { ...prev, blockNumber: propertyBlock }
+        }
+        return prev
+      })
     }
   }, [propertyBlock])
+  
+  // Also update when component mounts or data changes significantly
+  useEffect(() => {
+    // If filters are empty and we have data, populate them
+    if (!filters.blockNumber && propertyBlock) {
+      setFilters(prev => ({ ...prev, blockNumber: propertyBlock }))
+    }
+  }, []) // Run once on mount
 
   // Toggle selection
   const toggleSelection = (id: number) => {
@@ -618,12 +669,15 @@ export default function ComparableDataViewer({
             </label>
             <input
               type="text"
-              value={filters.blockNumber}
+              value={filters.blockNumber || propertyBlock || ''}
               onChange={(e) => setFilters(prev => ({ ...prev, blockNumber: e.target.value }))}
-              placeholder="מספר גוש"
+              placeholder={propertyBlock ? `מספר גוש (${propertyBlock})` : "מספר גוש"}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               required
             />
+            {propertyBlock && !filters.blockNumber && (
+              <p className="text-xs text-blue-600 mt-1">📋 נשלף מהדיבי: {propertyBlock}</p>
+            )}
             </div>
 
           {/* Filter 2: מ"ר (Surface Area) */}

@@ -53,6 +53,14 @@ export async function GET(request: NextRequest, { params }: { params: { sessionI
       
       // Return cached data with ETag
       console.log(`✅ Cache hit: Session ${sessionId}`)
+      console.log('🔍 [API GET] Cached data keys:', Object.keys(cached.data || {}))
+      console.log('🔍 [API GET] Cached critical fields:', {
+        clientTitle: cached.data?.clientTitle,
+        valuationType: cached.data?.valuationType,
+        clientNote: cached.data?.clientNote,
+        clientRelation: cached.data?.clientRelation,
+        valuationEffectiveDate: cached.data?.valuationEffectiveDate
+      })
       return NextResponse.json(
         {
           sessionId,
@@ -128,6 +136,76 @@ export async function PUT(request: NextRequest, { params }: { params: { sessionI
       })
     }
 
+    // Validate and sanitize extractedData if present
+    if (data.extractedData) {
+      try {
+        // Ensure extractedData can be serialized
+        JSON.stringify(data.extractedData)
+        
+        // Clean up any undefined values, null values in arrays, and circular references
+        const cleanExtractedData = (obj: any, seen = new WeakSet()): any => {
+          if (obj === null || obj === undefined) {
+            return null
+          }
+          
+          // Handle circular references
+          if (typeof obj === 'object') {
+            if (seen.has(obj)) {
+              return null // Break circular reference
+            }
+            seen.add(obj)
+          }
+          
+          if (Array.isArray(obj)) {
+            return obj.map(item => cleanExtractedData(item, seen)).filter(item => item !== undefined && item !== null)
+          }
+          
+          if (typeof obj === 'object') {
+            const cleaned: any = {}
+            for (const [key, value] of Object.entries(obj)) {
+              // Skip functions and undefined
+              if (value !== undefined && typeof value !== 'function') {
+                const cleanedValue = cleanExtractedData(value, seen)
+                if (cleanedValue !== undefined) {
+                  cleaned[key] = cleanedValue
+                }
+              }
+            }
+            return cleaned
+          }
+          
+          // Handle special values
+          if (typeof obj === 'number' && (isNaN(obj) || !isFinite(obj))) {
+            return null
+          }
+          
+          return obj
+        }
+        
+        data.extractedData = cleanExtractedData(data.extractedData)
+        
+        // Final validation - ensure it can still be serialized after cleaning
+        JSON.stringify(data.extractedData)
+      } catch (error) {
+        console.error('Error validating extractedData:', error)
+        console.error('Problematic extractedData:', JSON.stringify(data.extractedData, null, 2).substring(0, 500))
+        return NextResponse.json({ 
+          error: 'Invalid extractedData format - cannot serialize',
+          details: error instanceof Error ? error.message : 'Unknown error'
+        }, { status: 400 })
+      }
+    }
+
+    // Debug: Check what we're about to save
+    console.log('🔍 API PUT - About to save:', {
+      clientTitle: data.clientTitle,
+      clientTitleType: typeof data.clientTitle,
+      clientTitleIn: 'clientTitle' in data,
+      valuationType: data.valuationType,
+      valuationTypeType: typeof data.valuationType,
+      valuationTypeIn: 'valuationType' in data
+    })
+    
     // Save to shuma table
     const result = await ShumaDB.saveShumaFromSession(
       sessionId,
@@ -137,6 +215,7 @@ export async function PUT(request: NextRequest, { params }: { params: { sessionI
     )
 
     if (result.error) {
+      console.error('ShumaDB.saveShumaFromSession error:', result.error)
       return NextResponse.json({ error: result.error }, { status: 500 })
     }
     
@@ -156,7 +235,10 @@ export async function PUT(request: NextRequest, { params }: { params: { sessionI
     })
   } catch (error: any) {
     console.error('Session PUT error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ 
+      error: error.message || 'Internal server error',
+      details: error.stack 
+    }, { status: 500 })
   }
 }
 
