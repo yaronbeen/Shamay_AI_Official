@@ -84,7 +84,7 @@ export async function POST(
     const mappedData = {
       gush: extractedData.gush,
       chelka: extractedData.chelka,
-      sub_chelka: extractedData.subChelka,
+      sub_chelka: extractedData.subParcel || extractedData.sub_parcel || extractedData.subChelka,
       registration_office: extractedData.registrationOffice,
       ownership_type: extractedData.ownershipType,
       document_type: extractedData.documentType,

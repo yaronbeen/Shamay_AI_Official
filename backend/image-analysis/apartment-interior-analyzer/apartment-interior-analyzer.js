@@ -87,8 +87,23 @@ class ApartmentInteriorAnalyzer {
                 throw new Error('Unexpected response format from Gemini API');
             }
             
-            // Parse structured data if possible
-            const structuredData = this.parseStructuredData(analysis);
+            // Try to extract JSON from the response first (if AI provided structured data)
+            let structuredData = null;
+            const jsonMatch = analysis.match(/```json\s*([\s\S]*?)\s*```/);
+            if (jsonMatch) {
+                try {
+                    structuredData = JSON.parse(jsonMatch[1]);
+                    // Remove JSON block from analysis text for cleaner description
+                    analysis = analysis.replace(/```json\s*[\s\S]*?\s*```/g, '').trim();
+                } catch (parseError) {
+                    console.warn('Failed to parse JSON from response, falling back to text parsing:', parseError);
+                }
+            }
+            
+            // If no JSON found, fall back to text parsing
+            if (!structuredData) {
+                structuredData = this.parseStructuredData(analysis);
+            }
 
             return {
                 success: true,
@@ -137,7 +152,19 @@ class ApartmentInteriorAnalyzer {
 **דוגמה לסגנון הכתיבה הרצוי**:
 "החדר המצולם מהווה סלון מרווח בשטח משוער של כ-30 מ"ר, בעל חלוקה פנימית פתוחה עם יציאה למרפסת. הרצפה מצופה בקרמיקה איכותית, והתקרה בגובה סטנדרטי של כ-2.70 מ'. סטנדרט הגימור בחדר טוב מאוד, כולל חלונות זכוכית במסגרות אלומיניום, תריסים חשמליים, ומיזוג אוויר מרכזי. החדר נהנה מתאורה טבעית מצוינת..."
 
-אנא ספק תיאור מפורט, מקצועי ורציף בעברית בלבד.`;
+**חשוב מאוד**: בסוף התיאור הטקסטואלי, אנא הוסף גם נתונים מובנים בפורמט JSON בתוך בלוק code:
+
+\`\`\`json
+{
+  "room_type": "living_room/bedroom/kitchen/bathroom/balcony",
+  "area_estimate": מספר_משוער_במ"ר_או_null,
+  "finish_level": "יוקרתי/טוב/בינוני/בסיסי" או null,
+  "condition": "excellent/good/fair/poor" או null,
+  "features": ["built_in_storage", "natural_light", "hardwood_floor", "tile_floor", "high_ceiling", "balcony", "air_conditioning"]
+}
+\`\`\`
+
+אנא ספק תיאור מפורט, מקצועי ורציף בעברית בלבד, ואז את הנתונים המובנים ב-JSON.`;
 
         // Add specific focus areas if requested
         if (options.focusAreas && options.focusAreas.length > 0) {

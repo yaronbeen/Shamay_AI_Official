@@ -101,6 +101,58 @@ CONFIDENCE SCORES:
 For each field, provide a confidence score from 0-1 based on text clarity and certainty.
 Also provide context explaining where/how the information was found.
 
+CRITICAL FIELD EXTRACTION GUIDANCE:
+
+1. built_area (שטח בנוי):
+   - Look for "שטח בנוי", "שטח במ\"ר", "שטח בנוי במ\"ר" in the unit description section
+   - May appear as a separate field or within the property description
+   - If not found explicitly, try to calculate from registered_area + balcony_area if both are available
+   - If still not found, return null (do NOT guess or estimate)
+
+2. finish_standard (רמת גימור):
+   - Look for "רמת גימור", "סטנדרט גימור", "גימור" in property description or unit details
+   - Common values: "יוקרתי", "טוב", "בינוני", "בסיסי", "סטנדרטי"
+   - May be implied from property description (e.g., "דירה משופצת" = טוב, "דירה יוקרתית" = יוקרתי)
+   - If not found, return null
+
+3. construction_year (שנת בנייה):
+   - Look for "שנת בנייה", "נבנה ב-", "בנייה משנת", "הוקם ב-" in property details
+   - Extract 4-digit year (e.g., 1995, 2008, 2015)
+   - May appear in building description or property notes
+   - If not found, return null
+
+4. shared_areas (שטחים משותפים):
+   - Look for "שטחים משותפים", "רכוש משותף", "חלקים ברכוש המשותף"
+   - Can appear as fraction (e.g., "104/5975") or as description text
+   - Check both the unit section and the shared property section
+   - If found as fraction, extract the full fraction string
+   - If found as description, extract the description text
+   - If not found, return null
+
+5. property_condition (מצב הנכס):
+   - Look for "מצב הנכס", "מצב", "תחזוקה" in property description
+   - Common values: "מצוין", "טוב", "בינוני", "דורש שיפוץ", "משופץ"
+   - May be implied from description (e.g., "דירה משופצת" = טוב)
+   - If not found, return null
+
+6. attachments (הצמדות):
+   - Look for "הצמדות", "צמודות" section in the document
+   - Extract ALL attachments, not just the first one
+   - Each attachment should include:
+     * type: "חניה", "מחסן", "גינה", "גג", "קרקע", etc.
+     * area: numeric value in square meters
+     * symbol: Hebrew letter or symbol from blueprint (if mentioned)
+     * color: color mentioned in blueprint (if mentioned)
+     * description: full description text
+   - If attachments section exists but is empty, return empty array []
+   - If no attachments section found, return empty array []
+
+7. ownership_type (סוג בעלות):
+   - Look for "סוג בעלות", "בעלות", "מוסכם", "לא מוסכם", "מצוי"
+   - Usually appears near the regulation_type or in the ownership section
+   - Common values: "מוסכם", "לא מוסכם", "מצוי", "בעלות מלאה"
+   - If not found, return null
+
 Return ONLY the JSON object with this structure:
 {
   "data": {
@@ -194,7 +246,25 @@ Return ONLY the JSON object with this structure:
           }
         },
         {
-          text: 'Extract structured data from this Hebrew land registry document (נסח טאבו). Focus on finding the Hebrew text and extracting the required fields. For each field, also provide its location (page number and y_percent).'
+          text: `Extract structured data from this Hebrew land registry document (נסח טאבו).
+
+CRITICAL EXTRACTION GUIDANCE:
+
+1. built_area: Look for "שטח בנוי", "שטח במ\"ר", "שטח בנוי במ\"ר" in unit description section. If not found, try calculating from registered_area + balcony_area. If still not found, return null.
+
+2. finish_standard: Look for "רמת גימור", "סטנדרט גימור", "גימור" in property description. Common values: "יוקרתי", "טוב", "בינוני", "בסיסי". If not found, return null.
+
+3. construction_year: Look for "שנת בנייה", "נבנה ב-", "בנייה משנת" in property details. Extract 4-digit year. If not found, return null.
+
+4. shared_areas: Look for "שטחים משותפים", "רכוש משותף", "חלקים ברכוש המשותף". Can appear as fraction (e.g., "104/5975") or description. Check both unit section and shared property section.
+
+5. property_condition: Look for "מצב הנכס", "מצב", "תחזוקה" in property description. Common values: "מצוין", "טוב", "בינוני", "דורש שיפוץ". If not found, return null.
+
+6. attachments: Look for "הצמדות", "צמודות" section. Extract ALL attachments with type, area, symbol, color, description. If section exists but is empty, return empty array []. If no section found, return empty array [].
+
+7. ownership_type: Look for "סוג בעלות", "בעלות", "מוסכם", "לא מוסכם", "מצוי" near regulation_type or in ownership section.
+
+Focus on finding the Hebrew text and extracting the required fields. For each field, also provide its location (page number and y_percent).`
         }
       ];
     } else {

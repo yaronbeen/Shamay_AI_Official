@@ -8,6 +8,15 @@ export type ReportData = {
     inspectionDate: string;                // [InspectionDate] חובה
     valuationDate: string;                 // [ValuationDate] ברירת מחדל = inspectionDate
     appraiserName: string;                 // למשל "מני מנשה"
+    appraiserLicenseNumber?: string;       // מספר רישיון שמאי (למשל "115672")
+  };
+  openingPage?: {                          // עמוד 2 - מכתב פתיחה וטבלת ריכוז פרטי הנכס
+    openingDate?: string;                  // תאריך מכתב פתיחה (למשל "29.06.2025")
+    propertySummaryTable?: {               // טבלת ריכוז פרטי הנכס
+      gush?: string;
+      helka?: string;
+      area?: number;
+    };
   };
   address: {
     street: string;
@@ -71,13 +80,24 @@ export type ReportData = {
   section2: {
     registryOfficeName?: string;           // "תל אביב-יפו"
     tabuIssueDate?: string;                // "30.4.2025"
-    easementsText?: string;                // רשימת זיקות
+    easementsText?: string;                // רשימת זיקות כללית
+    easements?: Array<{                    // פירוט זיקות הנאה (7 זיקות)
+      letter: string;                       // א', ב', ג', וכו'
+      description: string;                 // תיאור הזיקה
+      areaSqm?: number;                    // שטח במ"ר (286, 85, 30, 125, 150, 45, 110)
+    }>;
     ownerships?: Array<{ name: string; id?: string; share: string }>;
     mortgagesText?: string;
     notesText?: string;
     condoOrder?: {
       orderDate?: string;                  // "8.12.2003"
       buildingDescription?: string;         // 4 מבנים, 227 דירות...
+      buildingsInfo?: Array<{              // פירוט המבנים בפרויקט
+        buildingNumber: string;            // I, II, III, IV
+        address?: string;
+        floors?: number;
+        units?: number;
+      }>;
       subParcelDescription?: string;
       sketches?: Array<{ src: string; caption: string }>; // מרתף, קומה 14
     };
@@ -92,6 +112,20 @@ export type ReportData = {
       maxFloors?: number;
       maxUnits?: number;
       buildingLines?: string;
+      buildingLinesTable?: {              // טבלת קווי בניין
+        front?: number;                    // חזית (5 מ')
+        back?: number;                     // אחורי (20 מ')
+        side1?: number;                    // צד 1 (10 מ')
+        side2?: number;                    // צד 2 (4 מ')
+      };
+    };
+    auxiliaryAreas?: {                    // שטחי עזר בסעיף 3.3
+      parkingSpaces?: number;              // מספר חניות (86)
+      storageRooms?: number;              // מספר מחסנים (55)
+      otherAreas?: Array<{                 // שטחים נוספים
+        type: string;                      // "חדר סקוואש"
+        areaSqm?: number;
+      }>;
     };
     permits: Array<{
       permitNumber: string;

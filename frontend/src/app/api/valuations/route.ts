@@ -6,10 +6,13 @@ const { ShumaDB } = require('@/lib/shumadb.js')
 
 export async function GET(request: NextRequest) {
   try {
+    console.log('🔍 [VALUATIONS API] GET request received')
     const session = await getServerSession(authOptions)
+    console.log('🔍 [VALUATIONS API] Session:', session ? 'exists' : 'null')
     
     // For development, use default values if session is not available
     const organizationId = session?.user?.primaryOrganizationId || 'default-org'
+    console.log('🔍 [VALUATIONS API] Organization ID:', organizationId)
     
     if (!session?.user && process.env.NODE_ENV !== 'development') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -18,21 +21,38 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const search = searchParams.get('search')
     const status = searchParams.get('status')
+    console.log('🔍 [VALUATIONS API] Search params - search:', search, 'status:', status)
 
+    console.log('🔍 [VALUATIONS API] Calling searchShumas...')
     const result = await ShumaDB.searchShumas(
       organizationId,
       search || undefined,
       status || undefined
     )
+    console.log('🔍 [VALUATIONS API] searchShumas result:', {
+      success: result?.success,
+      error: result?.error,
+      shumasCount: result?.shumas?.length
+    })
 
-    if (result.error) {
-      return NextResponse.json({ error: result.error }, { status: 500 })
+    if (!result.success || result.error) {
+      console.error('❌ [VALUATIONS API] Error searching shumas:', result.error)
+      console.error('❌ [VALUATIONS API] Full result:', JSON.stringify(result, null, 2))
+      return NextResponse.json({ 
+        error: result.error || 'Failed to fetch valuations',
+        details: result.error 
+      }, { status: 500 })
     }
 
-    return NextResponse.json({ valuations: result.shumas })
-  } catch (error) {
-    console.error('Error fetching valuations:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    console.log('✅ [VALUATIONS API] Returning valuations:', result.shumas?.length || 0)
+    return NextResponse.json({ valuations: result.shumas || [] })
+  } catch (error: any) {
+    console.error('❌ [VALUATIONS API] Exception caught:', error)
+    console.error('❌ [VALUATIONS API] Error stack:', error?.stack)
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: error?.message || String(error)
+    }, { status: 500 })
   }
 }
 

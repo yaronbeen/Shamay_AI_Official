@@ -299,6 +299,36 @@ const safeValue = (value?: string | number, fallback = '—') => {
   return value
 }
 
+// Helper to get nested values (used throughout the template)
+const getValueFromPaths = (obj: any, paths: string[]): any => {
+  for (const path of paths) {
+    const keys = path.split('.')
+    let value = obj
+    for (const key of keys) {
+      if (value && typeof value === 'object') {
+        value = value[key]
+      } else {
+        value = undefined
+        break
+      }
+    }
+    if (value !== undefined && value !== null && value !== '') {
+      return value
+    }
+  }
+  return undefined
+}
+
+// Helper to get subParcel value (used in multiple places)
+const getSubParcelValue = (data: any, landRegistry?: any): string | number | undefined => {
+  return getValueFromPaths(data, ['extractedData.subParcel', 'extractedData.sub_parcel', 'extractedData.land_registry.subParcel', 'extractedData.land_registry.sub_parcel', 'land_registry.sub_chelka', 'subParcel']) ||
+    data.extractedData?.subParcel ||
+    data.extractedData?.sub_parcel ||
+    landRegistry?.sub_chelka ||
+    data.subParcel ||
+    undefined
+}
+
 const createDetailsTable = (data: ValuationData) => {
   const landRegistry = resolveLandRegistryData(data).landRegistry
   
@@ -337,12 +367,7 @@ const createDetailsTable = (data: ValuationData) => {
     },
     {
       label: 'תת חלקה:',
-      value: formatNumber(
-        data.extractedData?.sub_chelka ||
-          data.extractedData?.subChelka ||
-          landRegistry?.sub_chelka ||
-          data.subParcel
-      )
+      value: formatNumber(getSubParcelValue(data, landRegistry))
     },
     {
       label: 'הצמדות:',
@@ -755,7 +780,7 @@ const buildBaseCss = () => `
   }
   .page.cover {
     position: relative;
-    page-break-after: always;
+          page-break-after: always;
     padding: 8mm 18mm 0mm 18mm; /* No bottom padding - footer is absolute */
     background: white;
     color: #000000;
@@ -1139,10 +1164,10 @@ const buildBaseCss = () => `
     height: 180px; /* Fixed height for uniformity in 2x3 grid */
     margin: 0;
     break-inside: avoid;
-    page-break-inside: avoid;
-  }
+          page-break-inside: avoid;
+        }
   .media-card img {
-    width: 100%; 
+          width: 100%; 
     height: 100%;
     object-fit: cover;
     border-radius: 0;
@@ -1160,7 +1185,7 @@ const buildBaseCss = () => `
     display: flex;
     flex-direction: column;
     break-inside: avoid;
-    page-break-inside: avoid;
+          page-break-inside: avoid;
     margin: 16px 0;
     align-items: center;
   }
@@ -1594,25 +1619,7 @@ export function generateDocumentHTML(
     })
   }
 
-  // Helper to get nested values
-  const getValueFromPaths = (obj: any, paths: string[]): any => {
-    for (const path of paths) {
-      const keys = path.split('.')
-      let value = obj
-      for (const key of keys) {
-        if (value && typeof value === 'object') {
-          value = value[key]
-        } else {
-          value = undefined
-          break
-        }
-      }
-      if (value !== undefined && value !== null && value !== '') {
-        return value
-      }
-    }
-    return undefined
-  }
+  // getValueFromPaths is now defined at module level (above)
   
   const neighborhoodName = normalizeText(data.neighborhood, 'שכונה לא צוינה')
   // Note: According to PRD, this should be AI-generated, but for now we keep placeholder text
@@ -1966,14 +1973,14 @@ export function generateDocumentHTML(
                 <div style="font-size: 36px; margin-bottom: 8px;">📷</div>
                 <div style="font-size: 10pt;">תמונה חיצונית לא הועלתה</div>
               </div>
-            </div>
-          `
+              </div>
+        `
           }
           return `
-          <div class="cover-image-frame">
+        <div class="cover-image-frame">
             <img src="${coverImages[0]}" alt="תמונת חזית הבניין" data-managed-image="true" />
-          </div>
-        `
+              </div>
+      `
         })()}
       </div>
       
@@ -2004,7 +2011,7 @@ export function generateDocumentHTML(
   
   const introductionPage = `
     <section class="page">
-      ${pageHeader}
+        ${pageHeader}
       
       <div class="page-body">
         <!-- Header with Date/Reference and Recipient -->
@@ -2013,11 +2020,11 @@ export function generateDocumentHTML(
             <div><strong>לכבוד,</strong></div>
             <div>${(data as any).clientTitle ? `${normalizeText((data as any).clientTitle)} ` : ''}${normalizeText(data.clientName)}${(data as any).clientNote ? `,` : ''}</div>
             ${(data as any).clientNote ? `<div>${normalizeText((data as any).clientNote)}</div>` : ''}
-          </div>
+        </div>
           <div style="text-align: left;">
         <div><strong>תאריך:</strong> ${formatDateHebrew(valuationDate)}</div>
             <div><strong>סימננו:</strong> ${reference}</div>
-      </div>
+        </div>
         </div>
         
         <!-- Title Section - Centered -->
@@ -2131,20 +2138,17 @@ export function generateDocumentHTML(
           const eastVal = normalizeText(boundaryEast) || 'חלקה 400'
           const northVal = normalizeText(boundaryNorth) || 'חלקה 397'
 
-          return `
-            <div class="section-block">
+            return `
+              <div class="section-block">
               <p><strong>גבולות החלקה:</strong> מערב – ${westVal}, דרום – ${southVal}, מזרח – ${eastVal}, צפון – ${northVal}.</p>
-            </div>
-          `
+              </div>
+            `
         })()}
         <!-- Section 1.3 - Property Description -->
         <div class="section-block">
           <div class="section-title">1.3&emsp;תיאור נשוא השומה</div>
           <p>נשוא השומה הינו תת חלקה ${formatNumber(
-            getValueFromPaths(data, ['extractedData.subParcel', 'extractedData.sub_parcel', 'extractedData.sub_chelka', 'extractedData.land_registry.subParcel', 'extractedData.land_registry.sub_parcel', 'extractedData.land_registry.sub_chelka', 'land_registry.sub_chelka', 'subParcel']) ||
-            data.extractedData?.sub_chelka ||
-              landRegistry?.sub_chelka ||
-              data.subParcel
+            getSubParcelValue(data, landRegistry)
           ) || '—'} המהווה ${unitDescription || 'דירת מגורים'}${floorText ? ` ${floorText}` : ''}${data.rooms ? ` בת ${data.rooms} חד'` : ''}${(() => {
             const airDir = typeof data.airDirections === 'number' ? data.airDirections : (typeof data.airDirections === 'string' ? parseInt(data.airDirections) : 0)
             if (airDir > 0) {
@@ -2217,10 +2221,10 @@ export function generateDocumentHTML(
             ${(() => {
               // Extract sub-chelka specific data from shared building sub_plots array
               const subPlots = toArray(sharedBuildingRaw?.sub_plots?.value || sharedBuildingData?.sub_plots || [])
-              const currentSubChelka = data.extractedData?.sub_chelka || landRegistry?.sub_chelka || data.subParcel
+              const currentSubParcel = getSubParcelValue(data, landRegistry)
               const matchingSubPlot = subPlots.find((sp: any) => 
-                sp?.sub_plot_number?.toString() === currentSubChelka?.toString() ||
-                sp?.sub_plot_number === currentSubChelka
+                sp?.sub_plot_number?.toString() === currentSubParcel?.toString() ||
+                sp?.sub_plot_number === currentSubParcel
               )
               
               if (matchingSubPlot) {
@@ -2367,10 +2371,7 @@ export function generateDocumentHTML(
     landRegistry?.total_plot_area
   )
   const subParcelNum = formatNumber(
-    getValueFromPaths(data, ['extractedData.subParcel', 'extractedData.sub_parcel', 'extractedData.sub_chelka', 'extractedData.land_registry.subParcel', 'extractedData.land_registry.sub_parcel', 'extractedData.land_registry.sub_chelka', 'land_registry.sub_chelka', 'subParcel']) ||
-    data.extractedData?.sub_chelka ||
-    landRegistry?.sub_chelka ||
-    data.subParcel
+    getSubParcelValue(data, landRegistry)
   )
   const registeredAreaSqm = formatNumber(
     getValueFromPaths(data, ['extractedData.registeredArea', 'extractedData.registered_area', 'extractedData.apartment_registered_area', 'extractedData.land_registry.registeredArea', 'extractedData.land_registry.registered_area', 'extractedData.land_registry.apartment_registered_area', 'land_registry.apartment_registered_area', 'registeredArea']) ||
@@ -2697,7 +2698,7 @@ export function generateDocumentHTML(
                 <figure class="garmushka-card">
                   <img src="${imgUrl}" alt="תשריט ${idx + 1}" data-managed-image="true" />
                   <figcaption class="media-caption">תשריט ${idx + 1}${allImages.length > 1 ? ` מתוך ${allImages.length}` : ''}</figcaption>
-                </figure>
+          </figure>
               `).join('')}
             </div>
           `
@@ -2740,7 +2741,7 @@ export function generateDocumentHTML(
           <div class="sub-title">מצב הזכויות</div>
           <ul class="bullet-list">
             <li>הזכויות בנכס – ${formatOwnership(data)}.</li>
-            <li>בהתאם לתשריט הבית המשותף הדירה זוהתה כתת חלקה ${formatNumber(data.extractedData?.sub_chelka || data.subParcel)} בקומה ${normalizeText(data.floor?.toString(), '—')} הפונה לכיוונים צפון דרום ומערב.</li>
+            <li>בהתאם לתשריט הבית המשותף הדירה זוהתה כתת חלקה ${formatNumber(getSubParcelValue(data, landRegistry))} בקומה ${normalizeText(data.floor?.toString(), '—')} הפונה לכיוונים צפון דרום ומערב.</li>
           </ul>
               </div>
         

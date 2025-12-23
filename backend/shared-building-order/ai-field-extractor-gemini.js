@@ -68,6 +68,49 @@ Hebrew terms to look for:
 - חלקים ברכוש המשותף
 - תיאור הצמדה, תיאור צמודה
 
+CRITICAL TABLE EXTRACTION STRATEGY:
+
+1. Identify the main table "תיאור תתי חלקות והצמדות":
+   - This table typically spans multiple pages (usually 2-7 pages)
+   - Look for table headers with columns: מספר תת חלקה, מבנה, כניסה, קומה, תיאור חלקה, שטח במ"ר, חלקים ברכוש המשותף, הצמדות
+   
+2. For EACH ROW in the table (extract ALL rows across ALL pages):
+   - sub_plot_number: Extract numeric value from "מספר תת חלקה" column
+   - building_number: Extract "I", "II", "III", etc. from "מבנה" column
+   - floor: Extract "קרקע", "ראשונה", "שניה", "שלישית", etc. from "קומה" column
+   - area: Extract numeric value from "שטח במ\"ר" column
+   - description: Extract "דירה", "חנות", "דירת קוטג'", etc. from "תיאור חלקה" column
+   - shared_property_parts: Extract fraction like "104/5975" from "חלקים ברכוש המשותף" column
+   
+3. For attachments in each row:
+   - Look for multiple attachment entries per sub-plot (each sub-plot can have 0-4+ attachments)
+   - Each attachment entry has:
+     * description: "חניה", "מחסן", "מרפסת גג", "קרקע", etc.
+     * diagram_symbol: Hebrew letter (א, ב, ג, ד, etc.) from "סימון בתשריט" column
+     * diagram_color: "כתום", "צהוב", "ירוק", "כחול", "אדום", "חום", "סגול", "תכלת" from "צבע בתשריט" column
+     * area: Numeric value in square meters from "שטח" column
+   - Extract ALL attachments for each sub-plot, not just the first one
+   - If no attachments exist for a sub-plot, return empty array []
+   
+4. For non_attachment_areas:
+   - Look for "מרפסת פתוחה" or other non-attachment areas mentioned in the row
+   - Extract description and area for each non-attachment area
+   - If no non-attachment areas exist, return empty array []
+   
+5. buildings_info extraction:
+   - Look for table "תיאור הבית" or "תיאור המבנים" (usually on first page)
+   - For each building entry, extract:
+     * building_number: "I", "II", etc.
+     * address: Full address from "כתובת" column
+     * floors: Number from "קומות" column
+     * sub_plots_count: Number from "מספר תתי חלקות" column
+   - If multiple buildings exist, create array with all buildings
+   - If only one building, still create array with one entry
+   
+6. CRITICAL: The sub_plots table may span multiple pages - extract ALL rows across ALL pages
+7. Verify: Count total rows extracted and compare with total_sub_plots if mentioned in summary
+8. If total_sub_plots is mentioned (e.g., "סה\"כ תתי חלקות: 55"), ensure you extracted that many rows
+
 Return ONLY the JSON object with this structure:
 {
   "data": {
@@ -147,21 +190,43 @@ CRITICAL RULES:
 3. If information is not found, return null - do NOT generate or guess data
 4. Do NOT provide default values or placeholder text
 
+TABLE EXTRACTION STRATEGY:
+
 This document contains detailed TABLES with individual sub-plot information. You MUST extract ALL sub-plots from the tables, not just summary information.
 
-Look for tables with columns like:
-- מספר תת חלקה (sub-plot number)
-- מבנה (building)
-- כניסה (entrance) 
-- קומה (floor)
-- תיאור חלקה (description)
-- שטח במ"ר (area)
-- חלקים ברכוש המשותף (shared property parts)
-- הצמדות (attachments) with סימון, צבע, תיאור, שטח
+1. Identify the main table "תיאור תתי חלקות והצמדות" - this table spans multiple pages (usually 2-7 pages)
 
-Extract EVERY ROW from these tables as individual sub_plots entries.
+2. For EACH ROW in the table (extract ALL rows across ALL pages):
+   - Extract sub_plot_number (מספר תת חלקה) - numeric value
+   - Extract building_number (מבנה) - "I", "II", "III", etc.
+   - Extract floor (קומה) - "קרקע", "ראשונה", "שניה", etc.
+   - Extract area (שטח במ\"ר) - numeric value
+   - Extract description (תיאור) - "דירה", "חנות", "דירת קוטג'", etc.
+   - Extract shared_property_parts (חלקים ברכוש המשותף) - fraction like "104/5975"
+   
+3. For attachments in each row:
+   - Look for multiple attachment entries per sub-plot (each can have 0-4+ attachments)
+   - Extract ALL attachments for each sub-plot with:
+     * description: "חניה", "מחסן", "מרפסת גג", "קרקע"
+     * diagram_symbol: Hebrew letter (א, ב, ג, etc.)
+     * diagram_color: "כתום", "צהוב", "ירוק", etc.
+     * area: numeric value in square meters
+   - If no attachments, return empty array []
+   
+4. For non_attachment_areas:
+   - Look for "מרפסת פתוחה" or other non-attachment areas
+   - Extract description and area
+   - If none exist, return empty array []
 
-The document should have around 55 individual sub-plot entries across multiple pages.
+5. buildings_info extraction:
+   - Look for table "תיאור הבית" on first page
+   - Extract building_number, address, floors, sub_plots_count for each building
+   - Create array with all buildings (even if only one)
+
+6. CRITICAL: The table spans multiple pages - extract ALL rows across ALL pages
+7. Count total rows extracted - should match total_sub_plots if mentioned
+
+The document typically contains 50-55 individual sub-plot entries across multiple pages.
 
 For each field, also provide its location (page number and y_percent).`;
 

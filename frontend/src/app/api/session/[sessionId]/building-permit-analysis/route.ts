@@ -94,7 +94,7 @@ export async function POST(
       property_address: result.propertyAddress,
       gush: result.gush,
       chelka: result.chelka,
-      sub_chelka: result.subChelka,
+      sub_chelka: result.subParcel || result.sub_parcel || result.subChelka,
       confidence: result.confidence
     }
     
