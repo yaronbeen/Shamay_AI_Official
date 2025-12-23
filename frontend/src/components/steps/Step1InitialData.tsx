@@ -167,47 +167,90 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
   }, [formData.street, formData.city, formData.buildingNumber, formData.neighborhood])
 
   // Sync local formData with incoming data prop when data changes
-  // Update formData when data prop changes (e.g., after loading from DB)
+  // OPTIMIZATION: Only update formData when Step1-specific fields change, not all data changes
+  // Use ref to track previous values and only update changed fields
+  const prevDataRef = useRef<Partial<any>>({})
+  
   useEffect(() => {
+    // Only update if Step1-specific fields actually changed
+    const step1Fields = [
+      'valuationType', 'valuationDate', 'valuationEffectiveDate',
+      'clientName', 'clientTitle', 'clientNote', 'clientRelation',
+      'street', 'buildingNumber', 'neighborhood', 'city',
+      'rooms', 'floor', 'airDirections', 'area',
+      'landContamination', 'landContaminationNote',
+      'shamayName', 'shamaySerialNumber'
+    ]
+    
+    // Check if any Step1 field changed
+    const hasChanges = step1Fields.some(field => {
+      const currentValue = field === 'valuationDate' || field === 'valuationEffectiveDate' 
+        ? normalizeDateToISO((data as any)[field])
+        : (data as any)[field]
+      const prevValue = prevDataRef.current[field]
+      
+      // Handle special cases for numbers and booleans
+      if (field === 'rooms' || field === 'floor') {
+        const current = currentValue !== null && currentValue !== undefined && currentValue !== 0 && currentValue !== '' ? currentValue : ''
+        const prev = prevValue !== null && prevValue !== undefined && prevValue !== 0 && prevValue !== '' ? prevValue : ''
+        return current !== prev
+      }
+      
+      return currentValue !== prevValue
+    })
+    
+    if (!hasChanges) {
+      return // No changes to Step1 fields, skip update
+    }
+    
     // Check if data has meaningful values (not just empty strings)
     const hasData = data.valuationType || data.clientName || data.street || data.city || 
                     (data as any).clientTitle || data.valuationDate || data.valuationEffectiveDate
     
     if (hasData) {
-      // Data has values - update formData to match
-      setFormData({
-        // סוג שומה ומועד כתיבתה
-        valuationType: data.valuationType ?? '',
-        valuationDate: normalizeDateToISO(data.valuationDate) || '',
+      // Update only changed fields using functional update to avoid unnecessary re-renders
+      setFormData(prev => {
+        const updated = {
+          // סוג שומה ומועד כתיבתה
+          valuationType: data.valuationType ?? prev.valuationType ?? '',
+          valuationDate: normalizeDateToISO(data.valuationDate) || prev.valuationDate || '',
+          
+          // זהות מזמין השומה והקשר שלו לנכס
+          clientName: data.clientName || prev.clientName || '',
+          clientTitle: (data as any).clientTitle ?? prev.clientTitle ?? '',
+          clientNote: (data as any).clientNote ?? prev.clientNote ?? '',
+          clientRelation: data.clientRelation ?? prev.clientRelation ?? '',
+          
+          // המועד הקובע לשומה
+          valuationEffectiveDate: normalizeDateToISO(data.valuationEffectiveDate) || prev.valuationEffectiveDate || '',
+          
+          // זיהוי הנכס
+          street: data.street || prev.street || '',
+          buildingNumber: data.buildingNumber || prev.buildingNumber || '',
+          neighborhood: data.neighborhood || prev.neighborhood || '',
+          city: data.city || prev.city || '',
+          
+          // תיאור הנכס והסביבה
+          rooms: (data.rooms !== null && data.rooms !== undefined && data.rooms !== 0 && data.rooms !== '') ? data.rooms : (prev.rooms || ''),
+          floor: (data.floor !== null && data.floor !== undefined && data.floor !== 0 && data.floor !== '') ? data.floor : (prev.floor || ''),
+          airDirections: data.airDirections || prev.airDirections || '',
+          area: (data.area !== null && data.area !== undefined && data.area !== 0 && data.area !== '') ? data.area : (prev.area || ''),
+          
+          // זיהום קרקע
+          landContamination: (data as any).landContamination ?? prev.landContamination ?? false,
+          landContaminationNote: (data as any).landContaminationNote ?? prev.landContaminationNote ?? '',
+          
+          // פרטי שמאי
+          shamayName: data.shamayName || prev.shamayName || '',
+          shamaySerialNumber: data.shamaySerialNumber || prev.shamaySerialNumber || ''
+        }
         
-        // זהות מזמין השומה והקשר שלו לנכס
-        clientName: data.clientName || '',
-        clientTitle: (data as any).clientTitle ?? '',
-        clientNote: (data as any).clientNote ?? '',
-        clientRelation: data.clientRelation ?? '',
+        // Update ref with current values
+        step1Fields.forEach(field => {
+          prevDataRef.current[field] = (data as any)[field]
+        })
         
-        // המועד הקובע לשומה
-        valuationEffectiveDate: normalizeDateToISO(data.valuationEffectiveDate) || '',
-        
-        // זיהוי הנכס
-        street: data.street || '',
-        buildingNumber: data.buildingNumber || '',
-        neighborhood: data.neighborhood || '',
-        city: data.city || '',
-        
-        // תיאור הנכס והסביבה (basic info only - detailed analysis will be done by AI in Step 3)
-        rooms: (data.rooms !== null && data.rooms !== undefined && data.rooms !== 0 && data.rooms !== '') ? data.rooms : '',
-        floor: (data.floor !== null && data.floor !== undefined && data.floor !== 0 && data.floor !== '') ? data.floor : '',
-        airDirections: data.airDirections || '',
-        area: (data.area !== null && data.area !== undefined && data.area !== 0 && data.area !== '') ? data.area : '',
-        
-        // זיהום קרקע
-        landContamination: (data as any).landContamination ?? false,
-        landContaminationNote: (data as any).landContaminationNote ?? '',
-        
-        // פרטי שמאי
-        shamayName: data.shamayName || '',
-        shamaySerialNumber: data.shamaySerialNumber || ''
+        return updated
       })
       isInitialLoad.current = false
     }

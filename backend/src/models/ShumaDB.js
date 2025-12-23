@@ -501,13 +501,13 @@ class ShumaDBEnhanced {
           area = CASE WHEN $9::text IS NOT NULL AND $9::text != '' AND $9::numeric != 0 THEN $9::numeric ELSE area END,
           property_essence = COALESCE(NULLIF($10, ''), property_essence),
           client_name = COALESCE(NULLIF($11, ''), client_name),
-          client_title = CASE WHEN $66::text IS NOT NULL THEN $66::text ELSE client_title END,
-          client_note = CASE WHEN $67::text IS NOT NULL THEN $67::text ELSE client_note END,
-          client_relation = CASE WHEN $68::text IS NOT NULL THEN $68::text ELSE client_relation END,
+          client_title = CASE WHEN $59::text IS NOT NULL THEN $59::text ELSE client_title END,
+          client_note = CASE WHEN $60::text IS NOT NULL THEN $60::text ELSE client_note END,
+          client_relation = CASE WHEN $61::text IS NOT NULL THEN $61::text ELSE client_relation END,
           visit_date = COALESCE($12, visit_date),
           valuation_date = COALESCE($13, valuation_date),
-          valuation_type = CASE WHEN $69::text IS NOT NULL THEN $69::text ELSE valuation_type END,
-          valuation_effective_date = COALESCE($70, valuation_effective_date),
+          valuation_type = CASE WHEN $62::text IS NOT NULL THEN $62::text ELSE valuation_type END,
+          valuation_effective_date = COALESCE($63, valuation_effective_date),
           reference_number = COALESCE(NULLIF($14, ''), reference_number),
           shamay_name = COALESCE(NULLIF($15, ''), shamay_name),
           shamay_serial_number = COALESCE(NULLIF($16, ''), shamay_serial_number),
@@ -553,10 +553,10 @@ class ShumaDBEnhanced {
           gis_analysis = CASE WHEN $56::text != '{}' THEN $56::jsonb ELSE gis_analysis END,
           gis_screenshots = CASE WHEN $57::text != '{}' THEN $57::jsonb ELSE gis_screenshots END,
           garmushka_measurements = CASE WHEN $58::text != '{}' THEN $58::jsonb ELSE garmushka_measurements END,
-          land_contamination = COALESCE($71, land_contamination),
-          land_contamination_note = CASE WHEN $72::text IS NOT NULL THEN $72::text ELSE land_contamination_note END,
+          land_contamination = COALESCE($64, land_contamination),
+          land_contamination_note = CASE WHEN $65::text IS NOT NULL THEN $65::text ELSE land_contamination_note END,
           updated_at = NOW()
-        WHERE id = $59
+        WHERE id = $66
       `, [
         valuationData.street, valuationData.buildingNumber,
         valuationData.city, valuationData.neighborhood, valuationData.fullAddress, valuationData.rooms || '0.0',

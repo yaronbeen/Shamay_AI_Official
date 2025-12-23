@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 
 import { ValuationData } from './ValuationWizard'
 import { generateDocumentHTML, CompanySettings } from '../lib/document-template'
@@ -40,6 +40,16 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
   const observerRef = useRef<MutationObserver | null>(null)
   const toolbarStateRef = useRef<ToolbarState>(toolbarState)
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const htmlUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const previousImageDataRef = useRef<{
+    propertyImages: any[]
+    selectedImagePreview: string | null
+    interiorImages: string[]
+  }>({
+    propertyImages: [],
+    selectedImagePreview: null,
+    interiorImages: []
+  })
 
   const updateIframeHeight = useCallback((frame: HTMLIFrameElement | null) => {
     if (!frame) {
@@ -414,28 +424,96 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
     fetchCompanySettings()
   }, [])
 
+  // Memoize image-related data to detect changes
+  const imageData = useMemo(() => ({
+    propertyImages: data.propertyImages || [],
+    selectedImagePreview: data.selectedImagePreview,
+    interiorImages: data.interiorImages || []
+  }), [data.propertyImages, data.selectedImagePreview, data.interiorImages])
+
+  // Check if image data actually changed
+  const imageDataChanged = useMemo(() => {
+    const prev = previousImageDataRef.current
+    const current = imageData
+    
+    const imagesChanged = JSON.stringify(prev.propertyImages) !== JSON.stringify(current.propertyImages)
+    const previewChanged = prev.selectedImagePreview !== current.selectedImagePreview
+    const interiorChanged = JSON.stringify(prev.interiorImages) !== JSON.stringify(current.interiorImages)
+    
+    const changed = imagesChanged || previewChanged || interiorChanged
+    
+    if (changed) {
+      // Update reference for next comparison
+      previousImageDataRef.current = {
+        propertyImages: [...current.propertyImages],
+        selectedImagePreview: current.selectedImagePreview,
+        interiorImages: [...current.interiorImages]
+      }
+    }
+    
+    return changed
+  }, [imageData])
+
   useEffect(() => {
     if (isEditMode) {
       return
     }
-    const mergedEdits = {
-      ...((data as any).customDocumentEdits || {}),
-      ...debouncedOverrides
-    }
-
-    const mergedData = {
-      ...data,
-      customDocumentEdits: mergedEdits
-    }
-
-    const html = generateDocumentHTML(mergedData as ValuationData, true, companySettings)
-    setHtmlContent(html)
     
-    // Count actual pages in generated HTML
-    const pageMatches = html.match(/<section[^>]*class="page"/g)
-    const actualPageCount = pageMatches ? pageMatches.length : 8
-    setPageCount(actualPageCount)
-  }, [data, companySettings, debouncedOverrides, isEditMode])
+    // Clear any pending HTML update
+    if (htmlUpdateTimerRef.current) {
+      clearTimeout(htmlUpdateTimerRef.current)
+    }
+    
+    // If images changed, update immediately (no debounce)
+    if (imageDataChanged) {
+      const mergedEdits = {
+        ...((data as any).customDocumentEdits || {}),
+        ...debouncedOverrides
+      }
+
+      const mergedData = {
+        ...data,
+        customDocumentEdits: mergedEdits
+      }
+
+      const html = generateDocumentHTML(mergedData as ValuationData, true, companySettings)
+      setHtmlContent(html)
+      
+      // Count actual pages in generated HTML
+      const pageMatches = html.match(/<section[^>]*class="page"/g)
+      const actualPageCount = pageMatches ? pageMatches.length : 8
+      setPageCount(actualPageCount)
+      return
+    }
+    
+    // For text field changes, debounce the HTML update to prevent image reloads
+    // This allows the user to type without reloading images on every keystroke
+    htmlUpdateTimerRef.current = setTimeout(() => {
+      const mergedEdits = {
+        ...((data as any).customDocumentEdits || {}),
+        ...debouncedOverrides
+      }
+
+      const mergedData = {
+        ...data,
+        customDocumentEdits: mergedEdits
+      }
+
+      const html = generateDocumentHTML(mergedData as ValuationData, true, companySettings)
+      setHtmlContent(html)
+      
+      // Count actual pages in generated HTML
+      const pageMatches = html.match(/<section[^>]*class="page"/g)
+      const actualPageCount = pageMatches ? pageMatches.length : 8
+      setPageCount(actualPageCount)
+    }, 1000) // 1 second debounce for text field changes
+    
+    return () => {
+      if (htmlUpdateTimerRef.current) {
+        clearTimeout(htmlUpdateTimerRef.current)
+      }
+    }
+  }, [data, companySettings, debouncedOverrides, isEditMode, imageDataChanged])
 
   useEffect(() => {
     if (!isEditMode) {
