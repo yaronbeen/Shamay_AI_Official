@@ -261,7 +261,7 @@ export function convertValuationDataToReportData(
       appraiserLicenseNumber
     },
     openingPage: {
-      openingDate: formatDate(valuationData.reportDate || valuationData.valuationDate || new Date().toISOString()),
+      openingDate: formatDate(valuationData.valuationDate || new Date().toISOString()),
       propertySummaryTable: {
         gush: valuationData.gush || landRegistry.gush || extracted.gush || '',
         helka: valuationData.parcel || landRegistry.chelka || landRegistry.parcel || extracted.parcel || '',

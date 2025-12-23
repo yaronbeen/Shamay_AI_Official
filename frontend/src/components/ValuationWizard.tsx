@@ -36,6 +36,7 @@ export interface ValuationData {
   shamayName: string
   shamaySerialNumber: string
   valuationType?: string
+  appraiserLicenseNumber?: string
   
   // Land Contamination
   landContamination?: boolean
