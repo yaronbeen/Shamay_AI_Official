@@ -13,7 +13,7 @@ export async function renderPdf(reportData: ReportData): Promise<Blob> {
   validateReportData(reportData);
   
   // Render PDF
-  const pdfDoc = pdf(React.createElement(AppraisalDocument, { data: reportData }));
+  const pdfDoc = pdf(React.createElement(AppraisalDocument, { data: reportData }) as any);
   const pdfBlob = await pdfDoc.toBlob();
   
   return pdfBlob;
@@ -28,17 +28,13 @@ export async function renderPdfToBuffer(reportData: ReportData): Promise<Buffer>
   validateReportData(reportData);
   
   // Render PDF
-  const pdfDoc = pdf(React.createElement(AppraisalDocument, { data: reportData }));
+  const pdfDoc = pdf(React.createElement(AppraisalDocument, { data: reportData }) as any);
   
-  // In Node.js, use toBuffer() which returns a Promise<Buffer>
-  // In browser, use toBlob() and convert
-  if (typeof Buffer !== 'undefined') {
-    return await pdfDoc.toBuffer();
-  } else {
-    const blob = await pdfDoc.toBlob();
-    const arrayBuffer = await blob.arrayBuffer();
-    return Buffer.from(arrayBuffer);
-  }
+  // In Node.js, use toBlob() and convert to Buffer
+  // toBuffer() returns ReadableStream, so we use toBlob() instead
+  const blob = await pdfDoc.toBlob();
+  const arrayBuffer = await blob.arrayBuffer();
+  return Buffer.from(arrayBuffer);
 }
 
 /**

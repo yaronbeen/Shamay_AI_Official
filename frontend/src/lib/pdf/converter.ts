@@ -158,7 +158,7 @@ export function convertValuationDataToReportData(
   // Get environment description (from AI or extracted)
   const environmentDescription = extracted.environmentDescription || 
     extracted.environment_analysis?.description ||
-    valuationData.propertyAnalysis?.environmentDescription ||
+    extracted.environmentDescription ||
     'תיאור הסביבה לא הוזן'
 
   // Get building rights
@@ -260,14 +260,14 @@ export function convertValuationDataToReportData(
         src: companySettings.companyLogo
       } : undefined,
       companyName: companySettings?.companyName,
-      companyTagline: companySettings?.companySlogan,
-      companyServices: companySettings?.services?.join(' - ') || 'שמאות מקרקעין - התחדשות עירונית - דוחות אפס וליווי פיננסי - מיסוי מקרקעין',
-      companyMembership: companySettings?.associationMembership || 'חבר בלשכת שמאי המקרקעין בישראל',
+      companyTagline: (companySettings as any)?.companySlogan || undefined,
+      companyServices: (companySettings as any)?.services?.join(' - ') || 'שמאות מקרקעין - התחדשות עירונית - דוחות אפס וליווי פיננסי - מיסוי מקרקעין',
+      companyMembership: (companySettings as any)?.associationMembership || 'חבר בלשכת שמאי המקרקעין בישראל',
       companyContact: {
-        email: companySettings?.companyEmail,
-        phone: companySettings?.companyPhone,
-        website: companySettings?.companyWebsite,
-        address: companySettings?.companyAddress
+        email: (companySettings as any)?.companyEmail,
+        phone: (companySettings as any)?.companyPhone,
+        website: (companySettings as any)?.companyWebsite,
+        address: (companySettings as any)?.companyAddress
       }
     },
     section1: {

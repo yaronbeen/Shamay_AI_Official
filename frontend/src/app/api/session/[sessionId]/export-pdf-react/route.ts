@@ -62,8 +62,11 @@ export async function POST(
     // Render PDF using React-PDF
     const pdfBuffer = await renderPdfToBuffer(reportData)
 
+    // Convert Buffer to Uint8Array for NextResponse compatibility
+    const pdfUint8Array = new Uint8Array(pdfBuffer)
+
     // Return the PDF with proper headers for download
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(pdfUint8Array, {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
