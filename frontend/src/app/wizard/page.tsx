@@ -13,6 +13,7 @@ import { Step4AIAnalysis } from '@/components/steps/Step4AIAnalysis'
 import { Step5Export } from '@/components/steps/Step5Export'
 import { ValuationData } from '@/components/ValuationWizard'
 import { useShumaDB } from '@/hooks/useShumaDB'
+import { ChatInterface } from '@/components/chat/ChatInterface'
 
 // Simple debounce function
 function debounce<T extends (...args: any[]) => any>(func: T, wait: number): T {
@@ -71,6 +72,7 @@ export default function WizardPage() {
   const [lastSavedData, setLastSavedData] = useState<ValuationData | null>(null)
   const [isTransitioning, startTransition] = useTransition()
   const [stepKey, setStepKey] = useState(1) // Key for forcing re-render on step change
+  const [showChat, setShowChat] = useState(false) // Chat interface visibility
   
   // Track pending save to prevent race conditions
   const pendingSaveRef = useRef<Promise<any> | null>(null)
@@ -795,6 +797,61 @@ export default function WizardPage() {
           </div>
         </div>
       </div>
+
+      {/* Chat Interface - Floating bubble button (bottom right) */}
+      {sessionId && (
+        <>
+          {/* Floating Chat Button - Bottom Right Corner */}
+          {!showChat && (
+            <button
+              onClick={() => setShowChat(true)}
+              className="fixed bottom-6 right-6 z-50 w-16 h-16 bg-teal-500 hover:bg-teal-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center group animate-bounce-subtle"
+              title="עוזר AI"
+              aria-label="פתח עוזר AI"
+            >
+              <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                className="h-7 w-7" 
+                fill="none" 
+                viewBox="0 0 24 24" 
+                stroke="currentColor"
+              >
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth={2} 
+                  d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" 
+                />
+              </svg>
+              {/* Optional: Notification badge - uncomment to show */}
+              {/* <span className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 text-white rounded-full text-xs flex items-center justify-center font-bold shadow-md">
+                5
+              </span> */}
+            </button>
+          )}
+
+          {/* Chat Interface Modal - Quarter screen, right side */}
+          {showChat && (
+            <div className="fixed inset-0 z-50 pointer-events-none" dir="rtl">
+              {/* Backdrop */}
+              <div 
+                className="absolute inset-0 bg-black bg-opacity-30 pointer-events-auto transition-opacity duration-300"
+                onClick={() => setShowChat(false)}
+              />
+              
+              {/* Chat Window - Quarter screen, right side */}
+              <div className="absolute right-0 top-0 bottom-0 w-1/4 h-full pointer-events-auto animate-slide-in-right-rtl">
+                <ChatInterface
+                  sessionId={sessionId}
+                  mode="sidebar"
+                  onClose={() => setShowChat(false)}
+                  className="h-full"
+                />
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }
