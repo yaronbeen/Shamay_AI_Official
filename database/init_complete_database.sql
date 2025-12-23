@@ -79,6 +79,9 @@ CREATE TABLE users (
   phone VARCHAR(50),
   license_number VARCHAR(255), -- Appraiser license
   
+  -- User settings (logos, signature, company info, etc.)
+  settings JSONB DEFAULT '{}'::jsonb,
+  
   -- Status
   is_active BOOLEAN DEFAULT TRUE,
   last_login TIMESTAMP,
@@ -90,6 +93,7 @@ CREATE TABLE users (
 
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_organization ON users(primary_organization_id);
+CREATE INDEX IF NOT EXISTS idx_users_settings ON users USING GIN (settings);
 
 -- Organization memberships (for multi-org support)
 DROP TABLE IF EXISTS organization_memberships CASCADE;

@@ -84,6 +84,34 @@ export default function AddressMapsViewer() {
   const [cityInput, setCityInput] = useState('')
   const [notesInput, setNotesInput] = useState('')
 
+  // טען כתובת אחרונה מ-localStorage אם אין נתונים
+  useEffect(() => {
+    if (!streetInput && !cityInput && typeof window !== 'undefined') {
+      const lastAddress = localStorage.getItem('shamay_last_address')
+      if (lastAddress) {
+        // נסה לפרק את הכתובת לחלקים
+        const parts = lastAddress.split(',')
+        if (parts.length > 0) {
+          const streetPart = parts[0].trim()
+          const cityPart = parts.length > 1 ? parts[parts.length - 1].trim() : ''
+          
+          // חיפוש מספר בניין
+          const buildingMatch = streetPart.match(/(\d+)/)
+          if (buildingMatch) {
+            setNumberInput(buildingMatch[1])
+            setStreetInput(streetPart.substring(0, buildingMatch.index).trim().replace(/^רחוב\s*/i, ''))
+          } else {
+            setStreetInput(streetPart.replace(/^רחוב\s*/i, ''))
+          }
+          
+          if (cityPart) {
+            setCityInput(cityPart)
+          }
+        }
+      }
+    }
+  }, [])
+
   // Coordinates display
   const [wgs84Coords, setWgs84Coords] = useState('--')
   const [itmCoords, setItmCoords] = useState('--')

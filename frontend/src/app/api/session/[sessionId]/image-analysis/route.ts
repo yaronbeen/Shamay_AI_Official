@@ -3,14 +3,13 @@ import { ShumaDB } from '../../../../../lib/shumadb.js'
 import { spawn } from 'child_process'
 import path from 'path'
 import fs from 'fs'
-import dotenv from 'dotenv'
 
 // Force this route to be dynamic (runtime-only) to avoid build-time issues
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-// Load environment variables
-dotenv.config()
+// Note: Environment variables are automatically loaded by Next.js
+// No need to use dotenv.config() in Next.js API routes
 
 // Helper functions for image analysis
 async function analyzeBuildingExterior(imagePath: string) {

@@ -789,7 +789,9 @@ export default function GarmushkaMeasurementViewer({
   // Finish editing shape name
   const finishEditing = () => {
     if (editingShapeId && editingName.trim()) {
-      updateShapeName(editingShapeId, editingName.trim())
+      // Keep spaces in the middle, only trim leading/trailing spaces
+      const trimmedName = editingName.trim()
+      updateShapeName(editingShapeId, trimmedName)
     }
     setEditingShapeId(null)
     setEditingName('')
@@ -1025,9 +1027,11 @@ export default function GarmushkaMeasurementViewer({
 
   const handleNameDialogSubmit = () => {
     if (pendingShapeId && editingName.trim()) {
+      // Keep spaces in the middle, only trim leading/trailing spaces
+      const trimmedName = editingName.trim()
       setShapes(prev => prev.map(shape => 
         shape.id === pendingShapeId 
-          ? { ...shape, name: editingName.trim() }
+          ? { ...shape, name: trimmedName }
           : shape
       ))
     }
@@ -1057,9 +1061,11 @@ export default function GarmushkaMeasurementViewer({
 
   const handleInlineSave = () => {
     if (editingShapeId && editingName.trim()) {
+      // Keep spaces in the middle, only trim leading/trailing spaces
+      const trimmedName = editingName.trim()
       setShapes(prev => prev.map(shape => 
         shape.id === editingShapeId 
-          ? { ...shape, name: editingName.trim() }
+          ? { ...shape, name: trimmedName }
           : shape
       ))
     }
@@ -1156,6 +1162,21 @@ export default function GarmushkaMeasurementViewer({
   // Add keyboard event handlers for spacebar panning and undo
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept keys if user is typing in an input field
+      const target = e.target as HTMLElement
+      if (!target) return
+      
+      // Check if target is an input field or inside an input field
+      const isInput = target.tagName === 'INPUT' || 
+                     target.tagName === 'TEXTAREA' || 
+                     target.isContentEditable ||
+                     target.closest('input') ||
+                     target.closest('textarea')
+      
+      if (isInput) {
+        return // Allow normal input behavior - don't interfere at all
+      }
+      
       if (e.code === 'Space' && !e.repeat) {
         e.preventDefault()
         document.body.style.cursor = 'grab'
@@ -1177,6 +1198,21 @@ export default function GarmushkaMeasurementViewer({
     }
     
     const handleKeyUp = (e: KeyboardEvent) => {
+      // Don't intercept keys if user is typing in an input field
+      const target = e.target as HTMLElement
+      if (!target) return
+      
+      // Check if target is an input field or inside an input field
+      const isInput = target.tagName === 'INPUT' || 
+                     target.tagName === 'TEXTAREA' || 
+                     target.isContentEditable ||
+                     target.closest('input') ||
+                     target.closest('textarea')
+      
+      if (isInput) {
+        return // Allow normal input behavior - don't interfere at all
+      }
+      
       if (e.code === 'Space') {
         e.preventDefault()
         document.body.style.cursor = 'default'
@@ -1187,15 +1223,15 @@ export default function GarmushkaMeasurementViewer({
       }
     }
     
-    window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('keyup', handleKeyUp)
+    window.addEventListener('keydown', handleKeyDown, false) // Use bubbling phase (default)
+    window.addEventListener('keyup', handleKeyUp, false) // Use bubbling phase (default)
     
     return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('keyup', handleKeyUp)
+      window.removeEventListener('keydown', handleKeyDown, false)
+      window.removeEventListener('keyup', handleKeyUp, false)
       document.body.style.cursor = 'default'
     }
-  }, [])
+  }, [toolMode, currentShape, isDrawingCalibration, temporaryPanMode])
 
   const deleteShape = (id: string) => {
     setShapes(prev => prev.filter(s => s.id !== id))
@@ -1975,13 +2011,24 @@ export default function GarmushkaMeasurementViewer({
                             <input
                               type="text"
                               value={editingName}
-                              onChange={(e) => setEditingName(e.target.value)}
+                              onChange={(e) => {
+                                e.stopPropagation() // Prevent event from bubbling to global handlers
+                                setEditingName(e.target.value)
+                              }}
                               onKeyDown={(e) => {
+                                e.stopPropagation() // Prevent event from bubbling to global handlers
+                                // Allow all keys including Space - only prevent default for Enter and Escape
                                 if (e.key === 'Enter') {
+                                  e.preventDefault()
                                   handleInlineSave()
                                 } else if (e.key === 'Escape') {
+                                  e.preventDefault()
                                   handleInlineCancel()
                                 }
+                                // Don't prevent default for Space or any other keys - let them work normally
+                              }}
+                              onKeyUp={(e) => {
+                                e.stopPropagation() // Prevent event from bubbling to global handlers
                               }}
                               className="px-2 py-1 border border-blue-300 rounded text-sm font-medium"
                               autoFocus
@@ -2141,17 +2188,28 @@ export default function GarmushkaMeasurementViewer({
               <input
                 type="text"
                 value={editingName}
-                onChange={(e) => setEditingName(e.target.value)}
+                onChange={(e) => {
+                  e.stopPropagation() // Prevent event from bubbling to global handlers
+                  setEditingName(e.target.value)
+                }}
+                onKeyDown={(e) => {
+                  e.stopPropagation() // Prevent event from bubbling to global handlers
+                  // Allow all keys including Space - only prevent default for Enter and Escape
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    handleNameDialogSubmit()
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault()
+                    handleNameDialogCancel()
+                  }
+                  // Don't prevent default for Space or any other keys - let them work normally
+                }}
+                onKeyUp={(e) => {
+                  e.stopPropagation() // Prevent event from bubbling to global handlers
+                }}
                 placeholder="הזן שם מדידה (לדוגמה: סלון, מטבח, מרחק 1)"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleNameDialogSubmit()
-                  } else if (e.key === 'Escape') {
-                    handleNameDialogCancel()
-                  }
-                }}
               />
             </div>
             <div className="flex justify-end gap-3">

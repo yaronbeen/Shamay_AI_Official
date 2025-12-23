@@ -296,6 +296,43 @@ export async function POST(
       : undefined
     const propertyImagesForHtml = resolvePropertyImages(valuationData.propertyImages)
     const interiorImagesForHtml = resolveImageList(valuationData.interiorImages)
+    
+    // Resolve garmushka measurements URLs
+    const resolveGarmushkaMeasurements = (garmushka?: any) => {
+      if (!garmushka) return garmushka
+      
+      const resolved = { ...garmushka }
+      
+      // Resolve garmushkaRecords URLs
+      if (Array.isArray(resolved.garmushkaRecords)) {
+        resolved.garmushkaRecords = resolved.garmushkaRecords.map((record: any) => {
+          if (!record || typeof record !== 'object') return record
+          return {
+            ...record,
+            url: resolveImageSrc(record.url),
+            signedUrl: resolveImageSrc(record.signedUrl),
+            path: resolveImageSrc(record.path),
+            fileUrl: resolveImageSrc(record.fileUrl),
+            absoluteUrl: resolveImageSrc(record.absoluteUrl),
+            preview: resolveImageSrc(record.preview)
+          }
+        })
+      }
+      
+      // Resolve legacy pngExport
+      if (resolved.pngExport) {
+        resolved.pngExport = resolveImageSrc(resolved.pngExport)
+      }
+      
+      // Resolve legacy pngExports array
+      if (Array.isArray(resolved.pngExports)) {
+        resolved.pngExports = resolved.pngExports.map((url: string) => resolveImageSrc(url)).filter(Boolean)
+      }
+      
+      return resolved
+    }
+    
+    const garmushkaMeasurementsForHtml = resolveGarmushkaMeasurements(valuationData.garmushkaMeasurements)
 
     const htmlContent = generateDocumentHTML(
       {
@@ -304,6 +341,7 @@ export async function POST(
         gisScreenshots: gisScreenshotsForHtml || valuationData.gisScreenshots,
         propertyImages: propertyImagesForHtml || valuationData.propertyImages,
         interiorImages: interiorImagesForHtml || valuationData.interiorImages,
+        garmushkaMeasurements: garmushkaMeasurementsForHtml || valuationData.garmushkaMeasurements,
         customDocumentEdits: mergedCustomEdits
       },
       false,

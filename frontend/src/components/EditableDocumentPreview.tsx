@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 
 import { ValuationData } from './ValuationWizard'
 import { generateDocumentHTML, CompanySettings } from '../lib/document-template'
@@ -40,6 +40,16 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
   const observerRef = useRef<MutationObserver | null>(null)
   const toolbarStateRef = useRef<ToolbarState>(toolbarState)
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const htmlUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const previousImageDataRef = useRef<{
+    propertyImages: any[]
+    selectedImagePreview: string | null
+    interiorImages: string[]
+  }>({
+    propertyImages: [],
+    selectedImagePreview: null,
+    interiorImages: []
+  })
 
   const updateIframeHeight = useCallback((frame: HTMLIFrameElement | null) => {
     if (!frame) {
@@ -414,28 +424,96 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
     fetchCompanySettings()
   }, [])
 
+  // Memoize image-related data to detect changes
+  const imageData = useMemo(() => ({
+    propertyImages: data.propertyImages || [],
+    selectedImagePreview: data.selectedImagePreview,
+    interiorImages: data.interiorImages || []
+  }), [data.propertyImages, data.selectedImagePreview, data.interiorImages])
+
+  // Check if image data actually changed
+  const imageDataChanged = useMemo(() => {
+    const prev = previousImageDataRef.current
+    const current = imageData
+    
+    const imagesChanged = JSON.stringify(prev.propertyImages) !== JSON.stringify(current.propertyImages)
+    const previewChanged = prev.selectedImagePreview !== current.selectedImagePreview
+    const interiorChanged = JSON.stringify(prev.interiorImages) !== JSON.stringify(current.interiorImages)
+    
+    const changed = imagesChanged || previewChanged || interiorChanged
+    
+    if (changed) {
+      // Update reference for next comparison
+      previousImageDataRef.current = {
+        propertyImages: [...current.propertyImages],
+        selectedImagePreview: current.selectedImagePreview,
+        interiorImages: [...current.interiorImages]
+      }
+    }
+    
+    return changed
+  }, [imageData])
+
   useEffect(() => {
     if (isEditMode) {
       return
     }
-    const mergedEdits = {
-      ...((data as any).customDocumentEdits || {}),
-      ...debouncedOverrides
-    }
-
-    const mergedData = {
-      ...data,
-      customDocumentEdits: mergedEdits
-    }
-
-    const html = generateDocumentHTML(mergedData as ValuationData, true, companySettings)
-    setHtmlContent(html)
     
-    // Count actual pages in generated HTML
-    const pageMatches = html.match(/<section[^>]*class="page"/g)
-    const actualPageCount = pageMatches ? pageMatches.length : 8
-    setPageCount(actualPageCount)
-  }, [data, companySettings, debouncedOverrides, isEditMode])
+    // Clear any pending HTML update
+    if (htmlUpdateTimerRef.current) {
+      clearTimeout(htmlUpdateTimerRef.current)
+    }
+    
+    // If images changed, update immediately (no debounce)
+    if (imageDataChanged) {
+      const mergedEdits = {
+        ...((data as any).customDocumentEdits || {}),
+        ...debouncedOverrides
+      }
+
+      const mergedData = {
+        ...data,
+        customDocumentEdits: mergedEdits
+      }
+
+      const html = generateDocumentHTML(mergedData as ValuationData, true, companySettings)
+      setHtmlContent(html)
+      
+      // Count actual pages in generated HTML
+      const pageMatches = html.match(/<section[^>]*class="page"/g)
+      const actualPageCount = pageMatches ? pageMatches.length : 8
+      setPageCount(actualPageCount)
+      return
+    }
+    
+    // For text field changes, debounce the HTML update to prevent image reloads
+    // This allows the user to type without reloading images on every keystroke
+    htmlUpdateTimerRef.current = setTimeout(() => {
+      const mergedEdits = {
+        ...((data as any).customDocumentEdits || {}),
+        ...debouncedOverrides
+      }
+
+      const mergedData = {
+        ...data,
+        customDocumentEdits: mergedEdits
+      }
+
+      const html = generateDocumentHTML(mergedData as ValuationData, true, companySettings)
+      setHtmlContent(html)
+      
+      // Count actual pages in generated HTML
+      const pageMatches = html.match(/<section[^>]*class="page"/g)
+      const actualPageCount = pageMatches ? pageMatches.length : 8
+      setPageCount(actualPageCount)
+    }, 1000) // 1 second debounce for text field changes
+    
+    return () => {
+      if (htmlUpdateTimerRef.current) {
+        clearTimeout(htmlUpdateTimerRef.current)
+      }
+    }
+  }, [data, companySettings, debouncedOverrides, isEditMode, imageDataChanged])
 
   useEffect(() => {
     if (!isEditMode) {
@@ -790,7 +868,7 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
     }
   }, [customHtmlOverrides, data, onDataChange])
 
-  const handleExportPDF = useCallback(async () => {
+  const handleExportPDF = useCallback(async (useReactPdf: boolean = false) => {
     const sessionId = (data as any).sessionId
     if (!sessionId) {
       alert('לא ניתן לייצא - חסר מזהה סשן')
@@ -804,7 +882,12 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
         ...customHtmlOverrides
       }
 
-      const response = await fetch(`/api/session/${sessionId}/export-pdf`, {
+      // Choose endpoint based on PDF engine preference
+      const endpoint = useReactPdf 
+        ? `/api/session/${sessionId}/export-pdf-react`
+        : `/api/session/${sessionId}/export-pdf`
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -813,7 +896,8 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
       })
 
       if (!response.ok) {
-        throw new Error('Failed to export PDF')
+        const errorText = await response.text()
+        throw new Error(`Failed to export PDF: ${errorText}`)
       }
 
       const blob = await response.blob()
@@ -826,14 +910,14 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
       
-      alert('✅ PDF הורד בהצלחה!')
+      alert(`✅ PDF הורד בהצלחה! (${useReactPdf ? 'React-PDF' : 'Puppeteer'})`)
     } catch (error) {
       console.error('Error exporting PDF:', error)
-      alert('❌ שגיאה בייצוא PDF')
+      alert(`❌ שגיאה בייצוא PDF: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setIsExporting(false)
     }
-  }, [data])
+  }, [data, customHtmlOverrides])
 
   const handleManualRefresh = useCallback(async () => {
     const sessionId = (data as any).sessionId
@@ -918,25 +1002,46 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
         <div className="flex items-center space-x-2 space-x-reverse gap-2">
           {(data as any).sessionId && (
             <>
-              <button
-                onClick={handleExportPDF}
-                disabled={isExporting}
-                className={`px-3 py-2 text-sm rounded-lg font-medium transition-all duration-200 ${
-                  isExporting 
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                    : 'bg-red-500 text-white hover:bg-red-600 shadow-md'
-                }`}
-                title="ייצא PDF של הדוח הערוך"
-              >
-                {isExporting ? (
-                  <>
-                    <span className="inline-block animate-spin mr-1">⟳</span>
-                    מייצא...
-                  </>
-                ) : (
-                  <>ייצא PDF של הדוח הערוך</>
-                )}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleExportPDF(false)}
+                  disabled={isExporting}
+                  className={`px-3 py-2 text-sm rounded-lg font-medium transition-all duration-200 ${
+                    isExporting 
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                      : 'bg-red-500 text-white hover:bg-red-600 shadow-md'
+                  }`}
+                  title="ייצא PDF של הדוח הערוך (Puppeteer - HTML template)"
+                >
+                  {isExporting ? (
+                    <>
+                      <span className="inline-block animate-spin mr-1">⟳</span>
+                      מייצא...
+                    </>
+                  ) : (
+                    <>📄 ייצא PDF (HTML)</>
+                  )}
+                </button>
+                <button
+                  onClick={() => handleExportPDF(true)}
+                  disabled={isExporting}
+                  className={`px-3 py-2 text-sm rounded-lg font-medium transition-all duration-200 ${
+                    isExporting 
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                      : 'bg-blue-500 text-white hover:bg-blue-600 shadow-md'
+                  }`}
+                  title="ייצא PDF של הדוח הערוך (React-PDF - חדש)"
+                >
+                  {isExporting ? (
+                    <>
+                      <span className="inline-block animate-spin mr-1">⟳</span>
+                      מייצא...
+                    </>
+                  ) : (
+                    <>⚡ ייצא PDF (React-PDF)</>
+                  )}
+                </button>
+              </div>
               
             <button
               onClick={handleManualRefresh}

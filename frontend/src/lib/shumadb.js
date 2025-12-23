@@ -201,6 +201,15 @@ class ShumaDBEnhanced {
    * Save to main shuma table
    */
   static async _saveShumaTable(client, sessionId, organizationId, userId, valuationData) {
+    // Debug: Check what we're about to save
+    console.log('🔍 _saveShumaTable - About to save:', {
+      clientTitle: valuationData.clientTitle,
+      clientTitleType: typeof valuationData.clientTitle,
+      clientTitleIn: 'clientTitle' in valuationData,
+      valuationType: valuationData.valuationType,
+      valuationTypeType: typeof valuationData.valuationType,
+      valuationTypeIn: 'valuationType' in valuationData
+    })
 
     // Check if shuma already exists for this session
     const existingShuma = await client.query(
@@ -217,7 +226,9 @@ class ShumaDBEnhanced {
           session_id, organization_id, user_id,
           street, building_number, city, neighborhood, full_address,
           rooms, floor, air_directions, area, property_essence,
-          client_name, visit_date, valuation_date, reference_number,
+          client_name, client_title, client_note, client_relation,
+          visit_date, valuation_date, valuation_type, valuation_effective_date,
+          reference_number,
           shamay_name, shamay_serial_number, gush, parcel, parcel_area,
           parcel_shape, parcel_surface, sub_parcel, registered_area,
           built_area, balcony_area, building_permit_number,
@@ -230,21 +241,25 @@ class ShumaDBEnhanced {
           market_analysis, risk_assessment, recommendations,
           extracted_data, comparable_data, final_valuation,
           price_per_sqm, is_complete, uploads, gis_analysis, gis_screenshots,
-          garmushka_measurements
+          garmushka_measurements, land_contamination, land_contamination_note
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
           $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26,
           $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38,
           $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50,
-          $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61
+          $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62,
+          $63, $64, $65, $66, $67, $68
         ) RETURNING id
       `, [
         sessionId, organizationId, userId,
         valuationData.street || '', valuationData.buildingNumber || '', String(valuationData.city || ''),
         valuationData.neighborhood || '', valuationData.fullAddress || '', valuationData.rooms || '0.0',
         valuationData.floor || '0', valuationData.airDirections || '', valuationData.area || 0,
-        valuationData.propertyEssence || '', valuationData.clientName || '', formatDateForDB(valuationData.visitDate),
-        formatDateForDB(valuationData.valuationDate), valuationData.referenceNumber || '', valuationData.shamayName || '',
+        valuationData.propertyEssence || '', valuationData.clientName || valuationData.client_name || '', valuationData.clientTitle || valuationData.client_title || '', valuationData.clientNote || valuationData.client_note || '', valuationData.clientRelation || valuationData.client_relation || '',
+        formatDateForDB(valuationData.visitDate),
+        formatDateForDB(valuationData.valuationDate), valuationData.valuationType || valuationData.valuation_type || '',
+        formatDateForDB(valuationData.valuationEffectiveDate),
+        valuationData.referenceNumber || '', valuationData.shamayName || '',
         valuationData.shamaySerialNumber || '', valuationData.gush || '', valuationData.parcel || '',
         this._parseNumeric(valuationData.parcelArea), valuationData.parcelShape || '', valuationData.parcelSurface || '',
         valuationData.subParcel || '', this._parseNumeric(valuationData.registeredArea), this._parseNumeric(valuationData.builtArea),
@@ -261,7 +276,8 @@ class ShumaDBEnhanced {
         JSON.stringify(valuationData.extractedData || {}), JSON.stringify(valuationData.comparableData || []),
         valuationData.finalValuation || 0, valuationData.pricePerSqm || 0, valuationData.isComplete || false,
         JSON.stringify(valuationData.uploads || []), JSON.stringify(valuationData.gisAnalysis || {}), JSON.stringify(valuationData.gisScreenshots || {}),
-        JSON.stringify(valuationData.garmushkaMeasurements || {})
+        JSON.stringify(valuationData.garmushkaMeasurements || {}),
+        valuationData.landContamination || false, valuationData.landContaminationNote || ''
       ])
 
       shumaId = result.rows[0].id
@@ -279,13 +295,44 @@ class ShumaDBEnhanced {
         return existingValue !== undefined && existingValue !== null ? existingValue : defaultValue
       }
       
-      // Helper for JSON fields - deep merge
+      // Helper for JSON fields - shallow merge
       const mergeJSON = (newValue, existingValue, defaultValue = {}) => {
         if (newValue && Object.keys(newValue).length > 0) {
           // Merge new data with existing
           return { ...existingValue, ...newValue }
         }
         return existingValue || defaultValue
+      }
+      
+      // Deep merge function for nested objects (like extracted_data)
+      const deepMergeJSON = (newValue, existingValue, defaultValue = {}) => {
+        if (!newValue || (typeof newValue !== 'object') || Array.isArray(newValue)) {
+          return newValue || existingValue || defaultValue
+        }
+        
+        if (!existingValue || (typeof existingValue !== 'object') || Array.isArray(existingValue)) {
+          return newValue || defaultValue
+        }
+        
+        // Deep merge: recursively merge nested objects
+        const merged = { ...existingValue }
+        for (const [key, value] of Object.entries(newValue)) {
+          if (value !== undefined && value !== null) {
+            // If both are objects (not arrays), deep merge them
+            if (
+              typeof value === 'object' && 
+              !Array.isArray(value) && 
+              typeof merged[key] === 'object' && 
+              !Array.isArray(merged[key])
+            ) {
+              merged[key] = deepMergeJSON(value, merged[key], {})
+            } else {
+              // Otherwise, replace (or set if new)
+              merged[key] = value
+            }
+          }
+        }
+        return merged
       }
       
       // Helper for arrays - concatenate or replace
@@ -300,6 +347,33 @@ class ShumaDBEnhanced {
       console.log('📊 Existing data keys:', Object.keys(existingData))
       console.log('📝 New data keys:', Object.keys(valuationData))
       
+      // Deep merge extracted_data BEFORE sending to database
+      let mergedExtractedData = {}
+      if (existingData.extracted_data) {
+        try {
+          const existingExtracted = typeof existingData.extracted_data === 'string' 
+            ? JSON.parse(existingData.extracted_data) 
+            : existingData.extracted_data
+          const newExtracted = valuationData.extractedData || {}
+          mergedExtractedData = deepMergeJSON(newExtracted, existingExtracted, {})
+          console.log('🔀 Deep merged extracted_data:', {
+            existingKeys: Object.keys(existingExtracted),
+            newKeys: Object.keys(newExtracted),
+            mergedKeys: Object.keys(mergedExtractedData),
+            hasPlanningRights: !!mergedExtractedData.planning_rights,
+            hasPlanningInfo: !!mergedExtractedData.planning_information
+          })
+        } catch (e) {
+          console.error('Error merging extracted_data:', e)
+          mergedExtractedData = valuationData.extractedData || existingData.extracted_data || {}
+        }
+      } else {
+        mergedExtractedData = valuationData.extractedData || {}
+      }
+      
+      // Replace valuationData.extractedData with merged version
+      valuationData.extractedData = mergedExtractedData
+      
       // Update existing shuma with MERGED data
       await client.query(`
         UPDATE shuma SET
@@ -312,8 +386,8 @@ class ShumaDBEnhanced {
           floor = COALESCE(NULLIF($7, ''), floor),
           air_directions = COALESCE(NULLIF($8, ''), air_directions),
           area = CASE WHEN $9::text IS NOT NULL AND $9::text != '' AND $9::numeric != 0 THEN $9::numeric ELSE area END,
-          property_essence = COALESCE(NULLIF($10, ''), property_essence),
-          client_name = COALESCE(NULLIF($11, ''), client_name),
+          property_essence = COALESCE($10, property_essence),
+          client_name = COALESCE($11, client_name),
           visit_date = COALESCE($12, visit_date),
           valuation_date = COALESCE($13, valuation_date),
           reference_number = COALESCE(NULLIF($14, ''), reference_number),
@@ -348,9 +422,9 @@ class ShumaDBEnhanced {
           selected_image_preview = COALESCE($43, selected_image_preview),
           interior_images = CASE WHEN $44::text != '[]' THEN $44::jsonb ELSE interior_images END,
           signature_preview = COALESCE($45, signature_preview),
-          property_analysis = CASE WHEN $46::text != '{}' THEN $46::jsonb ELSE property_analysis END,
-          market_analysis = CASE WHEN $47::text != '{}' THEN $47::jsonb ELSE market_analysis END,
-          risk_assessment = CASE WHEN $48::text != '{}' THEN $48::jsonb ELSE risk_assessment END,
+          property_analysis = CASE WHEN $46::text != '{}' THEN COALESCE(property_analysis, '{}'::jsonb) || $46::jsonb ELSE property_analysis END,
+          market_analysis = CASE WHEN $47::text != '{}' THEN COALESCE(market_analysis, '{}'::jsonb) || $47::jsonb ELSE market_analysis END,
+          risk_assessment = CASE WHEN $48::text != '{}' THEN COALESCE(risk_assessment, '{}'::jsonb) || $48::jsonb ELSE risk_assessment END,
           recommendations = CASE WHEN $49::text != '[]' THEN $49::jsonb ELSE recommendations END,
           extracted_data = CASE WHEN $50::text != '{}' THEN $50::jsonb ELSE extracted_data END,
           comparable_data = CASE WHEN $51::text != '[]' THEN $51::jsonb ELSE comparable_data END,
@@ -358,16 +432,26 @@ class ShumaDBEnhanced {
           price_per_sqm = CASE WHEN $53::numeric != 0 THEN $53 ELSE price_per_sqm END,
           is_complete = COALESCE($54, is_complete),
           uploads = CASE WHEN $55::text != '[]' THEN $55::jsonb ELSE uploads END,
-          gis_analysis = CASE WHEN $56::text != '{}' THEN $56::jsonb ELSE gis_analysis END,
-          gis_screenshots = CASE WHEN $57::text != '{}' THEN $57::jsonb ELSE gis_screenshots END,
-          garmushka_measurements = CASE WHEN $58::text != '{}' THEN $58::jsonb ELSE garmushka_measurements END,
+          gis_analysis = CASE WHEN $56::text != '{}' THEN COALESCE(gis_analysis, '{}'::jsonb) || $56::jsonb ELSE gis_analysis END,
+          gis_screenshots = CASE WHEN $57::text != '{}' THEN COALESCE(gis_screenshots, '{}'::jsonb) || $57::jsonb ELSE gis_screenshots END,
+          garmushka_measurements = CASE WHEN $58::text != '{}' THEN COALESCE(garmushka_measurements, '{}'::jsonb) || $58::jsonb ELSE garmushka_measurements END,
+          valuation_type = CASE WHEN $59::text IS NOT NULL THEN $59::text ELSE valuation_type END,
+          valuation_effective_date = COALESCE($60, valuation_effective_date),
+          client_title = CASE WHEN $61::text IS NOT NULL THEN $61::text ELSE client_title END,
+          client_note = CASE WHEN $62::text IS NOT NULL THEN $62::text ELSE client_note END,
+          client_relation = CASE WHEN $63::text IS NOT NULL THEN $63::text ELSE client_relation END,
+          land_contamination = COALESCE($64, land_contamination),
+          land_contamination_note = CASE WHEN $65::text IS NOT NULL THEN $65::text ELSE land_contamination_note END,
           updated_at = NOW()
-        WHERE id = $59
+        WHERE id = $67
       `, [
         valuationData.street, valuationData.buildingNumber,
         valuationData.city, valuationData.neighborhood, valuationData.fullAddress, valuationData.rooms || '0.0',
         valuationData.floor, valuationData.airDirections, valuationData.area || 0, valuationData.propertyEssence,
-        valuationData.clientName, formatDateForDB(valuationData.visitDate), formatDateForDB(valuationData.valuationDate), valuationData.referenceNumber,
+        valuationData.propertyEssence !== undefined ? (valuationData.propertyEssence || '') : null,
+        valuationData.clientName !== undefined ? (valuationData.clientName || '') : (valuationData.client_name !== undefined ? (valuationData.client_name || '') : null),
+        formatDateForDB(valuationData.visitDate), formatDateForDB(valuationData.valuationDate),
+        valuationData.referenceNumber,
         valuationData.shamayName, valuationData.shamaySerialNumber, valuationData.gush, valuationData.parcel,
         this._parseNumeric(valuationData.parcelArea), valuationData.parcelShape, valuationData.parcelSurface, valuationData.subParcel,
         this._parseNumeric(valuationData.registeredArea), this._parseNumeric(valuationData.builtArea), this._parseNumeric(valuationData.balconyArea), valuationData.buildingPermitNumber,
@@ -381,8 +465,27 @@ class ShumaDBEnhanced {
         JSON.stringify(valuationData.recommendations || []), JSON.stringify(valuationData.extractedData || {}),
         JSON.stringify(valuationData.comparableData || []), valuationData.finalValuation, valuationData.pricePerSqm,
         valuationData.isComplete, JSON.stringify(valuationData.uploads || []), JSON.stringify(valuationData.gisAnalysis || {}), JSON.stringify(valuationData.gisScreenshots || {}),
-        JSON.stringify(valuationData.garmushkaMeasurements || {}), shumaId
+        JSON.stringify(valuationData.garmushkaMeasurements || {}),
+        valuationData.valuationType ?? null,
+        formatDateForDB(valuationData.valuationEffectiveDate),
+        valuationData.clientTitle ?? null,
+        valuationData.clientNote ?? null,
+        valuationData.clientRelation ?? null,
+        valuationData.landContamination ?? false, valuationData.landContaminationNote ?? null,
+        shumaId
       ])
+      
+      // Debug: Check what was actually updated
+      const checkResult = await client.query(
+        'SELECT client_title, valuation_type, client_note, client_relation FROM shuma WHERE id = $1',
+        [shumaId]
+      )
+      console.log('🔍 After UPDATE - DB values:', {
+        clientTitle: checkResult.rows[0]?.client_title,
+        valuationType: checkResult.rows[0]?.valuation_type,
+        clientNote: checkResult.rows[0]?.client_note,
+        clientRelation: checkResult.rows[0]?.client_relation
+      })
       
       console.log('✅ Data merged successfully for session:', sessionId)
     }
@@ -724,11 +827,20 @@ class ShumaDBEnhanced {
         
         // Cover Page Fields
         clientName: shuma.client_name || '',
+        clientTitle: shuma.client_title ?? '',
+        clientNote: shuma.client_note ?? '',
+        clientRelation: shuma.client_relation ?? '',
         visitDate: shuma.visit_date || '',
         valuationDate: shuma.valuation_date || '',
+        valuationType: shuma.valuation_type ?? '',
+        valuationEffectiveDate: shuma.valuation_effective_date || '',
         referenceNumber: shuma.reference_number || '',
         shamayName: shuma.shamay_name || '',
         shamaySerialNumber: shuma.shamay_serial_number || '',
+        
+        // Land Contamination
+        landContamination: shuma.land_contamination || false,
+        landContaminationNote: shuma.land_contamination_note || '',
         
         // Legal Status Fields
         gush: shuma.gush || '',
@@ -1446,6 +1558,9 @@ class ShumaDBEnhanced {
           area,
           property_essence,
           client_name,
+          client_title,
+          client_note,
+          client_relation,
           visit_date,
           valuation_date,
           gush,
@@ -1489,6 +1604,9 @@ class ShumaDBEnhanced {
           sessionId: row.session_id,
           address: row.full_address || `${row.street} ${row.building_number}, ${row.city}`,
           clientName: row.client_name,
+          clientTitle: row.client_title,
+          clientNote: row.client_note,
+          clientRelation: row.client_relation,
           rooms: row.rooms,
           area: row.area,
           isComplete: row.is_complete,
@@ -1525,6 +1643,9 @@ class ShumaDBEnhanced {
           area,
           property_essence,
           client_name,
+          client_title,
+          client_note,
+          client_relation,
           visit_date,
           valuation_date,
           gush,
@@ -1551,6 +1672,9 @@ class ShumaDBEnhanced {
           sessionId: row.session_id,
           address: row.full_address || `${row.street} ${row.building_number}, ${row.city}`,
           clientName: row.client_name,
+          clientTitle: row.client_title,
+          clientNote: row.client_note,
+          clientRelation: row.client_relation,
           rooms: row.rooms,
           area: row.area,
           isComplete: row.is_complete,
@@ -1923,4 +2047,3 @@ class ShumaDBEnhanced {
 }
 
 module.exports = { db, ShumaDB: ShumaDBEnhanced, formatDateForDB }
-

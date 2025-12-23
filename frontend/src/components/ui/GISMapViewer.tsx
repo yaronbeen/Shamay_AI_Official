@@ -167,6 +167,22 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
     }
   }, [draggingPanel, isDesktop, leftCollapsed, rightCollapsed])
 
+  // טען כתובת מהדיבי אם יש נתונים
+  useEffect(() => {
+    if (data && (data.street || data.city)) {
+      // טען כתובת מהדיבי - עדכן תמיד אם יש נתונים מהדיבי
+      if (data.street) {
+        setAddressStreet(data.street)
+      }
+      if (data.buildingNumber) {
+        setAddressNumber(data.buildingNumber)
+      }
+      if (data.city) {
+        setAddressCity(data.city)
+      }
+    }
+  }, [data?.street, data?.city, data?.buildingNumber])
+
   // Initialize - load saved maps and initial screenshots
   useEffect(() => {
     try {

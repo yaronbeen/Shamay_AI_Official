@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { StepIndicator } from './StepIndicator'
 import { DocumentPreview } from './DocumentPreview'
 import { NavigationButtons } from './NavigationButtons'
@@ -20,19 +20,26 @@ export interface ValuationData {
   fullAddress: string
   rooms: number
   floor: number
-  airDirections?: string
+  airDirections?: string | number
   area: number
   propertyEssence: string
   
   // ✅ NEW: Cover Page Fields
   clientName: string
+  clientTitle?: string
+  clientNote?: string
   clientRelation?: string
+  visitDate?: string
   valuationDate: string
   valuationEffectiveDate: string
   referenceNumber?: string
   shamayName: string
   shamaySerialNumber: string
   valuationType?: string
+  
+  // Land Contamination
+  landContamination?: boolean
+  landContaminationNote?: string
   
   // ✅ NEW: Legal Status Fields
   gush?: string
@@ -297,6 +304,38 @@ export interface ValuationData {
     averagePricePerSqm?: string
     medianPricePerSqm?: string
     adjustmentFactor?: string
+    
+    // Planning Information (Chapter 3)
+    planning_information?: {
+      rights?: {
+        usage?: string
+        minLotSize?: string | number
+        min_lot_size?: string | number
+        buildPercentage?: string | number
+        build_percentage?: string | number
+        maxFloors?: string | number
+        max_floors?: string | number
+        maxUnits?: string | number
+        max_units?: string | number
+        buildingLines?: string
+        building_lines?: string
+      }
+      plans?: Array<{
+        name?: string
+        number?: string
+        date?: string
+        status?: string
+        description?: string
+      }>
+    }
+    planning_rights?: {
+      usage?: string
+      minLotSize?: string | number
+      buildPercentage?: string | number
+      maxFloors?: string | number
+      maxUnits?: string | number
+      buildingLines?: string
+    }
   }
   
   // Calculations
@@ -358,6 +397,7 @@ export function ValuationWizard() {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [sessionLoading, setSessionLoading] = useState(true)
   const [showPDFViewer, setShowPDFViewer] = useState(false)
+  const dataRef = useRef<ValuationData | null>(null)
   const [data, setData] = useState<ValuationData>({
     street: '',
     buildingNumber: '',
@@ -366,9 +406,14 @@ export function ValuationWizard() {
     fullAddress: '',
     rooms: 0,
     floor: 0,
+    airDirections: '',
     area: 0,
     propertyEssence: '',
+    landContamination: false,
+    landContaminationNote: '',
     clientName: '',
+    clientTitle: '',
+    clientNote: '',
     clientRelation: '',
     valuationDate: '',
     valuationEffectiveDate: '',
@@ -434,13 +479,59 @@ export function ValuationWizard() {
     isComplete: false
   })
 
-  // Create session on mount
+  // Load or create session on mount
   useEffect(() => {
-    const createSession = async () => {
+    const loadOrCreateSession = async () => {
       try {
-        console.log('🚀 Creating new session...')
         setSessionLoading(true)
         
+        // Check for sessionId in URL or localStorage
+        const urlParams = new URLSearchParams(window.location.search)
+        const urlSessionId = urlParams.get('sessionId')
+        const storedSessionId = localStorage.getItem('valuationSessionId')
+        const existingSessionId = urlSessionId || storedSessionId
+        
+        if (existingSessionId) {
+          console.log('🔄 Loading existing session:', existingSessionId)
+          
+          // Try to load existing session data
+          const response = await fetch(`/api/session/${existingSessionId}`)
+          
+          if (response.ok) {
+            const result = await response.json()
+            if (result.data && Object.keys(result.data).length > 0) {
+              console.log('✅ Session loaded:', existingSessionId, 'Fields:', Object.keys(result.data))
+              setSessionId(existingSessionId)
+              setData(prev => {
+                // Deep merge to preserve all fields including valuationType, clientTitle, etc.
+                const mergedData = {
+                  ...prev,
+                  ...result.data,
+                  sessionId: existingSessionId,
+                  // Ensure critical fields are preserved
+                  valuationType: result.data.valuationType || prev.valuationType || '',
+                  valuationDate: result.data.valuationDate || prev.valuationDate || '',
+                  valuationEffectiveDate: result.data.valuationEffectiveDate || prev.valuationEffectiveDate || '',
+                  clientTitle: result.data.clientTitle || prev.clientTitle || '',
+                  // Deep merge extractedData if it exists
+                  extractedData: result.data.extractedData 
+                    ? { ...prev.extractedData, ...result.data.extractedData }
+                    : prev.extractedData
+                }
+                dataRef.current = mergedData
+                return mergedData
+              })
+              localStorage.setItem('valuationSessionId', existingSessionId)
+              setSessionLoading(false)
+              return
+            }
+          }
+          
+          console.log('⚠️ Session not found, creating new session')
+        }
+        
+        // Create new session
+        console.log('🚀 Creating new session...')
         const response = await fetch('/api/session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' }
@@ -454,29 +545,34 @@ export function ValuationWizard() {
         console.log('✅ Session created:', sessionId)
         
         setSessionId(sessionId)
-        setData(prev => ({ ...prev, sessionId }))
+        setData(prev => {
+          const newData = { ...prev, sessionId }
+          dataRef.current = newData
+          return newData
+        })
+        localStorage.setItem('valuationSessionId', sessionId)
         setSessionLoading(false)
         
       } catch (error) {
-        console.error('❌ Failed to create session:', error)
+        console.error('❌ Failed to load/create session:', error)
         setSessionLoading(false)
         // Still allow the wizard to work, just without session persistence
       }
     }
-    createSession()
+    loadOrCreateSession()
   }, [])
 
   // Save data to session whenever it changes
-  const saveToSession = useCallback(async (updates: Partial<ValuationData>) => {
+  const saveToSession = useCallback(async (dataToSave: Partial<ValuationData> | ValuationData) => {
     if (!sessionId) return
 
     try {
-      console.log('💾 Saving to session:', sessionId, updates)
+      console.log('💾 Saving to session:', sessionId, 'Fields:', Object.keys(dataToSave))
       
       const response = await fetch(`/api/session/${sessionId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: updates })
+        body: JSON.stringify({ data: dataToSave })
       })
 
       if (!response.ok) {
@@ -490,23 +586,53 @@ export function ValuationWizard() {
   }, [sessionId])
 
   // Memoize the updateData function to prevent infinite loops
-  const updateData = useCallback((updates: Partial<ValuationData>) => {
-    console.log('📝 Updating data:', updates)
+  const updateData = useCallback((updates: Partial<ValuationData>, options?: { skipAutoSave?: boolean }) => {
+    console.log('📝 Updating data:', updates, 'skipAutoSave:', options?.skipAutoSave)
     setData(prev => {
-      const newData = { ...prev, ...updates }
+      // Deep merge for extractedData to preserve planning_rights, planning_information, etc.
+      let newData: ValuationData
+      if (updates.extractedData) {
+        newData = {
+          ...prev,
+          ...updates,
+          extractedData: {
+            ...prev.extractedData,
+            ...updates.extractedData
+          }
+        }
+      } else {
+        newData = { ...prev, ...updates }
+      }
       
-      // Save to session
-      saveToSession(updates)
+      // Update ref with latest data
+      dataRef.current = newData
+      
+      // Save to session - send ALL current data, not just updates
+      // This ensures fields like valuationType, valuationDate, etc. are always saved
+      if (!options?.skipAutoSave) {
+        saveToSession(newData)
+      }
       
       return newData
     })
   }, [saveToSession])
 
-  const nextStep = () => {
+  // Keep dataRef in sync with data state
+  useEffect(() => {
+    dataRef.current = data
+  }, [data])
+
+  const nextStep = useCallback(() => {
     if (currentStep < 5) {
-      setCurrentStep(currentStep + 1)
+      // Save all current data before moving to next step
+      // This ensures fields like valuationType, valuationDate, valuationEffectiveDate, clientTitle are saved
+      const currentData = dataRef.current || data
+      if (currentData) {
+        saveToSession(currentData)
+      }
+      setCurrentStep(prev => prev + 1)
     }
-  }
+  }, [currentStep, saveToSession, data])
 
   const prevStep = () => {
     if (currentStep > 1) {

@@ -205,23 +205,16 @@ export default function WizardPage() {
           // Load existing data from database
           try {
             const loadResult = await loadShumaForWizard(currentUrlSessionId)
-            console.log('🔍 [INIT] Database load result:', loadResult)
             if (loadResult.success && loadResult.valuationData) {
-              console.log('✅ [INIT] Loaded existing data from database:', loadResult.valuationData)
-              // Directly set the data without going through session store merge
+              // Directly set the data - REPLACE, don't merge
               const loadedData = {
                 ...loadResult.valuationData,
                 sessionId: currentUrlSessionId
               }
-              setData(prev => ({
-                ...prev,
-                ...loadedData
-              }))
+              // CRITICAL: Replace all data, don't merge with previous state
+              setData(loadedData)
               // MITIGATION: Initialize lastSavedData from loaded data
               setLastSavedData(loadedData)
-              console.log('✅ [INIT] Initialized lastSavedData from database')
-            } else {
-              console.log('⚠️ [INIT] No existing data found, starting fresh')
             }
           } catch (error) {
             console.error('❌ [INIT] Error loading existing data:', error)
@@ -244,21 +237,15 @@ export default function WizardPage() {
           try {
             const loadResult = await loadShumaForWizard(localSessionId)
             if (loadResult.success && loadResult.valuationData) {
-              console.log('✅ [INIT] Loaded existing data from database')
-              // Directly set the data without going through session store merge
+              // Directly set the data - REPLACE, don't merge
               const loadedData = {
                 ...loadResult.valuationData,
                 sessionId: localSessionId
               }
-              setData(prev => ({
-                ...prev,
-                ...loadedData
-              }))
+              // CRITICAL: Replace all data, don't merge with previous state
+              setData(loadedData)
               // MITIGATION: Initialize lastSavedData from loaded data
               setLastSavedData(loadedData)
-              console.log('✅ [INIT] Initialized lastSavedData from database')
-            } else {
-              console.log('⚠️ [INIT] No existing data found, starting fresh')
             }
           } catch (error) {
             console.error('❌ [INIT] Error loading existing data:', error)
@@ -351,6 +338,7 @@ export default function WizardPage() {
             // Create a deep copy to avoid reference issues
             setLastSavedData(JSON.parse(JSON.stringify(dataToSave)))
             console.log('✅ [DEBOUNCED SAVE] Updated lastSavedData baseline')
+            
             if (result.shumaId && !valuationId) {
               setValuationId(result.shumaId)
               console.log('✅ New shuma created:', result.shumaId)

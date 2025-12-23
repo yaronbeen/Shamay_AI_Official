@@ -1,12 +1,15 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Search, MapPin, Loader2 } from 'lucide-react'
 import type { AddressData, GISData } from './types'
 
 interface AddressSearchPanelProps {
   sessionId: string
   initialAddress?: string
+  initialStreet?: string
+  initialNumber?: string
+  initialCity?: string
   onAddressFound: (address: AddressData, gisData: GISData) => void
   onError: (error: Error) => void
 }
@@ -18,13 +21,29 @@ interface AddressSearchPanelProps {
 const AddressSearchPanel: React.FC<AddressSearchPanelProps> = ({
   sessionId,
   initialAddress,
+  initialStreet,
+  initialNumber,
+  initialCity,
   onAddressFound,
   onError
 }) => {
-  const [streetInput, setStreetInput] = useState('')
-  const [numberInput, setNumberInput] = useState('')
-  const [cityInput, setCityInput] = useState('')
+  const [streetInput, setStreetInput] = useState(initialStreet || '')
+  const [numberInput, setNumberInput] = useState(initialNumber || '')
+  const [cityInput, setCityInput] = useState(initialCity || '')
   const [isSearching, setIsSearching] = useState(false)
+
+  // טען כתובת מהדיבי אם יש נתונים
+  useEffect(() => {
+    if (initialStreet) {
+      setStreetInput(initialStreet)
+    }
+    if (initialNumber) {
+      setNumberInput(initialNumber)
+    }
+    if (initialCity) {
+      setCityInput(initialCity)
+    }
+  }, [initialStreet, initialNumber, initialCity])
 
   const handleSearch = async () => {
     if (!streetInput.trim() || !cityInput.trim()) {
