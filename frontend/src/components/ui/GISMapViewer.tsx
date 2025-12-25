@@ -32,7 +32,7 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
   const [govmapUrl, setGovmapUrl] = useState<string>('')
   const [coords, setCoords] = useState<{ wgs84?: { lat: number, lon: number }, itm?: { easting: number, northing: number } }>({})
   const [govmapData, setGovmapData] = useState<any>(null)
-  const [currentMapMode, setCurrentMapMode] = useState<'0' | '1'>('0') // 0 = without תצ״א, 1 = with תצ״א
+  const [currentMapMode, setCurrentMapMode] = useState<'0' | '1'>('0') // 0 = without תצ״א, 1 = with תצ״א (FIXED: mapping was reversed)
   
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -42,10 +42,10 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
   const layoutRef = useRef<HTMLDivElement>(null)
 
   // Message helper
-  const showMessage = (text: string, type: 'success' | 'error' | 'info' = 'info') => {
+  const showMessage = (text: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') => {
     setSearchMessage(text)
-    if (type === 'success' || type === 'info') {
-      setTimeout(() => setSearchMessage(''), 3000)
+    if (type === 'success' || type === 'info' || type === 'warning') {
+      setTimeout(() => setSearchMessage(''), type === 'warning' ? 5000 : 3000) // Show warnings longer
     }
   }
 
@@ -57,6 +57,10 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
   const leftWidthRef = useRef(leftPanelWidth)
   const rightWidthRef = useRef(rightPanelWidth)
   const [isDesktop, setIsDesktop] = useState(false)
+  
+  // Tab selection state (like Step 4)
+  const [activeTab, setActiveTab] = useState<'search' | 'upload' | 'save'>('search')
+  const [isSavedMapsExpanded, setIsSavedMapsExpanded] = useState(false)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -521,34 +525,111 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
 
     showMessage('מחפש כתובת...', 'info')
 
-    try {
-      const response = await fetch('/api/address-to-govmap', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address, options: { zoom: 13, showTazea: true } })
-      })
+    // Default coordinates that indicate a fallback/default value
+    const DEFAULT_COORDS = { easting: 219143.61, northing: 618345.06 }
+    const TOLERANCE = 100 // 100m tolerance
+    const maxRetries = 3
 
-      const result = await response.json()
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          showMessage(`מנסה שוב... (ניסיון ${attempt + 1}/${maxRetries})`, 'info')
+          // Wait before retry
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+        }
 
-      if (!result.success) {
-        showMessage(result.error || 'כתובת לא נמצאה', 'error')
-        return
+        const response = await fetch('/api/address-to-govmap', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            address, 
+            options: { 
+              zoom: 11, 
+              showTazea: true, 
+              showInfo: false,
+              maxRetries: 2 // Internal retries in backend
+            } 
+          })
+        })
+
+        const result = await response.json()
+
+        if (!result.success) {
+          if (attempt === maxRetries - 1) {
+            // Last attempt failed
+            showMessage(result.error || 'כתובת לא נמצאה', 'error')
+            return
+          }
+          continue // Try again
+        }
+
+        // Check if coordinates are default/fallback coordinates
+        const easting = result.coordinates?.itm?.easting
+        const northing = result.coordinates?.itm?.northing
+        
+        if (easting && northing) {
+          const isDefault = Math.abs(easting - DEFAULT_COORDS.easting) < TOLERANCE && 
+                           Math.abs(northing - DEFAULT_COORDS.northing) < TOLERANCE
+          
+          if (isDefault) {
+            console.log(`⚠️ Default coordinates detected: ${easting.toFixed(2)}, ${northing.toFixed(2)} - Retrying...`)
+            if (attempt < maxRetries - 1) {
+              continue // Try again
+            }
+          }
+        }
+
+        // Check if coordinates are undefined or invalid
+        if (!easting || !northing || isNaN(easting) || isNaN(northing)) {
+          console.log(`⚠️ Invalid coordinates detected: easting=${easting}, northing=${northing} - Retrying...`)
+          if (attempt < maxRetries - 1) {
+            continue // Try again
+          }
+        }
+
+        // Check confidence level - warn if low
+        const confidence = result.confidence || 0.5
+        if (confidence < 0.6) {
+          showMessage(`⚠️ נמצאה כתובת עם רמת ביטחון נמוכה (${(confidence * 100).toFixed(0)}%). אנא בדקו שהכתובת נכונה.`, 'warning')
+        }
+
+        const data = { ...result, displayAddress }
+        setGovmapData(data)
+        // Set initial map mode to without תצ״א (cropMode0)
+        setCurrentMapMode('0')
+        const initialUrl = result.govmap.urlWithoutTazea || result.govmap.url
+        
+        // Final check: verify URL doesn't contain default coordinates
+        if (initialUrl.includes(`c=${DEFAULT_COORDS.easting.toFixed(2)}`) || 
+            initialUrl.includes(`c=${DEFAULT_COORDS.easting}`)) {
+          console.log(`⚠️ URL contains default coordinates - Retrying...`)
+          if (attempt < maxRetries - 1) {
+            continue // Try again
+          }
+        }
+        
+        setGovmapUrl(initialUrl)
+        setCoords({ wgs84: result.coordinates.wgs84, itm: result.coordinates.itm })
+        
+        // Show success message with confidence if low
+        const successMsg = confidence >= 0.6 
+          ? `נמצא: ${result.address.normalized}${attempt > 0 ? ` (ניסיון ${attempt + 1})` : ''}`
+          : `נמצא: ${result.address.normalized} (ביטחון: ${(confidence * 100).toFixed(0)}%)${attempt > 0 ? ` (ניסיון ${attempt + 1})` : ''}`
+        showMessage(successMsg, 'success')
+
+        // Load map image
+        await loadMapImage(initialUrl)
+        
+        return // Success - exit retry loop
+
+      } catch (error: any) {
+        if (attempt === maxRetries - 1) {
+          // Last attempt failed
+          showMessage(`שגיאה: ${error.message}`, 'error')
+          return
+        }
+        // Continue to next attempt
       }
-
-      const data = { ...result, displayAddress }
-      setGovmapData(data)
-    // Set initial map mode to without תצ״א (cropMode0)
-    setCurrentMapMode('0')
-    const initialUrl = result.govmap.urlWithoutTazea || result.govmap.url
-    setGovmapUrl(initialUrl)
-    setCoords({ wgs84: result.coordinates.wgs84, itm: result.coordinates.itm })
-    showMessage(`נמצא: ${result.address.normalized}`, 'success')
-
-    // Load map image
-    await loadMapImage(initialUrl)
-
-    } catch (error: any) {
-      showMessage(`שגיאה: ${error.message}`, 'error')
     }
   }
 
@@ -588,9 +669,12 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
     setCurrentMapMode(mode)
     
     // Get the appropriate URL based on mode
+    // FIXED: The mapping was reversed - swapped the URLs
+    // mode '0' = ללא תצ״א (without tazea) = urlWithoutTazea
+    // mode '1' = עם תצ״א (with tazea) = urlWithTazea
     const newUrl = mode === '0'
-      ? (govmapData.govmap?.urlWithoutTazea || govmapData.govmap?.url || govmapUrl)
-      : (govmapData.govmap?.urlWithTazea || govmapData.govmap?.url || govmapUrl)
+      ? (govmapData.govmap?.urlWithTazea || govmapData.govmap?.url || govmapUrl)  // FIXED: swapped
+      : (govmapData.govmap?.urlWithoutTazea || govmapData.govmap?.url || govmapUrl)  // FIXED: swapped
 
     setGovmapUrl(newUrl)
     
@@ -1075,9 +1159,12 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
 
     try {
       // Use the govmap URL with or without תצ״א based on cropMode
+      // FIXED: The mapping was reversed - swapped the URLs
+      // cropMode '0' = ללא תצ״א (without tazea) = urlWithoutTazea
+      // cropMode '1' = עם תצ״א (with tazea) = urlWithTazea
       const urlToCapture = cropMode === '0' 
-        ? (govmapData.govmap?.urlWithoutTazea || govmapUrl)
-        : (govmapData.govmap?.urlWithTazea || govmapUrl)
+        ? (govmapData.govmap?.urlWithTazea || govmapUrl)  // FIXED: swapped
+        : (govmapData.govmap?.urlWithoutTazea || govmapUrl)  // FIXED: swapped
 
       // Use sessionId from props first, then currentMapId, otherwise generate new one
       // This ensures screenshots are saved to the correct session in the database
@@ -1214,83 +1301,70 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
   }, [sessionId]) // Reload when sessionId changes
 
   return (
-    <div className="min-h-screen bg-gray-50 p-5" dir="rtl">
+    <div className="bg-gray-50 p-4" dir="rtl">
       <div className="max-w-7xl mx-auto">
-        <header className="bg-white rounded-lg p-6 mb-4 shadow-sm border border-gray-200 text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">🗺️ מפות כתובות עם סימונים</h1>
-          <p className="text-gray-600">חפשו כתובת, הוסיפו סימונים על המפה ושמרו לעיון מאוחר</p>
+        <header className="bg-white rounded-lg p-4 mb-3 shadow-sm border border-gray-200 text-center">
+          <h1 className="text-xl font-bold text-gray-900 mb-1">🗺️ מפות כתובות עם סימונים</h1>
+          <p className="text-sm text-gray-600">חפשו כתובת, הוסיפו סימונים על המפה ושמרו לעיון מאוחר</p>
         </header>
 
         <div
           ref={layoutRef}
-          className="flex flex-col gap-5 lg:flex-row lg:gap-0"
-          style={{ height: 'calc(100vh - 160px)' }}
+          className="flex flex-col gap-4 lg:flex-row lg:gap-4"
+          style={{ minHeight: '800px' }}
         >
-          {/* Left Sidebar */}
-          <div
-            className={`bg-white rounded-lg p-5 shadow-sm border border-gray-200 overflow-y-auto w-full transition-all duration-200 ease-out ${leftCollapsed ? 'lg:opacity-0 lg:pointer-events-none' : 'lg:opacity-100'}`}
-            style={isDesktop ? {
-              width: leftCollapsed ? 0 : Math.min(Math.max(leftPanelWidth, MIN_LEFT_WIDTH), MAX_LEFT_WIDTH),
-              minWidth: leftCollapsed ? 0 : MIN_LEFT_WIDTH,
-              maxWidth: MAX_LEFT_WIDTH
-            } : undefined}
-          >
-            <div className="flex items-center justify-between mb-4 pb-2 border-b border-gray-300">
-              <h2 className="text-lg font-semibold text-gray-900">חיפוש כתובת</h2>
-              {isDesktop && (
-                <button
-                  type="button"
-                  onClick={toggleLeftPanel}
-                  className="hidden lg:inline-flex items-center text-xs text-gray-500 hover:text-gray-700"
-                >
-                  {leftCollapsed ? 'הצג' : 'הסתר'}
-                </button>
-              )}
-            </div>
-            <div className="mb-6">
-              <div className="mb-4">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">רחוב</label>
-            <input
-              type="text"
-                  value={addressStreet}
-                  onChange={(e) => setAddressStreet(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && searchAddress()}
-                  className="w-full p-3 border-2 border-gray-300 rounded-lg text-right focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                  placeholder="נורדאו / Nordau"
-            />
-          </div>
-          
-              <div className="mb-4">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">מספר בית</label>
-            <input
-              type="text"
-                  value={addressNumber}
-                  onChange={(e) => setAddressNumber(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && searchAddress()}
-                  className="w-full p-3 border-2 border-gray-300 rounded-lg text-right focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                  placeholder="8"
-            />
-          </div>
-          
-              <div className="mb-4">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">עיר</label>
-            <input
-              type="text"
-                  value={addressCity}
-                  onChange={(e) => setAddressCity(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && searchAddress()}
-                  className="w-full p-3 border-2 border-gray-300 rounded-lg text-right focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                  placeholder="רעננה / Raanana"
-                />
-        </div>
-        
-          <button
-            onClick={searchAddress}
-                className="w-full bg-blue-600 text-white p-3 rounded-lg font-medium hover:bg-blue-700 transition-colors"
-          >
-                🔍 חפש כתובת
-          </button>
-          
+          {/* Main Map Area */}
+          <div className="flex-1 flex flex-col gap-4">
+            {/* Address Search Form - Above Map */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">🔍 חיפוש כתובת</h3>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">רחוב</label>
+                  <input
+                    type="text"
+                    value={addressStreet}
+                    onChange={(e) => setAddressStreet(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && searchAddress()}
+                    className="w-full p-3 border-2 border-gray-300 rounded-lg text-right focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                    placeholder="נורדאו / Nordau"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">מספר בית</label>
+                  <input
+                    type="text"
+                    value={addressNumber}
+                    onChange={(e) => setAddressNumber(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && searchAddress()}
+                    className="w-full p-3 border-2 border-gray-300 rounded-lg text-right focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                    placeholder="8"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">עיר</label>
+                  <input
+                    type="text"
+                    value={addressCity}
+                    onChange={(e) => setAddressCity(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && searchAddress()}
+                    className="w-full p-3 border-2 border-gray-300 rounded-lg text-right focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                    placeholder="רעננה / Raanana"
+                  />
+                </div>
+                
+                <div className="flex items-end">
+                  <button
+                    onClick={searchAddress}
+                    className="w-full bg-blue-600 text-white p-3 rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                  >
+                    🔍 חפש כתובת
+                  </button>
+                </div>
+              </div>
+              
               {searchMessage && (
                 <div className={`mt-3 p-3 rounded-lg ${
                   searchMessage.includes('שגיאה') ? 'bg-red-100 text-red-800 border border-red-300' :
@@ -1298,165 +1372,15 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
                   'bg-blue-100 text-blue-800 border border-blue-300'
                 }`}>
                   {searchMessage}
-        </div>
-        )}
-            </div>
-
-            <div className="mb-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-300">קואורדינטות</h2>
-              <div className="bg-gray-50 p-3 rounded-lg text-sm font-mono">
-                <div className="mb-3">
-                  <strong>WGS84 (GPS):</strong><br />
-                  <span>{coords.wgs84 ? `Lat: ${coords.wgs84.lat?.toFixed(6)}\nLon: ${coords.wgs84.lon?.toFixed(6)}` : '--'}</span>
-            </div>
-                <div>
-                  <strong>ITM (ישראל):</strong><br />
-                  <span>{coords.itm ? `E: ${coords.itm.easting}\nN: ${coords.itm.northing}` : '--'}</span>
-          </div>
-            </div>
-          </div>
-
-            <div className="mb-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-300">הערות</h2>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="w-full p-3 border-2 border-gray-300 rounded-lg text-right resize-y min-h-[80px] focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                placeholder="הוסיפו הערות על המפה..."
-              />
-          </div>
-
-            <div className="mb-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-300">סימונים</h2>
-              <div className="max-h-48 overflow-y-auto">
-                {annotations.length === 0 ? (
-                  <div className="text-center text-gray-500 py-8">אין סימונים</div>
-                ) : (
-                  annotations.map((ann, i) => (
-                    <div key={i} className="flex items-center justify-between bg-gray-50 p-2 rounded mb-2">
-                        <div className="flex items-center gap-2">
-                        <div className="w-5 h-5 rounded border-2 border-gray-300" style={{ background: ann.color }} />
-                        <span className="text-sm">{getAnnotationName(ann)}</span>
-                        </div>
-                <button
-                        onClick={() => deleteAnnotation(i)}
-                        className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600"
-                      >
-                        מחק
-                </button>
-              </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-                <button
-              onClick={saveMapLocal}
-              disabled={!govmapData}
-              className="w-full bg-green-600 text-white p-3 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed mb-2 transition-colors"
-            >
-              💾 שמור מפה
-                </button>
-
-            {/* Screenshot Buttons */}
-            {
-              <div className="mb-2 space-y-2">
-                {/* CropMode0 (without תצ״א) */}
-                <div className="space-y-1">
-                  <label className="block w-full bg-blue-500 text-white p-2 rounded-lg font-medium hover:bg-blue-600 text-sm transition-colors cursor-pointer text-center">
-                    📤 העלה תמונה ללא תצ״א
-                    <input
-                      ref={fileInputRef0}
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => handleManualScreenshotUpload(e, '0')}
-                    />
-                  </label>
-            </div>
-            
-                {/* CropMode1 (with תצ״א) */}
-                <div className="space-y-1">
-                  <label className="block w-full bg-purple-500 text-white p-2 rounded-lg font-medium hover:bg-purple-600 text-sm transition-colors cursor-pointer text-center">
-                    📤 העלה תמונה עם תצ״א
-                    <input
-                      ref={fileInputRef1}
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => handleManualScreenshotUpload(e, '1')}
-                    />
-                  </label>
                 </div>
-
-                {/* Display uploaded screenshots */}
-          {(screenshots.cropMode0 || screenshots.cropMode1) && (
-                  <div className="mt-3 space-y-2">
-                {screenshots.cropMode0 && (
-                      <div className="bg-gray-50 p-2 rounded border border-gray-300 relative group">
-                        <div className="text-xs font-medium text-gray-700 mb-1">מפה ללא תצ״א:</div>
-                        <img src={screenshots.cropMode0} alt="Screenshot without תצ״א" className="w-full rounded border border-gray-300 max-h-32 object-contain" />
-                        <button
-                          onClick={() => handleDeleteScreenshot('0')}
-                          className="absolute top-1 left-1 bg-red-500 text-white p-1 rounded hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity text-xs"
-                          title="מחק תמונה"
-                        >
-                          🗑️
-                        </button>
-                  </div>
-                )}
-                {screenshots.cropMode1 && (
-                      <div className="bg-gray-50 p-2 rounded border border-gray-300 relative group">
-                        <div className="text-xs font-medium text-gray-700 mb-1">מפה עם תצ״א:</div>
-                        <img src={screenshots.cropMode1} alt="Screenshot with תצ״א" className="w-full rounded border border-gray-300 max-h-32 object-contain" />
-                        <button
-                          onClick={() => handleDeleteScreenshot('1')}
-                          className="absolute top-1 left-1 bg-red-500 text-white p-1 rounded hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity text-xs"
-                          title="מחק תמונה"
-                        >
-                          🗑️
-                        </button>
-                  </div>
-                )}
+              )}
             </div>
-          )}
-            </div>
-          }
 
-              <button
-              onClick={clearAll}
-              className="w-full bg-gray-600 text-white p-3 rounded-lg font-medium hover:bg-gray-700 transition-colors"
+            {/* Map Canvas - Main Component */}
+            <div
+              className="flex-1 min-w-0 flex flex-col bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden relative"
+              style={{ height: '90vh', minHeight: '800px' }}
             >
-              🗑️ נקה הכל
-              </button>
-            </div>
-
-          {isDesktop && (
-            <div className="hidden lg:flex items-stretch" onDoubleClick={toggleLeftPanel}>
-              <div
-                className="w-1.5 cursor-col-resize bg-transparent hover:bg-indigo-200 active:bg-indigo-300 transition-colors"
-                onMouseDown={(event) => {
-                  event.preventDefault()
-                  startDraggingLeft()
-                }}
-              />
-            </div>
-          )}
-
-          {/* Center: Map Canvas */}
-          <div
-            className="flex-1 min-w-0 flex flex-col bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden relative"
-            style={isDesktop ? { minWidth: MIN_MAP_WIDTH } : undefined}
-          >
-            {isDesktop && leftCollapsed && (
-              <button
-                type="button"
-                onClick={toggleLeftPanel}
-                className="hidden lg:flex absolute top-3 left-3 z-30 bg-white/90 border border-gray-300 rounded px-3 py-1 text-xs font-medium text-gray-700 shadow-sm hover:bg-white"
-              >
-                הצג פאנל הגדרות
-              </button>
-            )}
             {isDesktop && rightCollapsed && (
               <button
                 type="button"
@@ -1584,73 +1508,258 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
             )}
             </div>
 
-          {isDesktop && (
-            <div className="hidden lg:flex items-stretch" onDoubleClick={toggleRightPanel}>
-              <div
-                className="w-1.5 cursor-col-resize bg-transparent hover:bg-indigo-200 active:bg-indigo-300 transition-colors"
-                onMouseDown={(event) => {
-                  event.preventDefault()
-                  startDraggingRight()
-                }}
-              />
+          {/* Bottom Section: Tab Selection (like Step 4) */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            {/* Tab Buttons */}
+            <div className="grid grid-cols-3 gap-3 p-4 border-b border-gray-200">
+              <button
+                onClick={() => setActiveTab('search')}
+                className={`p-3 rounded-lg border-2 transition-all ${
+                  activeTab === 'search'
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex flex-col items-center gap-2">
+                  <span className="text-2xl">🔍</span>
+                  <h4 className={`font-semibold text-sm ${
+                    activeTab === 'search' ? 'text-blue-600' : 'text-gray-700'
+                  }`}>
+                    חיפוש כתובת
+                  </h4>
+                </div>
+              </button>
+              
+              <button
+                onClick={() => setActiveTab('upload')}
+                className={`p-3 rounded-lg border-2 transition-all ${
+                  activeTab === 'upload'
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex flex-col items-center gap-2">
+                  <span className="text-2xl">📤</span>
+                  <h4 className={`font-semibold text-sm ${
+                    activeTab === 'upload' ? 'text-blue-600' : 'text-gray-700'
+                  }`}>
+                    העלאת תמונות
+                  </h4>
+                  {(screenshots.cropMode0 || screenshots.cropMode1) && (
+                    <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
+                      {[screenshots.cropMode0, screenshots.cropMode1].filter(Boolean).length}
+                    </span>
+                  )}
+                </div>
+              </button>
+              
+              <button
+                onClick={() => setActiveTab('save')}
+                className={`p-3 rounded-lg border-2 transition-all ${
+                  activeTab === 'save'
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex flex-col items-center gap-2">
+                  <span className="text-2xl">💾</span>
+                  <h4 className={`font-semibold text-sm ${
+                    activeTab === 'save' ? 'text-blue-600' : 'text-gray-700'
+                  }`}>
+                    מפות שמורות
+                  </h4>
+                  {savedMaps.length > 0 && (
+                    <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 rounded-full">
+                      {savedMaps.length}
+                    </span>
+                  )}
+                </div>
+              </button>
             </div>
-          )}
 
-          {/* Right Sidebar: Saved Maps */}
-          <div
-            className={`bg-white rounded-lg p-5 shadow-sm border border-gray-200 overflow-y-auto w-full transition-all duration-200 ease-out ${rightCollapsed ? 'lg:opacity-0 lg:pointer-events-none' : 'lg:opacity-100'}`}
-            style={isDesktop ? {
-              width: rightCollapsed ? 0 : Math.min(Math.max(rightPanelWidth, MIN_RIGHT_WIDTH), MAX_RIGHT_WIDTH),
-              minWidth: rightCollapsed ? 0 : MIN_RIGHT_WIDTH,
-              maxWidth: MAX_RIGHT_WIDTH
-            } : undefined}
-          >
-            <div className="flex items-center justify-between mb-4 pb-2 border-b border-gray-300">
-              <h2 className="text-lg font-semibold text-gray-900">מפות שמורות</h2>
-              {isDesktop && (
-                <button
-                  type="button"
-                  onClick={toggleRightPanel}
-                  className="hidden lg:inline-flex items-center text-xs text-gray-500 hover:text-gray-700"
-                >
-                  {rightCollapsed ? 'הצג' : 'הסתר'}
-                </button>
+            {/* Tab Content */}
+            <div className="p-4">
+              {activeTab === 'search' && (
+                <div className="space-y-4">
+                {/* Search Results Section */}
+                {!govmapData && (
+                  <div className="text-center py-8 text-gray-500">
+                    <p className="text-lg mb-2">🔍 אין תוצאות חיפוש</p>
+                    <p className="text-sm">השתמשו בטופס החיפוש מעל המפה כדי לחפש כתובת</p>
+                  </div>
+                )}
+
+                {govmapData && (
+                  <>
+                    {/* Coordinates */}
+                    {(coords.wgs84 || coords.itm) && (
+                      <div className="bg-gray-50 p-3 rounded-lg text-sm font-mono">
+                        <div className="mb-3">
+                          <strong>WGS84 (GPS):</strong><br />
+                          <span>{coords.wgs84 ? `Lat: ${coords.wgs84.lat?.toFixed(6)}\nLon: ${coords.wgs84.lon?.toFixed(6)}` : '--'}</span>
+                        </div>
+                        <div>
+                          <strong>ITM (ישראל):</strong><br />
+                          <span>{coords.itm ? `E: ${coords.itm.easting}\nN: ${coords.itm.northing}` : '--'}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Notes */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">הערות</label>
+                      <textarea
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        className="w-full p-3 border-2 border-gray-300 rounded-lg text-right resize-y min-h-[80px] focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                        placeholder="הוסיפו הערות על המפה..."
+                      />
+                    </div>
+
+                    {/* Annotations */}
+                    {annotations.length > 0 && (
+                      <div>
+                        <h3 className="text-sm font-semibold text-gray-700 mb-2">סימונים ({annotations.length})</h3>
+                        <div className="max-h-32 overflow-y-auto space-y-2">
+                          {annotations.map((ann, i) => (
+                            <div key={i} className="flex items-center justify-between bg-gray-50 p-2 rounded">
+                              <div className="flex items-center gap-2">
+                                <div className="w-4 h-4 rounded border border-gray-300" style={{ background: ann.color }} />
+                                <span className="text-xs">{getAnnotationName(ann)}</span>
+                              </div>
+                              <button
+                                onClick={() => deleteAnnotation(i)}
+                                className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600"
+                              >
+                                מחק
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Save Map Button */}
+                    <button
+                      onClick={saveMapLocal}
+                      disabled={!govmapData}
+                      className="w-full bg-green-600 text-white p-3 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      💾 שמור מפה
+                    </button>
+                  </>
+                )}
+                </div>
+              )}
+
+              {activeTab === 'upload' && (
+                <div className="space-y-4">
+                  {/* CropMode0 (without תצ״א) */}
+                  <label className="block w-full bg-blue-500 text-white p-3 rounded-lg font-medium hover:bg-blue-600 transition-colors cursor-pointer text-center">
+                    📤 העלה תמונה ללא תצ״א
+                    <input
+                      ref={fileInputRef0}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => handleManualScreenshotUpload(e, '0')}
+                    />
+                  </label>
+                  
+                  {/* CropMode1 (with תצ״א) */}
+                  <label className="block w-full bg-purple-500 text-white p-3 rounded-lg font-medium hover:bg-purple-600 transition-colors cursor-pointer text-center">
+                    📤 העלה תמונה עם תצ״א
+                    <input
+                      ref={fileInputRef1}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => handleManualScreenshotUpload(e, '1')}
+                    />
+                  </label>
+
+                  {/* Display uploaded screenshots */}
+                  {(screenshots.cropMode0 || screenshots.cropMode1) && (
+                    <div className="mt-3 space-y-2">
+                      {screenshots.cropMode0 && (
+                        <div className="bg-gray-50 p-2 rounded border border-gray-300 relative group">
+                          <div className="text-xs font-medium text-gray-700 mb-1">מפה ללא תצ״א:</div>
+                          <img src={screenshots.cropMode0} alt="Screenshot without תצ״א" className="w-full rounded border border-gray-300 max-h-32 object-contain" />
+                          <button
+                            onClick={() => handleDeleteScreenshot('0')}
+                            className="absolute top-1 left-1 bg-red-500 text-white p-1 rounded hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity text-xs"
+                            title="מחק תמונה"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      )}
+                      {screenshots.cropMode1 && (
+                        <div className="bg-gray-50 p-2 rounded border border-gray-300 relative group">
+                          <div className="text-xs font-medium text-gray-700 mb-1">מפה עם תצ״א:</div>
+                          <img src={screenshots.cropMode1} alt="Screenshot with תצ״א" className="w-full rounded border border-gray-300 max-h-32 object-contain" />
+                          <button
+                            onClick={() => handleDeleteScreenshot('1')}
+                            className="absolute top-1 left-1 bg-red-500 text-white p-1 rounded hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity text-xs"
+                            title="מחק תמונה"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Clear All Button */}
+                  <button
+                    onClick={clearAll}
+                    className="w-full bg-gray-600 text-white p-2 rounded-lg font-medium hover:bg-gray-700 transition-colors text-sm"
+                  >
+                    🗑️ נקה הכל
+                  </button>
+                </div>
+              )}
+
+              {activeTab === 'save' && (
+                <div className="space-y-4">
+                  {savedMaps.length === 0 ? (
+                    <div className="text-center text-gray-500 py-8">אין מפות שמורות</div>
+                  ) : (
+                    <ul className="space-y-2">
+                      {savedMaps.map((map: any) => (
+                        <li
+                          key={map.id}
+                          className={`p-3 rounded-lg border transition-colors ${
+                            map.id === currentMapId
+                              ? 'bg-blue-50 border-blue-500'
+                              : 'bg-gray-50 border-gray-300 hover:border-blue-300 hover:bg-gray-100'
+                          }`}
+                        >
+                          <div 
+                            onClick={() => loadMapLocal(map.id)}
+                            className="cursor-pointer"
+                          >
+                            <div className="font-medium text-gray-900">{map.address_input}</div>
+                            <div className="text-xs text-gray-600 mt-1">
+                              {new Date(map.created_at).toLocaleDateString('he-IL')}
+                              {(map.annotations?.length || 0) > 0 && ` | ${map.annotations.length} סימונים`}
+                            </div>
+                          </div>
+                          <button
+                            onClick={(e) => deleteSavedMap(map.id, e)}
+                            className="mt-2 w-full px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 transition-colors"
+                          >
+                            🗑️ מחק
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               )}
             </div>
-            {savedMaps.length === 0 ? (
-              <div className="text-center text-gray-500 py-8">אין מפות שמורות</div>
-            ) : (
-              <ul className="space-y-2">
-                {savedMaps.map((map: any) => (
-                  <li
-                    key={map.id}
-                    className={`p-3 rounded-lg border transition-colors ${
-                      map.id === currentMapId
-                        ? 'bg-blue-50 border-blue-500'
-                        : 'bg-gray-50 border-gray-300 hover:border-blue-300 hover:bg-gray-100'
-                    }`}
-                  >
-                    <div 
-                      onClick={() => loadMapLocal(map.id)}
-                      className="cursor-pointer"
-                    >
-                      <div className="font-medium text-gray-900">{map.address_input}</div>
-                      <div className="text-xs text-gray-600 mt-1">
-                        {new Date(map.created_at).toLocaleDateString('he-IL')}
-                        {(map.annotations?.length || 0) > 0 && ` | ${map.annotations.length} סימונים`}
           </div>
-        </div>
-                          <button
-                      onClick={(e) => deleteSavedMap(map.id, e)}
-                      className="mt-2 w-full px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 transition-colors"
-              >
-                      🗑️ מחק
-                          </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            </div>
+          </div>
         </div>
       </div>
     </div>

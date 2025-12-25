@@ -433,7 +433,7 @@ export default function AddressMapsViewer() {
           'Cache-Control': 'no-cache'
         },
         cache: 'no-store',
-        body: JSON.stringify({ address, options: { zoom: 16, showTazea: true, showInfo: false } })
+        body: JSON.stringify({ address, options: { zoom: 11, showTazea: true, showInfo: false } })
       })
 
       console.log('📡 Response received:', {
