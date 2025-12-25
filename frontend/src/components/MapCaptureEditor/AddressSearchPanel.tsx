@@ -65,7 +65,7 @@ const AddressSearchPanel: React.FC<AddressSearchPanelProps> = ({
         cache: 'no-store',
         body: JSON.stringify({ 
           address, 
-          options: { zoom: 16, showTazea: true, showInfo: false }
+          options: { zoom: 11, showTazea: true, showInfo: false }
         })
       })
 

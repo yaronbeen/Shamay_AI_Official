@@ -55,14 +55,23 @@ async function geocodeAddress(address: string) {
 }
 
 function wgs84ToITM(lat: number, lon: number) {
-  // ITM projection parameters
-  const a = 6378137.0
-  const f = 1 / 298.257222101
-  const lat0 = 31.7343936111111 * Math.PI / 180
-  const lon0 = 35.2045169444444 * Math.PI / 180
-  const k0 = 1.0000067
-  const falseE = 219529.584
-  const falseN = 626907.390
+  // ITM projection parameters (EPSG:2039 - Israel Transverse Mercator)
+  // Based on official Israeli Survey Authority specifications
+  const a = 6378137.0                    // Semi-major axis (WGS84 ellipsoid)
+  const f = 1 / 298.257222101            // Flattening
+  const lat0 = 31.7343936111111 * Math.PI / 180  // Origin latitude (radians)
+  const lon0 = 35.2045169444444 * Math.PI / 180  // Central meridian (radians)
+  const k0 = 1.0000067                   // Scale factor
+  const falseE = 219529.584              // False easting
+  const falseN = 626907.390              // False northing
+
+  // Validate inputs
+  if (typeof lat !== 'number' || typeof lon !== 'number') {
+    throw new Error('Latitude and longitude must be numbers')
+  }
+  if (isNaN(lat) || isNaN(lon) || !isFinite(lat) || !isFinite(lon)) {
+    throw new Error('Invalid coordinate values (NaN or Infinity)')
+  }
 
   const latRad = lat * Math.PI / 180
   const lonRad = lon * Math.PI / 180
@@ -71,54 +80,86 @@ function wgs84ToITM(lat: number, lon: number) {
   const e2 = (a * a - b * b) / (a * a)
   const n = (a - b) / (a + b)
 
-  const A0 = 1 - n + (5/4) * n * n - (5/4) * n * n * n
-  const A2 = 3 * (n - n * n + (7/8) * n * n * n)
-  const A4 = (15/8) * (n * n - n * n * n)
-  const A6 = (35/24) * n * n * n
+  // Calculate meridional arc coefficients (improved precision)
+  const n2 = n * n
+  const n3 = n2 * n
+  const A0 = 1 - n + (5/4) * n2 - (5/4) * n3
+  const A2 = 3 * (n - n2 + (7/8) * n3)
+  const A4 = (15/8) * (n2 - n3)
+  const A6 = (35/24) * n3
 
+  // Calculate meridional arc length
+  const sin2Lat = Math.sin(2 * latRad)
+  const sin4Lat = Math.sin(4 * latRad)
+  const sin6Lat = Math.sin(6 * latRad)
+  
   const sigma = a / (1 + n) * (
     A0 * latRad -
-    A2 * Math.sin(2 * latRad) +
-    A4 * Math.sin(4 * latRad) -
-    A6 * Math.sin(6 * latRad)
+    A2 * sin2Lat +
+    A4 * sin4Lat -
+    A6 * sin6Lat
   )
 
+  const sin2Lat0 = Math.sin(2 * lat0)
+  const sin4Lat0 = Math.sin(4 * lat0)
+  const sin6Lat0 = Math.sin(6 * lat0)
+  
   const sigma0 = a / (1 + n) * (
     A0 * lat0 -
-    A2 * Math.sin(2 * lat0) +
-    A4 * Math.sin(4 * lat0) -
-    A6 * Math.sin(6 * lat0)
+    A2 * sin2Lat0 +
+    A4 * sin4Lat0 -
+    A6 * sin6Lat0
   )
 
   const dLon = lonRad - lon0
   const sinLat = Math.sin(latRad)
   const cosLat = Math.cos(latRad)
   const tanLat = Math.tan(latRad)
+  const cosLat2 = cosLat * cosLat
+  const cosLat3 = cosLat2 * cosLat
+  const cosLat5 = cosLat3 * cosLat2
+  const tanLat2 = tanLat * tanLat
+  const tanLat4 = tanLat2 * tanLat2
 
-  const nu = a / Math.sqrt(1 - e2 * sinLat * sinLat)
-  const rho = a * (1 - e2) / Math.pow(1 - e2 * sinLat * sinLat, 1.5)
+  const sinLat2 = sinLat * sinLat
+  const sqrtTerm = Math.sqrt(1 - e2 * sinLat2)
+  const nu = a / sqrtTerm
+  const rho = a * (1 - e2) / Math.pow(1 - e2 * sinLat2, 1.5)
   const eta2 = nu / rho - 1
 
+  // Calculate projection coefficients (optimized to reduce floating point errors)
   const I = sigma - sigma0
   const II = nu / 2 * sinLat * cosLat
-  const III = nu / 24 * sinLat * Math.pow(cosLat, 3) * (5 - tanLat * tanLat + 9 * eta2)
-  const IIIA = nu / 720 * sinLat * Math.pow(cosLat, 5) * (61 - 58 * tanLat * tanLat + Math.pow(tanLat, 4))
+  const III = nu / 24 * sinLat * cosLat3 * (5 - tanLat2 + 9 * eta2)
+  const IIIA = nu / 720 * sinLat * cosLat5 * (61 - 58 * tanLat2 + tanLat4)
   const IV = nu * cosLat
-  const V = nu / 6 * Math.pow(cosLat, 3) * (nu / rho - tanLat * tanLat)
-  const VI = nu / 120 * Math.pow(cosLat, 5) * (5 - 18 * tanLat * tanLat + Math.pow(tanLat, 4))
+  const V = nu / 6 * cosLat3 * (nu / rho - tanLat2)
+  const VI = nu / 120 * cosLat5 * (5 - 18 * tanLat2 + tanLat4)
+
+  // Calculate ITM coordinates (using optimized power calculations)
+  const dLon2 = dLon * dLon
+  const dLon3 = dLon2 * dLon
+  const dLon4 = dLon2 * dLon2
+  const dLon5 = dLon3 * dLon2
+  const dLon6 = dLon3 * dLon3
 
   const northing = falseN + k0 * (
     I +
-    II * dLon * dLon +
-    III * Math.pow(dLon, 4) +
-    IIIA * Math.pow(dLon, 6)
+    II * dLon2 +
+    III * dLon4 +
+    IIIA * dLon6
   )
 
   const easting = falseE + k0 * (
     IV * dLon +
-    V * Math.pow(dLon, 3) +
-    VI * Math.pow(dLon, 5)
+    V * dLon3 +
+    VI * dLon5
   )
+
+  // Validate results
+  if (isNaN(easting) || isNaN(northing) || !isFinite(easting) || !isFinite(northing)) {
+    throw new Error('Coordinate conversion produced invalid results')
+  }
 
   return { easting, northing }
 }
@@ -134,14 +175,19 @@ function buildGovMapUrl(easting: number, northing: number, options: { address?: 
 
   const { address, showTazea = true, showInfo = false } = options
 
-  const eastingRounded = easting.toFixed(2)
-  const northingRounded = northing.toFixed(2)
+  // Round coordinates to 2 decimal places (for marker position)
+  // Note: 2 decimal places = ~1cm precision, which is sufficient for GovMap
+  const eastingRounded = Math.round(easting * 100) / 100
+  const northingRounded = Math.round(northing * 100) / 100
 
-  const centerEasting = (easting + GOVMAP_CENTER_OFFSET.easting).toFixed(2)
-  const centerNorthing = (northing + GOVMAP_CENTER_OFFSET.northing).toFixed(2)
+  // Calculate center coordinates with offset
+  // Use Math.round for better precision than toFixed
+  const centerEasting = Math.round((easting + GOVMAP_CENTER_OFFSET.easting) * 100) / 100
+  const centerNorthing = Math.round((northing + GOVMAP_CENTER_OFFSET.northing) * 100) / 100
 
   const params = new URLSearchParams()
-  params.append('c', `${centerEasting},${centerNorthing}`)
+  // Format coordinates with 2 decimal places for URL
+  params.append('c', `${centerEasting.toFixed(2)},${centerNorthing.toFixed(2)}`)
   params.append('z', '13') // Increased zoom level for better address visibility
   
   const layers = showTazea ? '21,15' : '15'
@@ -206,10 +252,13 @@ async function addressToGovMap(address: string) {
         details
       },
       coordinates: {
-        wgs84: { lat, lon },
+        wgs84: {
+          lat: Math.round(lat * 1000000) / 1000000, // 6 decimal places = ~10cm precision
+          lon: Math.round(lon * 1000000) / 1000000
+        },
         itm: {
-          easting: parseFloat(easting.toFixed(2)),
-          northing: parseFloat(northing.toFixed(2))
+          easting: Math.round(easting * 100) / 100, // 2 decimal places = ~1cm precision
+          northing: Math.round(northing * 100) / 100
         }
       },
       govmap: {

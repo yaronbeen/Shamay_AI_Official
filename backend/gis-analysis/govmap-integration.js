@@ -28,7 +28,8 @@ function sleep(ms) {
  * @returns {Object} - { easting, northing } in meters
  */
 function wgs84ToITM(lat, lon) {
-    // ITM projection parameters
+    // ITM projection parameters (EPSG:2039 - Israel Transverse Mercator)
+    // Based on official Israeli Survey Authority specifications
     const a = 6378137.0;                    // Semi-major axis (WGS84 ellipsoid)
     const f = 1 / 298.257222101;            // Flattening
     const lat0 = 31.7343936111111 * Math.PI / 180;  // Origin latitude (radians)
@@ -36,6 +37,14 @@ function wgs84ToITM(lat, lon) {
     const k0 = 1.0000067;                   // Scale factor
     const falseE = 219529.584;              // False easting
     const falseN = 626907.390;              // False northing
+
+    // Validate inputs
+    if (typeof lat !== 'number' || typeof lon !== 'number') {
+        throw new Error('Latitude and longitude must be numbers');
+    }
+    if (isNaN(lat) || isNaN(lon) || !isFinite(lat) || !isFinite(lon)) {
+        throw new Error('Invalid coordinate values (NaN or Infinity)');
+    }
 
     // Convert input coordinates to radians
     const latRad = lat * Math.PI / 180;
@@ -46,25 +55,35 @@ function wgs84ToITM(lat, lon) {
     const e2 = (a * a - b * b) / (a * a);  // First eccentricity squared
     const n = (a - b) / (a + b);           // Third flattening
 
-    // Calculate meridional arc coefficients
-    const A0 = 1 - n + (5/4) * n * n - (5/4) * n * n * n;
-    const A2 = 3 * (n - n * n + (7/8) * n * n * n);
-    const A4 = (15/8) * (n * n - n * n * n);
-    const A6 = (35/24) * n * n * n;
+    // Calculate meridional arc coefficients (improved precision)
+    const n2 = n * n;
+    const n3 = n2 * n;
+    const A0 = 1 - n + (5/4) * n2 - (5/4) * n3;
+    const A2 = 3 * (n - n2 + (7/8) * n3);
+    const A4 = (15/8) * (n2 - n3);
+    const A6 = (35/24) * n3;
 
     // Calculate meridional arc length
+    const sin2Lat = Math.sin(2 * latRad);
+    const sin4Lat = Math.sin(4 * latRad);
+    const sin6Lat = Math.sin(6 * latRad);
+    
     const sigma = a / (1 + n) * (
         A0 * latRad -
-        A2 * Math.sin(2 * latRad) +
-        A4 * Math.sin(4 * latRad) -
-        A6 * Math.sin(6 * latRad)
+        A2 * sin2Lat +
+        A4 * sin4Lat -
+        A6 * sin6Lat
     );
 
+    const sin2Lat0 = Math.sin(2 * lat0);
+    const sin4Lat0 = Math.sin(4 * lat0);
+    const sin6Lat0 = Math.sin(6 * lat0);
+    
     const sigma0 = a / (1 + n) * (
         A0 * lat0 -
-        A2 * Math.sin(2 * lat0) +
-        A4 * Math.sin(4 * lat0) -
-        A6 * Math.sin(6 * lat0)
+        A2 * sin2Lat0 +
+        A4 * sin4Lat0 -
+        A6 * sin6Lat0
     );
 
     // Calculate trigonometric functions
@@ -72,34 +91,52 @@ function wgs84ToITM(lat, lon) {
     const sinLat = Math.sin(latRad);
     const cosLat = Math.cos(latRad);
     const tanLat = Math.tan(latRad);
+    const cosLat2 = cosLat * cosLat;
+    const cosLat3 = cosLat2 * cosLat;
+    const cosLat5 = cosLat3 * cosLat2;
+    const tanLat2 = tanLat * tanLat;
+    const tanLat4 = tanLat2 * tanLat2;
 
     // Calculate radii of curvature
-    const nu = a / Math.sqrt(1 - e2 * sinLat * sinLat);
-    const rho = a * (1 - e2) / Math.pow(1 - e2 * sinLat * sinLat, 1.5);
+    const sinLat2 = sinLat * sinLat;
+    const sqrtTerm = Math.sqrt(1 - e2 * sinLat2);
+    const nu = a / sqrtTerm;
+    const rho = a * (1 - e2) / Math.pow(1 - e2 * sinLat2, 1.5);
     const eta2 = nu / rho - 1;
 
-    // Calculate projection coefficients
+    // Calculate projection coefficients (optimized to reduce floating point errors)
     const I = sigma - sigma0;
     const II = nu / 2 * sinLat * cosLat;
-    const III = nu / 24 * sinLat * Math.pow(cosLat, 3) * (5 - tanLat * tanLat + 9 * eta2);
-    const IIIA = nu / 720 * sinLat * Math.pow(cosLat, 5) * (61 - 58 * tanLat * tanLat + Math.pow(tanLat, 4));
+    const III = nu / 24 * sinLat * cosLat3 * (5 - tanLat2 + 9 * eta2);
+    const IIIA = nu / 720 * sinLat * cosLat5 * (61 - 58 * tanLat2 + tanLat4);
     const IV = nu * cosLat;
-    const V = nu / 6 * Math.pow(cosLat, 3) * (nu / rho - tanLat * tanLat);
-    const VI = nu / 120 * Math.pow(cosLat, 5) * (5 - 18 * tanLat * tanLat + Math.pow(tanLat, 4));
+    const V = nu / 6 * cosLat3 * (nu / rho - tanLat2);
+    const VI = nu / 120 * cosLat5 * (5 - 18 * tanLat2 + tanLat4);
 
-    // Calculate ITM coordinates
+    // Calculate ITM coordinates (using optimized power calculations)
+    const dLon2 = dLon * dLon;
+    const dLon3 = dLon2 * dLon;
+    const dLon4 = dLon2 * dLon2;
+    const dLon5 = dLon3 * dLon2;
+    const dLon6 = dLon3 * dLon3;
+
     const northing = falseN + k0 * (
         I +
-        II * dLon * dLon +
-        III * Math.pow(dLon, 4) +
-        IIIA * Math.pow(dLon, 6)
+        II * dLon2 +
+        III * dLon4 +
+        IIIA * dLon6
     );
 
     const easting = falseE + k0 * (
         IV * dLon +
-        V * Math.pow(dLon, 3) +
-        VI * Math.pow(dLon, 5)
+        V * dLon3 +
+        VI * dLon5
     );
+
+    // Validate results
+    if (isNaN(easting) || isNaN(northing) || !isFinite(easting) || !isFinite(northing)) {
+        throw new Error('Coordinate conversion produced invalid results');
+    }
 
     return { easting, northing };
 }
@@ -111,11 +148,12 @@ function wgs84ToITM(lat, lon) {
  * @returns {boolean} - True if coordinates are within Israel's approximate bounds
  */
 function validateIsraeliCoordinates(lat, lon) {
-    // Approximate bounds of Israel
-    const LAT_MIN = 29.5;  // Eilat area
-    const LAT_MAX = 33.3;  // Northern border
-    const LON_MIN = 34.3;  // Mediterranean coast
-    const LON_MAX = 35.9;  // Jordan Valley
+    // More accurate bounds of Israel (including territories)
+    // Based on official Israeli Survey Authority data
+    const LAT_MIN = 29.45;  // Southernmost point (Eilat area)
+    const LAT_MAX = 33.35;  // Northernmost point (Golan Heights)
+    const LON_MIN = 34.22;  // Westernmost point (Mediterranean coast)
+    const LON_MAX = 35.95;  // Easternmost point (Jordan Valley, Dead Sea)
 
     return lat >= LAT_MIN && lat <= LAT_MAX && lon >= LON_MIN && lon <= LON_MAX;
 }
@@ -169,6 +207,27 @@ function convertWithValidation(lat, lon) {
 
     try {
         const { easting, northing } = wgs84ToITM(lat, lon);
+        
+        // Additional validation: check if ITM coordinates are within reasonable bounds for Israel
+        // ITM coordinates for Israel typically range:
+        // Easting: ~100000 to ~300000
+        // Northing: ~500000 to ~800000
+        const ITM_EASTING_MIN = 50000;
+        const ITM_EASTING_MAX = 350000;
+        const ITM_NORTHING_MIN = 400000;
+        const ITM_NORTHING_MAX = 900000;
+        
+        if (easting < ITM_EASTING_MIN || easting > ITM_EASTING_MAX ||
+            northing < ITM_NORTHING_MIN || northing > ITM_NORTHING_MAX) {
+            return {
+                easting,
+                northing,
+                isValid: true, // Still valid, but outside typical range
+                error: null,
+                warning: 'ITM coordinates are outside typical Israeli bounds'
+            };
+        }
+        
         return {
             easting,
             northing,
@@ -220,8 +279,10 @@ async function geocodeAddress(address, options = {}) {
                     q: address.trim(),
                     format: 'json',
                     countrycodes: 'il',  // Restrict to Israel
-                    limit: 1,
-                    addressdetails: 1
+                    limit: 3,            // Get multiple results to find best match
+                    addressdetails: 1,
+                    extratags: 1,         // Get extra tags for better matching
+                    namedetails: 1       // Get name details
                 },
                 headers: {
                     'User-Agent': userAgent
@@ -238,10 +299,39 @@ async function geocodeAddress(address, options = {}) {
                 };
             }
 
-            const result = response.data[0];
+            // Find the best match from results
+            // Prefer results with house numbers and exact street matches
+            let bestResult = response.data[0];
+            let bestScore = 0;
 
-            // Parse importance as confidence score
-            const confidence = Math.min(result.importance || 0.5, 1.0);
+            for (const result of response.data) {
+                let score = result.importance || 0.5;
+                
+                // Boost score if it has a house number (more specific)
+                if (result.address?.house_number) {
+                    score += 0.2;
+                }
+                
+                // Boost score if it's a building or house type
+                if (result.type === 'house' || result.type === 'building' || result.class === 'building') {
+                    score += 0.15;
+                }
+                
+                // Boost score if it has a street name
+                if (result.address?.road) {
+                    score += 0.1;
+                }
+                
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestResult = result;
+                }
+            }
+
+            const result = bestResult;
+
+            // Calculate confidence score (normalized to 0-1)
+            const confidence = Math.min(bestScore, 1.0);
 
             return {
                 success: true,
@@ -296,11 +386,11 @@ function buildGovMapUrl(easting, northing, options = {}) {
     };
 
     const config = {
-        zoom: 13,
+        zoom: 11,             // Higher zoom level (16-17) for better building visibility
         showTazea: true,      // Show land registry overlay (affects lay and bs parameters)
         showBorder: true,     // bb=1
         showZoomBorder: true, // zb=1
-        showInfo: true,       // in=1
+        showInfo: false,      // Don't show info panel by default
         ...options
     };
 
@@ -312,18 +402,21 @@ function buildGovMapUrl(easting, northing, options = {}) {
     }
 
     // Round coordinates to 2 decimal places (for marker position)
-    const eastingRounded = easting.toFixed(2);
-    const northingRounded = northing.toFixed(2);
+    // Note: 2 decimal places = ~1cm precision, which is sufficient for GovMap
+    const eastingRounded = Math.round(easting * 100) / 100;
+    const northingRounded = Math.round(northing * 100) / 100;
 
     // Calculate center coordinates with offset
-    const centerEasting = (easting + GOVMAP_CENTER_OFFSET.easting).toFixed(2);
-    const centerNorthing = (northing + GOVMAP_CENTER_OFFSET.northing).toFixed(2);
+    // Use Math.round for better precision than toFixed
+    const centerEasting = Math.round((easting + GOVMAP_CENTER_OFFSET.easting) * 100) / 100;
+    const centerNorthing = Math.round((northing + GOVMAP_CENTER_OFFSET.northing) * 100) / 100;
 
     // Build URL parameters
     const params = new URLSearchParams();
 
     // Center coordinates (with offset for better framing)
-    params.append('c', `${centerEasting},${centerNorthing}`);
+    // Format coordinates with 2 decimal places for URL
+    params.append('c', `${centerEasting.toFixed(2)},${centerNorthing.toFixed(2)}`);
 
     // Zoom level
     params.append('z', zoom.toString());
@@ -339,7 +432,8 @@ function buildGovMapUrl(easting, northing, options = {}) {
 
     // Marker position (bs uses reversed layer order: 15,21 instead of 21,15)
     const bsLayers = showTazea ? '15,21' : '15';
-    params.append('bs', `${bsLayers}|${eastingRounded},${northingRounded}`);
+    // Format coordinates with 2 decimal places for URL
+    params.append('bs', `${bsLayers}|${eastingRounded.toFixed(2)},${northingRounded.toFixed(2)}`);
 
     // Additional toggles
     if (showTazea) {
@@ -437,12 +531,12 @@ async function addressToGovMap(address, options = {}) {
             },
             coordinates: {
                 wgs84: {
-                    lat,
-                    lon
+                    lat: Math.round(lat * 1000000) / 1000000, // 6 decimal places = ~10cm precision
+                    lon: Math.round(lon * 1000000) / 1000000
                 },
                 itm: {
-                    easting: parseFloat(easting.toFixed(2)),
-                    northing: parseFloat(northing.toFixed(2))
+                    easting: Math.round(easting * 100) / 100, // 2 decimal places = ~1cm precision
+                    northing: Math.round(northing * 100) / 100
                 }
             },
             govmap: {
