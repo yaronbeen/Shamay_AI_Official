@@ -253,8 +253,8 @@ async function addressToGovMap(address: string) {
       },
       coordinates: {
         wgs84: {
-          lat: Math.round(lat * 1000000) / 1000000, // 6 decimal places = ~10cm precision
-          lon: Math.round(lon * 1000000) / 1000000
+          lat: lat ? Math.round(lat * 1000000) / 1000000 : 0, // 6 decimal places = ~10cm precision
+          lon: lon ? Math.round(lon * 1000000) / 1000000 : 0
         },
         itm: {
           easting: Math.round(easting * 100) / 100, // 2 decimal places = ~1cm precision
