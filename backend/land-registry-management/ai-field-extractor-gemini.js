@@ -40,11 +40,19 @@ CORE PROPERTY IDENTIFIERS:
 - sub_chelka: Sub-plot number (תת חלקה)
 
 PROPERTY DETAILS:
-- total_plot_area: Total plot area (שטח קרקע כולל)
-- regulation_type: Regulation type - מוסכם/לא מוסכם/מצוי
+- total_plot_area: Total plot area (שטח קרקע כולל של החלקה)
+- regulation_type: Regulation type - מוסכם/לא מוסכם/מצוי (סוג התקנון)
 - sub_plots_count: Number of sub-plots (מספר תתי חלקות)
 - buildings_count: Number of buildings (מספר מבנים)
+- building_units: Number of units in building (מספר יחידות בבניין)
+- wings_count: Number of wings/entrances (מספר אגפים / כניסות)
+- building_wing_number: Building/wing number of sub-plot (מספר מבנה / אגף של תת־החלקה)
 - address_from_tabu: Address from tabu document (כתובת מהנסח)
+- bylaws: Bylaws/regulations text (תקנון - טקסט)
+- general_notes: General notes about property (הערות כלליות)
+- building_description: Building description (תיאור הבניין)
+- air_directions: Air directions/orientation (כיווני אוויר - צפון/דרום/מזרח/מערב)
+- property_essence: Property essence/type (מהות הנכס - דירה/משרד/חנות)
 
 UNIT/APARTMENT INFORMATION:
 - unit_description: Unit description (תיאור הדירה - דירה/חנות/משרד)
@@ -60,6 +68,7 @@ UNIT/APARTMENT INFORMATION:
 - construction_year: Year of construction (שנת בנייה)
 - property_condition: Property condition/state (מצב הנכס)
 - finish_standard: Finish level/standard (רמת גימור)
+- finish_details: Finish details description (פרטי גימור)
 
 ATTACHMENTS (הצמדות):
 - attachments: Complete attachments data with all details
@@ -74,14 +83,23 @@ OWNERSHIP (בעלויות):
 - ownership_type: Ownership type (סוג בעלות)
 - rights: Rights description (זכויות)
 
-NOTES AND COMMENTS (הערות):
-- plot_notes: Notes for the entire plot (הערות לכל החלקה)
-- notes_action_type: Action type in notes (מהות פעולה)
-- notes_beneficiary: Beneficiary in notes (שם המוטב)
+NOTES AND COMMENTS - FOR ENTIRE PLOT (הערות רישומיות – לכלל החלקה):
+- plot_notes: Notes for the entire plot (הערות לחלקה)
+- plot_notes_action_type: Action type in plot notes (מהות הפעולה - לחלקה)
+- plot_notes_beneficiary: Beneficiary in plot notes (שם המוטב - לחלקה)
 
-EASEMENTS (זיקות הנאה):
-- easements_essence: Easement essence (זיקות הנאה - מהות)
-- easements_description: Easement description (זיקות הנאה - תיאור)
+NOTES AND COMMENTS - FOR SUB-PLOT (הערות רישומיות – לתת־חלקה):
+- sub_chelka_notes: Notes for sub-plot (הערות לתת־חלקה)
+- sub_chelka_notes_action_type: Action type for sub-plot notes (מהות הפעולה - לתת חלקה)
+- sub_chelka_notes_beneficiary: Beneficiary for sub-plot notes (שם המוטב - לתת חלקה)
+
+EASEMENTS FOR ENTIRE PLOT (זיקות הנאה – לכלל החלקה):
+- plot_easements_essence: Easement essence for plot (זיקות הנאה לחלקה - מהות)
+- plot_easements_description: Easement description for plot (זיקות הנאה לחלקה - תיאור)
+
+EASEMENTS FOR SUB-PLOT (זיקות הנאה – לתת־חלקה):
+- sub_chelka_easements_essence: Easement essence for sub-plot (זיקות הנאה לתת־חלקה - מהות)
+- sub_chelka_easements_description: Easement description for sub-plot (זיקות הנאה לתת־חלקה - תיאור)
 
 MORTGAGES (משכנתאות):
 - mortgages: Complete mortgages array
@@ -91,6 +109,29 @@ MORTGAGES (משכנתאות):
 - mortgage_borrowers: Primary mortgage borrowers (שם הלווים)
 - mortgage_amount: Primary mortgage amount (סכום משכנתא)
 - mortgage_property_share: Property share in mortgage (חלק בנכס)
+- mortgage_date: Mortgage registration date (תאריך רישום משכנתא)
+
+ATTACHMENTS SHARED WITH (שיוך הצמדות):
+- attachments_shared_with: Which units/properties share the attachment (שיוך - לאילו יחידות משויכת ההצמדה)
+
+SHARED BUILDING ORDER (צו בית משותף):
+- shared_building_order_date: Date of shared building order (תאריך הפקת צו בית משותף)
+- building_address: Building address (כתובת הבניין)
+- floors_count_in_building: Number of floors in building (מספר קומות בבניין)
+- sub_plots_total_in_building: Total sub-plots in building (מספר תתי־חלקות כולל בבניין)
+- sub_plot_floor: Sub-plot floor (קומה של תת־החלקה)
+- sub_plot_area: Sub-plot area (שטח תת־החלקה)
+- sub_plot_description: Sub-plot verbal description (תיאור מילולי של תת־החלקה)
+- shared_property_parts: Shared property parts attributed to sub-plot (חלקים ברכוש המשותף המיוחסים לתת־החלקה)
+- non_attachment_areas: Areas not in attachments (שטחים שאינם בהצמדות)
+
+BUILDING PERMITS (היתרי בנייה) - This is a REPEATING object (0/1/N permits):
+- permits: Array of building permits, each containing:
+  * permit_number: Permit number (מספר היתר)
+  * permit_date: Permit date (תאריך היתר)
+  * permit_issue_date: Permit issue date (תאריך הפקת היתר)
+  * permitted_description: Permitted description (תיאור מותר) - store AS IS without parsing
+  * local_committee_name: Local committee name (שם הוועדה המקומית)
 
 FIELD LOCATIONS:
 For EACH field you extract, also provide its location in the document:
@@ -166,7 +207,15 @@ Return ONLY the JSON object with this structure:
     "regulation_type": "מוסכם/לא מוסכם/מצוי or null",
     "sub_plots_count": number or null,
     "buildings_count": number or null,
+    "building_units": number or null,
+    "wings_count": number or null,
+    "building_wing_number": "number or null",
     "address_from_tabu": "address or null",
+    "bylaws": "bylaws text or null",
+    "general_notes": "notes or null",
+    "building_description": "description or null",
+    "air_directions": "N/S/E/W or null",
+    "property_essence": "type or null",
     "unit_description": "description or null",
     "floor": "floor or null",
     "registered_area": number or null,
@@ -180,6 +229,7 @@ Return ONLY the JSON object with this structure:
     "construction_year": number or null,
     "property_condition": "condition or null",
     "finish_standard": "finish level or null",
+    "finish_details": "finish details or null",
     "attachments": [{"type": "type", "area": number, "symbol": "symbol", "color": "color", "description": "desc"}],
     "attachments_symbol": "primary symbol or null",
     "attachments_color": "primary color or null", 
@@ -190,17 +240,34 @@ Return ONLY the JSON object with this structure:
     "ownership_type": "type or null",
     "rights": "rights or null",
     "plot_notes": "notes or null",
-    "notes_action_type": "action or null",
-    "notes_beneficiary": "beneficiary or null",
-    "easements_essence": "essence or null",
-    "easements_description": "description or null",
-    "mortgages": [{"essence": "type", "rank": "rank", "lenders": "lenders", "borrowers": "borrowers", "amount": number, "share": "share"}],
+    "plot_notes_action_type": "action or null",
+    "plot_notes_beneficiary": "beneficiary or null",
+    "sub_chelka_notes": "notes or null",
+    "sub_chelka_notes_action_type": "action or null",
+    "sub_chelka_notes_beneficiary": "beneficiary or null",
+    "plot_easements_essence": "essence or null",
+    "plot_easements_description": "description or null",
+    "sub_chelka_easements_essence": "essence or null",
+    "sub_chelka_easements_description": "description or null",
+    "mortgages": [{"essence": "type", "rank": "rank", "lenders": "lenders", "borrowers": "borrowers", "amount": number, "share": "share", "date": "YYYY-MM-DD or null"}],
     "mortgage_essence": "primary essence or null",
     "mortgage_rank": "primary rank or null",
     "mortgage_lenders": "primary lenders or null",
     "mortgage_borrowers": "primary borrowers or null",
     "mortgage_amount": number or null,
-    "mortgage_property_share": "primary share or null"
+    "mortgage_property_share": "primary share or null",
+    "mortgage_date": "YYYY-MM-DD or null",
+    "attachments_shared_with": "shared units or null",
+    "shared_building_order_date": "YYYY-MM-DD or null",
+    "building_address": "address or null",
+    "floors_count_in_building": number or null,
+    "sub_plots_total_in_building": number or null,
+    "sub_plot_floor": "floor or null",
+    "sub_plot_area": number or null,
+    "sub_plot_description": "description or null",
+    "shared_property_parts": "fraction or description or null",
+    "non_attachment_areas": "description or null",
+    "permits": [{"permit_number": "number", "permit_date": "YYYY-MM-DD or null", "permit_issue_date": "YYYY-MM-DD or null", "permitted_description": "description", "local_committee_name": "name or null"}]
   },
   "locations": {
     "gush": {"page": 1, "y_percent": 8},
@@ -426,7 +493,394 @@ Focus on finding the Hebrew text and extracting the required fields. For each fi
           context: extractionContexts.ownership || '',
           pattern: 'ai_extraction'
         },
-        
+
+        // Wings/entrances count
+        wings_count: {
+          value: data.wings_count || null,
+          confidence: data.wings_count ? 70 : 0,
+          context: data.wings_count ? 'Found in document' : '',
+          pattern: 'ai_extraction'
+        },
+
+        building_wing_number: {
+          value: data.building_wing_number || null,
+          confidence: data.building_wing_number ? 70 : 0,
+          context: data.building_wing_number ? 'Found in document' : '',
+          pattern: 'ai_extraction'
+        },
+
+        // Plot notes
+        plot_notes: {
+          value: data.plot_notes || null,
+          confidence: (confidenceScores.notes || 0) * 100,
+          context: extractionContexts.notes || '',
+          pattern: 'ai_extraction'
+        },
+
+        plot_notes_action_type: {
+          value: data.plot_notes_action_type || null,
+          confidence: (confidenceScores.notes || 0) * 100,
+          context: extractionContexts.notes || '',
+          pattern: 'ai_extraction'
+        },
+
+        plot_notes_beneficiary: {
+          value: data.plot_notes_beneficiary || null,
+          confidence: (confidenceScores.notes || 0) * 100,
+          context: extractionContexts.notes || '',
+          pattern: 'ai_extraction'
+        },
+
+        // Sub-chelka notes
+        sub_chelka_notes: {
+          value: data.sub_chelka_notes || null,
+          confidence: (confidenceScores.notes || 0) * 100,
+          context: extractionContexts.notes || '',
+          pattern: 'ai_extraction'
+        },
+
+        sub_chelka_notes_action_type: {
+          value: data.sub_chelka_notes_action_type || null,
+          confidence: (confidenceScores.notes || 0) * 100,
+          context: extractionContexts.notes || '',
+          pattern: 'ai_extraction'
+        },
+
+        sub_chelka_notes_beneficiary: {
+          value: data.sub_chelka_notes_beneficiary || null,
+          confidence: (confidenceScores.notes || 0) * 100,
+          context: extractionContexts.notes || '',
+          pattern: 'ai_extraction'
+        },
+
+        // Plot easements
+        plot_easements_essence: {
+          value: data.plot_easements_essence || null,
+          confidence: (confidenceScores.easements || 0) * 100,
+          context: extractionContexts.easements || '',
+          pattern: 'ai_extraction'
+        },
+
+        plot_easements_description: {
+          value: data.plot_easements_description || null,
+          confidence: (confidenceScores.easements || 0) * 100,
+          context: extractionContexts.easements || '',
+          pattern: 'ai_extraction'
+        },
+
+        // Sub-chelka easements
+        sub_chelka_easements_essence: {
+          value: data.sub_chelka_easements_essence || null,
+          confidence: (confidenceScores.easements || 0) * 100,
+          context: extractionContexts.easements || '',
+          pattern: 'ai_extraction'
+        },
+
+        sub_chelka_easements_description: {
+          value: data.sub_chelka_easements_description || null,
+          confidence: (confidenceScores.easements || 0) * 100,
+          context: extractionContexts.easements || '',
+          pattern: 'ai_extraction'
+        },
+
+        // Aliases for sub_parcel naming (DB compatibility)
+        sub_parcel_easements_essence: {
+          value: data.sub_chelka_easements_essence || null,
+          confidence: (confidenceScores.easements || 0) * 100,
+          context: extractionContexts.easements || '',
+          pattern: 'ai_extraction'
+        },
+
+        sub_parcel_easements_description: {
+          value: data.sub_chelka_easements_description || null,
+          confidence: (confidenceScores.easements || 0) * 100,
+          context: extractionContexts.easements || '',
+          pattern: 'ai_extraction'
+        },
+
+        // Balcony area
+        balcony_area: {
+          value: data.balcony_area || null,
+          confidence: (confidenceScores.unit_info || 0) * 100,
+          context: extractionContexts.unit_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        // Regulation type
+        regulation_type: {
+          value: data.regulation_type || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        // Property counts
+        sub_plots_count: {
+          value: data.sub_plots_count || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        buildings_count: {
+          value: data.buildings_count || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        total_plot_area: {
+          value: data.total_plot_area || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        // Rights
+        rights: {
+          value: data.rights || null,
+          confidence: (confidenceScores.ownership || 0) * 100,
+          context: extractionContexts.ownership || '',
+          pattern: 'ai_extraction'
+        },
+
+        // Mortgage date
+        mortgage_date: {
+          value: data.mortgage_date || null,
+          confidence: (confidenceScores.mortgages || 0) * 100,
+          context: extractionContexts.mortgages || '',
+          pattern: 'ai_extraction'
+        },
+
+        // Attachments shared with
+        attachments_shared_with: {
+          value: data.attachments_shared_with || null,
+          confidence: (confidenceScores.attachments || 0) * 100,
+          context: extractionContexts.attachments || '',
+          pattern: 'ai_extraction'
+        },
+
+        // Missing Tabu fields
+        mortgage_lenders: {
+          value: data.mortgage_lenders || null,
+          confidence: (confidenceScores.mortgages || 0) * 100,
+          context: extractionContexts.mortgages || '',
+          pattern: 'ai_extraction'
+        },
+
+        mortgage_borrowers: {
+          value: data.mortgage_borrowers || null,
+          confidence: (confidenceScores.mortgages || 0) * 100,
+          context: extractionContexts.mortgages || '',
+          pattern: 'ai_extraction'
+        },
+
+        mortgage_essence: {
+          value: data.mortgage_essence || null,
+          confidence: (confidenceScores.mortgages || 0) * 100,
+          context: extractionContexts.mortgages || '',
+          pattern: 'ai_extraction'
+        },
+
+        mortgage_rank: {
+          value: data.mortgage_rank || null,
+          confidence: (confidenceScores.mortgages || 0) * 100,
+          context: extractionContexts.mortgages || '',
+          pattern: 'ai_extraction'
+        },
+
+        mortgage_amount: {
+          value: data.mortgage_amount || null,
+          confidence: (confidenceScores.mortgages || 0) * 100,
+          context: extractionContexts.mortgages || '',
+          pattern: 'ai_extraction'
+        },
+
+        mortgage_property_share: {
+          value: data.mortgage_property_share || null,
+          confidence: (confidenceScores.mortgages || 0) * 100,
+          context: extractionContexts.mortgages || '',
+          pattern: 'ai_extraction'
+        },
+
+        // Mortgages array
+        mortgages: data.mortgages || [],
+
+        issue_date: {
+          value: data.issue_date || null,
+          confidence: (confidenceScores.document_info || 0) * 100,
+          context: extractionContexts.document_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        tabu_extract_date: {
+          value: data.tabu_extract_date || null,
+          confidence: (confidenceScores.document_info || 0) * 100,
+          context: extractionContexts.document_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        unit_description: {
+          value: data.unit_description || null,
+          confidence: (confidenceScores.unit_info || 0) * 100,
+          context: extractionContexts.unit_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        additional_areas: data.additional_areas || [],
+
+        // Shared Building Order (צו בית משותף) fields
+        shared_building_order_date: {
+          value: data.shared_building_order_date || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        building_address: {
+          value: data.building_address || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        floors_count_in_building: {
+          value: data.floors_count_in_building || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        sub_plots_total_in_building: {
+          value: data.sub_plots_total_in_building || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        sub_plot_floor: {
+          value: data.sub_plot_floor || null,
+          confidence: (confidenceScores.unit_info || 0) * 100,
+          context: extractionContexts.unit_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        sub_plot_area: {
+          value: data.sub_plot_area || null,
+          confidence: (confidenceScores.unit_info || 0) * 100,
+          context: extractionContexts.unit_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        sub_plot_description: {
+          value: data.sub_plot_description || null,
+          confidence: (confidenceScores.unit_info || 0) * 100,
+          context: extractionContexts.unit_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        shared_property_parts: {
+          value: data.shared_property_parts || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        non_attachment_areas: {
+          value: data.non_attachment_areas || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        // Building Permits (היתרי בנייה) - repeating object array
+        permits: data.permits || [],
+
+        // New fields added for Step3 UI alignment
+        building_units: {
+          value: data.building_units || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        bylaws: {
+          value: data.bylaws || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        general_notes: {
+          value: data.general_notes || null,
+          confidence: (confidenceScores.notes || 0) * 100,
+          context: extractionContexts.notes || '',
+          pattern: 'ai_extraction'
+        },
+
+        building_description: {
+          value: data.building_description || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        air_directions: {
+          value: data.air_directions || null,
+          confidence: (confidenceScores.unit_info || 0) * 100,
+          context: extractionContexts.unit_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        property_essence: {
+          value: data.property_essence || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        finish_details: {
+          value: data.finish_details || null,
+          confidence: (confidenceScores.unit_info || 0) * 100,
+          context: extractionContexts.unit_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        built_area: {
+          value: data.built_area || null,
+          confidence: (confidenceScores.unit_info || 0) * 100,
+          context: extractionContexts.unit_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        shared_areas: {
+          value: data.shared_areas || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        construction_year: {
+          value: data.construction_year || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        property_condition: {
+          value: data.property_condition || null,
+          confidence: (confidenceScores.unit_info || 0) * 100,
+          context: extractionContexts.unit_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        finish_standard: {
+          value: data.finish_standard || null,
+          confidence: (confidenceScores.unit_info || 0) * 100,
+          context: extractionContexts.unit_info || '',
+          pattern: 'ai_extraction'
+        },
+
         // Field locations for scroll-to-source
         fieldLocations: locations,
         
