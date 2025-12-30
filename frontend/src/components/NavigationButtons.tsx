@@ -40,7 +40,7 @@ export function NavigationButtons({
           <AlertCircle className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
           <div className="text-sm text-orange-800">
             <span className="font-medium">שדות חובה חסרים: </span>
-            <span>{missingFields.join('، ')}</span>
+            <span>{missingFields.join(', ')}</span>
           </div>
         </div>
       )}

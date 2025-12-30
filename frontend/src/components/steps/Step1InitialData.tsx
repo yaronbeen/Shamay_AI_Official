@@ -298,7 +298,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
     if (!formData.buildingNumber?.trim()) missing.push(FIELD_LABELS.buildingNumber)
     if (!formData.city?.trim()) missing.push(FIELD_LABELS.city)
     if (!(formData.rooms > 0)) missing.push(FIELD_LABELS.rooms)
-    if (!(formData.floor > 0)) missing.push(FIELD_LABELS.floor)
+    if (formData.floor === '' || formData.floor === undefined || formData.floor === null) missing.push(FIELD_LABELS.floor)
     // שטח יבוא מהטאבו - לא נדרש כאן
     if (!formData.shamayName?.trim()) missing.push(FIELD_LABELS.shamayName)
     if (!formData.shamaySerialNumber?.trim()) missing.push(FIELD_LABELS.shamaySerialNumber)
@@ -351,11 +351,10 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
 
   // Helper to compute input class with visual feedback for unfilled required fields
   // Note: Classes written explicitly for Tailwind JIT to find them
-  const inputBaseClass = "w-full px-4 py-3 border rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
   const inputUnfilledClass = "w-full px-4 py-3 border rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent border-orange-300 bg-orange-50"
   const inputFilledClass = "w-full px-4 py-3 border rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent border-gray-300"
 
-  const getInputClass = (fieldName: string, isFilled: boolean) => {
+  const getInputClass = (isFilled: boolean) => {
     return isFilled ? inputFilledClass : inputUnfilledClass
   }
 
@@ -367,7 +366,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
     buildingNumber: !!formData.buildingNumber?.trim(),
     city: !!formData.city?.trim(),
     rooms: formData.rooms > 0,
-    floor: formData.floor > 0,
+    floor: formData.floor !== '' && formData.floor !== undefined && formData.floor !== null,
     shamayName: !!formData.shamayName?.trim(),
     shamaySerialNumber: !!formData.shamaySerialNumber?.trim()
   }
@@ -397,7 +396,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 name="valuationType"
                 value={formData.valuationType || ''}
                 onChange={(e) => updateField('valuationType', e.target.value)}
-                className={getInputClass('valuationType', isFieldFilled.valuationType)}
+                className={getInputClass(isFieldFilled.valuationType)}
                 dir="rtl"
               >
                 <option value="">בחר סוג שומה</option>
@@ -456,7 +455,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 autoComplete="name"
                 value={formData.clientName}
                 onChange={(e) => updateField('clientName', e.target.value)}
-                className={getInputClass('clientName', isFieldFilled.clientName)}
+                className={getInputClass(isFieldFilled.clientName)}
                 placeholder="הזן שם מלא"
                 dir="rtl"
               />
@@ -536,7 +535,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 autoComplete="address-line1"
                 value={formData.street}
                 onChange={(e) => updateField('street', e.target.value)}
-                className={getInputClass('street', isFieldFilled.street)}
+                className={getInputClass(isFieldFilled.street)}
                 placeholder="הזן שם רחוב"
                 dir="rtl"
               />
@@ -552,7 +551,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 autoComplete="address-line2"
                 value={formData.buildingNumber}
                 onChange={(e) => updateField('buildingNumber', e.target.value)}
-                className={getInputClass('buildingNumber', isFieldFilled.buildingNumber)}
+                className={getInputClass(isFieldFilled.buildingNumber)}
                 placeholder="הזן מספר בניין"
                 dir="rtl"
               />
@@ -584,7 +583,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 autoComplete="address-level1"
                 value={formData.city}
                 onChange={(e) => updateField('city', e.target.value)}
-                className={getInputClass('city', isFieldFilled.city)}
+                className={getInputClass(isFieldFilled.city)}
                 placeholder="הזן שם עיר"
                 dir="rtl"
               />
@@ -654,7 +653,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                   const val = e.target.value === '' ? '' : parseInt(e.target.value)
                   updateField('rooms', val)
                 }}
-                className={getInputClass('rooms', isFieldFilled.rooms)}
+                className={getInputClass(isFieldFilled.rooms)}
                 placeholder="הזן מספר חדרים"
               />
             </div>
@@ -674,7 +673,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                   const val = e.target.value === '' ? '' : parseInt(e.target.value)
                   updateField('floor', val)
                 }}
-                className={getInputClass('floor', isFieldFilled.floor)}
+                className={getInputClass(isFieldFilled.floor)}
                 placeholder="הזן מספר קומה"
               />
             </div>
@@ -770,7 +769,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 autoComplete="name"
                 value={formData.shamayName}
                 onChange={(e) => updateField('shamayName', e.target.value)}
-                className={getInputClass('shamayName', isFieldFilled.shamayName)}
+                className={getInputClass(isFieldFilled.shamayName)}
                 placeholder="הזן שם מלא של השמאי"
                 dir="rtl"
               />
@@ -786,7 +785,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 autoComplete="off"
                 value={formData.shamaySerialNumber}
                 onChange={(e) => updateField('shamaySerialNumber', e.target.value)}
-                className={getInputClass('shamaySerialNumber', isFieldFilled.shamaySerialNumber)}
+                className={getInputClass(isFieldFilled.shamaySerialNumber)}
                 placeholder="הזן מספר רישיון"
                 dir="rtl"
               />
