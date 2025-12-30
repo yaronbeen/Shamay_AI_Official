@@ -102,6 +102,10 @@ MORTGAGES (משכנתאות):
 - mortgage_borrowers: Primary mortgage borrowers (שם הלווים)
 - mortgage_amount: Primary mortgage amount (סכום משכנתא)
 - mortgage_property_share: Property share in mortgage (חלק בנכס)
+- mortgage_date: Mortgage registration date (תאריך רישום משכנתא)
+
+ATTACHMENTS SHARED WITH (שיוך הצמדות):
+- attachments_shared_with: Which units/properties share the attachment (שיוך - לאילו יחידות משויכת ההצמדה)
 
 FIELD LOCATIONS:
 For EACH field you extract, also provide its location in the document:
@@ -212,13 +216,15 @@ Return ONLY the JSON object with this structure:
     "plot_easements_description": "description or null",
     "sub_chelka_easements_essence": "essence or null",
     "sub_chelka_easements_description": "description or null",
-    "mortgages": [{"essence": "type", "rank": "rank", "lenders": "lenders", "borrowers": "borrowers", "amount": number, "share": "share"}],
+    "mortgages": [{"essence": "type", "rank": "rank", "lenders": "lenders", "borrowers": "borrowers", "amount": number, "share": "share", "date": "YYYY-MM-DD or null"}],
     "mortgage_essence": "primary essence or null",
     "mortgage_rank": "primary rank or null",
     "mortgage_lenders": "primary lenders or null",
     "mortgage_borrowers": "primary borrowers or null",
     "mortgage_amount": number or null,
-    "mortgage_property_share": "primary share or null"
+    "mortgage_property_share": "primary share or null",
+    "mortgage_date": "YYYY-MM-DD or null",
+    "attachments_shared_with": "shared units or null"
   },
   "locations": {
     "gush": {"page": 1, "y_percent": 8},
@@ -531,6 +537,83 @@ Focus on finding the Hebrew text and extracting the required fields. For each fi
           value: data.sub_chelka_easements_description || null,
           confidence: (confidenceScores.easements || 0) * 100,
           context: extractionContexts.easements || '',
+          pattern: 'ai_extraction'
+        },
+
+        // Aliases for sub_parcel naming (DB compatibility)
+        sub_parcel_easements_essence: {
+          value: data.sub_chelka_easements_essence || null,
+          confidence: (confidenceScores.easements || 0) * 100,
+          context: extractionContexts.easements || '',
+          pattern: 'ai_extraction'
+        },
+
+        sub_parcel_easements_description: {
+          value: data.sub_chelka_easements_description || null,
+          confidence: (confidenceScores.easements || 0) * 100,
+          context: extractionContexts.easements || '',
+          pattern: 'ai_extraction'
+        },
+
+        // Balcony area
+        balcony_area: {
+          value: data.balcony_area || null,
+          confidence: (confidenceScores.unit_info || 0) * 100,
+          context: extractionContexts.unit_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        // Regulation type
+        regulation_type: {
+          value: data.regulation_type || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        // Property counts
+        sub_plots_count: {
+          value: data.sub_plots_count || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        buildings_count: {
+          value: data.buildings_count || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        total_plot_area: {
+          value: data.total_plot_area || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        // Rights
+        rights: {
+          value: data.rights || null,
+          confidence: (confidenceScores.ownership || 0) * 100,
+          context: extractionContexts.ownership || '',
+          pattern: 'ai_extraction'
+        },
+
+        // Mortgage date
+        mortgage_date: {
+          value: data.mortgage_date || null,
+          confidence: (confidenceScores.mortgages || 0) * 100,
+          context: extractionContexts.mortgages || '',
+          pattern: 'ai_extraction'
+        },
+
+        // Attachments shared with
+        attachments_shared_with: {
+          value: data.attachments_shared_with || null,
+          confidence: (confidenceScores.attachments || 0) * 100,
+          context: extractionContexts.attachments || '',
           pattern: 'ai_extraction'
         },
 
