@@ -326,14 +326,72 @@ export function Step3FieldsPanel({
         </div>
       )}
 
-      {/* Legal Status Section */}
+      {/* נסח טאבו Section */}
       {hasExtractedData && (
         <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="text-base font-semibold text-gray-900 mb-3">מצב משפטי</h3>
+          <h3 className="text-lg font-bold text-gray-900 mb-2">טבלת נסח טאבו</h3>
+          <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+            השדות המפורטים לעיל הם שדות אפשריים מנסח טאבו. לא בכל נסח מופיעים כל השדות, והיעדר שדה אינו מהווה חוסר נתון אלא מצב רישומי תקין.
+          </div>
+
+          {/* זיהוי ורישום */}
+          <h4 className="text-base font-semibold text-gray-800 mb-3 mt-4 border-b pb-2">זיהוי ורישום</h4>
           <div className="space-y-3">
             <EditableField
+              field="gush"
+              label="גוש"
+              value={extractedData.gush || extractedData.land_registry?.gush || data.gush}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource={getDataSource('gush')}
+              provenanceInfo={getProvenanceForField('gush')}
+            />
+            <EditableField
+              field="parcel"
+              label="חלקה"
+              value={extractedData.parcel || extractedData.chelka || extractedData.land_registry?.chelka || extractedData.land_registry?.parcel || data.parcel}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource={getDataSource('parcel')}
+              provenanceInfo={getProvenanceForField('parcel') || getProvenanceForField('chelka')}
+            />
+            <EditableField
+              field="subParcel"
+              label="תת־חלקה"
+              value={getValueFromPaths(['subParcel', 'sub_parcel', 'subparcel', 'land_registry.subParcel', 'land_registry.sub_parcel'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource={getDataSource('subParcel')}
+              provenanceInfo={getProvenanceForField('subParcel')}
+            />
+            <EditableField
+              field="fullAddress"
+              label="כתובת"
+              value={data.street && data.buildingNumber && data.city ? `${data.street} ${data.buildingNumber}, ${data.neighborhood ? `שכונת ${data.neighborhood}, ` : ''}${data.city}` : undefined}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource={getDataSource('fullAddress')}
+              provenanceInfo={getProvenanceForField('fullAddress')}
+            />
+            <EditableField
               field="registrationOffice"
-              label="משרד רישום מקרקעין"
+              label="לשכת רישום מקרקעין"
               value={extractedData.registrationOffice || extractedData.land_registry?.registration_office}
               editingField={editingField}
               tempValue={tempValue}
@@ -357,35 +415,84 @@ export function Step3FieldsPanel({
               dataSource="נשלף מתוך נסח טאבו"
               provenanceInfo={getProvenanceForField('tabuExtractDate')}
             />
+          </div>
+
+          {/* מבנה וחלוקה */}
+          <h4 className="text-base font-semibold text-gray-800 mb-3 mt-6 border-b pb-2">מבנה וחלוקה</h4>
+          <div className="space-y-3">
             <EditableField
-              field="gush"
-              label="מספר גוש"
-              value={extractedData.gush || extractedData.land_registry?.gush || data.gush}
+              field="buildingsCount"
+              label="מספר מבנים"
+              value={getValueFromPaths(['buildingsCount', 'buildings_count', 'land_registry.buildings_count', 'numberOfBuildings'], extractedData, data)}
               editingField={editingField}
               tempValue={tempValue}
               onEdit={handleFieldEdit}
               onSave={handleFieldSave}
               onCancel={handleFieldCancel}
               onValueChange={setTempValue}
-              dataSource={getDataSource('gush')}
-              provenanceInfo={getProvenanceForField('gush')}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('buildingsCount')}
             />
             <EditableField
-              field="parcel"
-              label="מספר חלקה"
-              value={extractedData.parcel || extractedData.chelka || extractedData.land_registry?.chelka || extractedData.land_registry?.parcel || data.parcel}
+              field="wingsCount"
+              label="מספר אגפים / כניסות"
+              value={getValueFromPaths(['wingsCount', 'wings_count', 'land_registry.wings_count', 'entrances_count'], extractedData, data)}
               editingField={editingField}
               tempValue={tempValue}
               onEdit={handleFieldEdit}
               onSave={handleFieldSave}
               onCancel={handleFieldCancel}
               onValueChange={setTempValue}
-              dataSource={getDataSource('parcel')}
-              provenanceInfo={getProvenanceForField('parcel') || getProvenanceForField('chelka')}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('wingsCount')}
             />
+            <EditableField
+              field="buildingWingNumber"
+              label="מספר מבנה / אגף של תת־החלקה"
+              value={getValueFromPaths(['buildingWingNumber', 'building_wing_number', 'land_registry.building_wing_number'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('buildingWingNumber')}
+            />
+            <EditableField
+              field="subPlotsCount"
+              label="מספר תתי־חלקות"
+              value={getValueFromPaths(['subPlotsCount', 'sub_plots_count', 'land_registry.sub_plots_count', 'total_sub_plots'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('subPlotsCount')}
+            />
+            <EditableField
+              field="parcelArea"
+              label="שטח קרקע כולל של החלקה"
+              value={getValueFromPaths(['parcelArea', 'parcel_area', 'land_registry.parcelArea', 'land_registry.total_plot_area'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource={getDataSource('parcelArea')}
+              provenanceInfo={getProvenanceForField('parcelArea')}
+            />
+          </div>
+
+          {/* זכויות ובעלות */}
+          <h4 className="text-base font-semibold text-gray-800 mb-3 mt-6 border-b pb-2">זכויות ובעלות</h4>
+          <div className="space-y-3">
             <EditableField
               field="ownershipType"
-              label="סוג בעלות"
+              label="סוג הבעלות"
               value={extractedData.ownershipType || extractedData.land_registry?.ownership_type || 'בעלות פרטית'}
               editingField={editingField}
               tempValue={tempValue}
@@ -410,118 +517,31 @@ export function Step3FieldsPanel({
               provenanceInfo={getProvenanceForField('rights')}
             />
             <EditableField
-              field="attachments"
-              label="נספחים"
-              value={typeof extractedData.attachments === 'string' 
-                ? extractedData.attachments 
-                : Array.isArray(extractedData.attachments) 
-                  ? extractedData.attachments.map((a: any) => a.description || a.type).join(', ')
-                  : extractedData.land_registry?.attachments || data.attachments || ''}
+              field="owners"
+              label="בעלי זכויות"
+              value={(() => {
+                const owners = getValueFromPaths(['owners', 'land_registry.owners'], extractedData, data)
+                if (Array.isArray(owners) && owners.length > 0) {
+                  return owners.map((o: any) => {
+                    if (typeof o === 'string') return o
+                    return `${o.name || ''}${o.idType ? `, ${o.idType}` : ''}${o.idNumber ? ` ${o.idNumber}` : ''}${o.share ? `, חלק ${o.share}` : ''}`
+                  }).join('; ')
+                }
+                return owners
+              })()}
               editingField={editingField}
               tempValue={tempValue}
               onEdit={handleFieldEdit}
               onSave={handleFieldSave}
               onCancel={handleFieldCancel}
               onValueChange={setTempValue}
-              dataSource={getDataSource('attachments')}
-              provenanceInfo={getProvenanceForField('attachments')}
-            />
-            <EditableField
-              field="parcelArea"
-              label="שטח קרקע רשום (מר״ר)"
-              value={getValueFromPaths(['parcelArea', 'parcel_area', 'land_registry.parcelArea', 'land_registry.total_plot_area'], extractedData, data)}
-              editingField={editingField}
-              tempValue={tempValue}
-              onEdit={handleFieldEdit}
-              onSave={handleFieldSave}
-              onCancel={handleFieldCancel}
-              onValueChange={setTempValue}
-              dataSource={getDataSource('parcelArea')}
-              provenanceInfo={getProvenanceForField('parcelArea')}
-            />
-            <EditableField
-              field="fullAddress"
-              label="כתובת מלאה"
-              value={data.street && data.buildingNumber && data.city ? `${data.street} ${data.buildingNumber}, ${data.neighborhood ? `שכונת ${data.neighborhood}, ` : ''}${data.city}` : undefined}
-              editingField={editingField}
-              tempValue={tempValue}
-              onEdit={handleFieldEdit}
-              onSave={handleFieldSave}
-              onCancel={handleFieldCancel}
-              onValueChange={setTempValue}
-              dataSource={getDataSource('fullAddress')}
-              provenanceInfo={getProvenanceForField('fullAddress')}
-            />
-            <EditableField
-              field="bylaws"
-              label="תקנון"
-              value={getValueFromPaths(['bylaws', 'bylaw', 'land_registry.bylaws', 'land_registry.bylaw'], extractedData, data)}
-              editingField={editingField}
-              tempValue={tempValue}
-              onEdit={handleFieldEdit}
-              onSave={handleFieldSave}
-              onCancel={handleFieldCancel}
-              onValueChange={setTempValue}
-              dataSource={getDataSource('bylaws')}
-              provenanceInfo={getProvenanceForField('bylaws')}
-            />
-            <EditableField
-              field="regulationType"
-              label="סוג התקנון"
-              value={getValueFromPaths(['regulationType', 'regulation_type', 'land_registry.regulation_type'], extractedData, data)}
-              editingField={editingField}
-              tempValue={tempValue}
-              onEdit={handleFieldEdit}
-              onSave={handleFieldSave}
-              onCancel={handleFieldCancel}
-              onValueChange={setTempValue}
-              dataSource="נשלף מתוך נסח טאבו"
-              provenanceInfo={getProvenanceForField('regulationType')}
-              type="select"
-              options={['מוסכם', 'לא מוסכם', 'מצוי']}
-            />
-            <EditableField
-              field="subParcel"
-              label="תת חלקה"
-              value={getValueFromPaths(['subParcel', 'sub_parcel', 'subparcel', 'land_registry.subParcel', 'land_registry.sub_parcel'], extractedData, data)}
-              editingField={editingField}
-              tempValue={tempValue}
-              onEdit={handleFieldEdit}
-              onSave={handleFieldSave}
-              onCancel={handleFieldCancel}
-              onValueChange={setTempValue}
-              dataSource={getDataSource('subParcel')}
-              provenanceInfo={getProvenanceForField('subParcel')}
-            />
-            <EditableField
-              field="unitDescription"
-              label="תיאור דירה"
-              value={getValueFromPaths(['unitDescription', 'unit_description', 'land_registry.unitDescription', 'land_registry.unit_description'], extractedData, data)}
-              editingField={editingField}
-              tempValue={tempValue}
-              onEdit={handleFieldEdit}
-              onSave={handleFieldSave}
-              onCancel={handleFieldCancel}
-              onValueChange={setTempValue}
-              dataSource={getDataSource('unitDescription')}
-              provenanceInfo={getProvenanceForField('unitDescription')}
-            />
-            <EditableField
-              field="registeredArea"
-              label="שטח רשום (מ״ר)"
-              value={getValueFromPaths(['registeredArea', 'registered_area', 'land_registry.registeredArea', 'land_registry.registered_area'], extractedData, data)}
-              editingField={editingField}
-              tempValue={tempValue}
-              onEdit={handleFieldEdit}
-              onSave={handleFieldSave}
-              onCancel={handleFieldCancel}
-              onValueChange={setTempValue}
-              dataSource={getDataSource('registeredArea')}
-              provenanceInfo={getProvenanceForField('registeredArea')}
+              dataSource={getDataSource('owners')}
+              provenanceInfo={getProvenanceForField('owners')}
+              type="textarea"
             />
             <EditableField
               field="commonParts"
-              label="חלק ברכוש המשותף"
+              label="החלק ברכוש המשותף"
               value={getValueFromPaths(['commonParts', 'common_parts', 'land_registry.commonParts', 'land_registry.common_parts'], extractedData, data)}
               editingField={editingField}
               tempValue={tempValue}
@@ -532,8 +552,150 @@ export function Step3FieldsPanel({
               dataSource={getDataSource('commonParts')}
               provenanceInfo={getProvenanceForField('commonParts')}
             />
+          </div>
+
+          {/* הצמדות */}
+          <h4 className="text-base font-semibold text-gray-800 mb-3 mt-6 border-b pb-2">הצמדות</h4>
+          <div className="space-y-3">
             <EditableField
-              field="owners"
+              field="attachments"
+              label="הצמדות (כולל תיאור, שטח, שיוך, סימון בתשריט)"
+              value={typeof extractedData.attachments === 'string'
+                ? extractedData.attachments
+                : Array.isArray(extractedData.attachments)
+                  ? extractedData.attachments.map((a: any) => {
+                      const parts = []
+                      if (a.description || a.type) parts.push(a.description || a.type)
+                      if (a.area || a.size) parts.push(`שטח: ${a.area || a.size} מ"ר`)
+                      if (a.symbol) parts.push(`אות: ${a.symbol}`)
+                      if (a.color) parts.push(`צבע: ${a.color}`)
+                      return parts.join(', ')
+                    }).join('; ')
+                  : extractedData.land_registry?.attachments || data.attachments || ''}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource={getDataSource('attachments')}
+              provenanceInfo={getProvenanceForField('attachments')}
+              type="textarea"
+            />
+          </div>
+
+          {/* נתוני יחידה כפי שמופיעים בנסח */}
+          <h4 className="text-base font-semibold text-gray-800 mb-3 mt-6 border-b pb-2">נתוני יחידה כפי שמופיעים בנסח</h4>
+          <div className="space-y-3">
+            <EditableField
+              field="floor"
+              label="קומה"
+              value={getValueFromPaths(['floor', 'land_registry.floor'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('floor')}
+            />
+            <EditableField
+              field="registeredArea"
+              label="שטח דירה רשום"
+              value={getValueFromPaths(['registeredArea', 'registered_area', 'land_registry.registeredArea', 'land_registry.registered_area', 'apartment_registered_area'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource={getDataSource('registeredArea')}
+              provenanceInfo={getProvenanceForField('registeredArea')}
+            />
+            <EditableField
+              field="balconyArea"
+              label="שטח מרפסת"
+              value={getValueFromPaths(['balconyArea', 'balcony_area', 'land_registry.balcony_area'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('balconyArea')}
+            />
+            <EditableField
+              field="additionalAreas"
+              label="שטחים נוספים"
+              value={getValueFromPaths(['additionalAreas', 'additional_areas', 'land_registry.additional_areas'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('additionalAreas')}
+            />
+            <EditableField
+              field="unitDescription"
+              label="תיאור הדירה"
+              value={getValueFromPaths(['unitDescription', 'unit_description', 'land_registry.unitDescription', 'land_registry.unit_description'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource={getDataSource('unitDescription')}
+              provenanceInfo={getProvenanceForField('unitDescription')}
+              type="textarea"
+            />
+          </div>
+
+          {/* תקנון */}
+          <h4 className="text-base font-semibold text-gray-800 mb-3 mt-6 border-b pb-2">תקנון</h4>
+          <div className="space-y-3">
+            <EditableField
+              field="regulationType"
+              label="סוג התקנון (מוסכם / לא מוסכם / מצוי וכו')"
+              value={getValueFromPaths(['regulationType', 'regulation_type', 'land_registry.regulation_type'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('regulationType')}
+              type="select"
+              options={['מוסכם', 'לא מוסכם', 'מצוי', 'אחר']}
+            />
+            <EditableField
+              field="bylaws"
+              label="תוכן התקנון"
+              value={getValueFromPaths(['bylaws', 'bylaw', 'land_registry.bylaws', 'land_registry.bylaw'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource={getDataSource('bylaws')}
+              provenanceInfo={getProvenanceForField('bylaws')}
+              type="textarea"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Placeholder for continuation - Remove duplicate old fields */}
+      {false && hasExtractedData && (
+        <div className="hidden">
+            <EditableField
+              field="owners_old"
               label="בעלים"
               value={(() => {
                 const owners = getValueFromPaths(['owners', 'land_registry.owners'], extractedData, data)
