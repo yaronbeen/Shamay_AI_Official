@@ -1193,7 +1193,7 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
       // Use sessionId from props first, then currentMapId, otherwise generate new one
       const mapSessionId = sessionId || currentMapId || `map-${Date.now()}`
 
-      const response = await fetch('/api/gis-screenshot', {
+      const response = await fetch(`/api/session/${mapSessionId}/gis-screenshot`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
