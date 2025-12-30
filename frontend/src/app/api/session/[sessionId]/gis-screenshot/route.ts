@@ -103,11 +103,59 @@ export async function POST(
         )
 
         if (wmsResult.success && wmsResult.imageBase64) {
-          return NextResponse.json({
-            success: true,
-            screenshot: wmsResult.imageBase64,
-            message: 'WMS screenshot captured successfully'
-          })
+          // Save image to storage and get URL
+          const buffer = Buffer.from(wmsResult.imageBase64, 'base64')
+          const filename = `gis-${mode}-${Date.now()}.png`
+
+          try {
+            const uploadResult = await FileStorageService.uploadFile(
+              buffer,
+              params.sessionId,
+              filename,
+              'image/png'
+            )
+
+            console.log(`✅ Screenshot saved to storage: ${uploadResult.url}`)
+
+            // Also save to session gisScreenshots
+            const loadResult = await ShumaDB.loadShumaForWizard(params.sessionId)
+            if (loadResult.success) {
+              const sessionData = loadResult.valuationData || {}
+              const existingScreenshots = (sessionData as any).gisScreenshots || {}
+
+              // Update with new screenshot
+              const updatedScreenshots = {
+                ...existingScreenshots,
+                [mode]: uploadResult.url
+              }
+
+              await ShumaDB.saveShumaFromSession(
+                params.sessionId,
+                'default-org',
+                'system',
+                {
+                  ...sessionData,
+                  gisScreenshots: updatedScreenshots
+                } as any
+              )
+              console.log(`💾 Updated gisScreenshots in session: ${mode} = ${uploadResult.url}`)
+            }
+
+            return NextResponse.json({
+              success: true,
+              screenshot: wmsResult.imageBase64,
+              screenshotUrl: uploadResult.url,
+              message: 'WMS screenshot captured and saved successfully'
+            })
+          } catch (uploadError) {
+            console.error('❌ Failed to save screenshot:', uploadError)
+            // Still return the image even if save failed
+            return NextResponse.json({
+              success: true,
+              screenshot: wmsResult.imageBase64,
+              message: 'WMS screenshot captured (save failed)'
+            })
+          }
         } else {
           console.warn('⚠️ WMS failed, coordinates were:', coordinates)
           return NextResponse.json({
