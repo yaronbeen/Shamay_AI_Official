@@ -52,13 +52,29 @@ export async function POST(
       size: result.size
     })
 
+    // Get the document type from form data
+    const documentType = formData.get('type') as string || 'document'
+
+    // Return in format expected by frontend (with uploadEntry wrapper)
     return NextResponse.json({
       success: true,
       url: result.url,
       path: result.path,
       size: result.size,
       originalName: file.name,
-      filename: uniqueFilename
+      filename: uniqueFilename,
+      // Frontend expects uploadEntry object with all metadata
+      uploadEntry: {
+        url: result.url,
+        path: result.path,
+        size: result.size,
+        name: file.name,
+        fileName: uniqueFilename,
+        mimeType: file.type,
+        status: 'completed',
+        type: documentType,
+        uploadedAt: new Date().toISOString()
+      }
     })
 
   } catch (error: any) {
