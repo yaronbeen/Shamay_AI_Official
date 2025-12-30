@@ -770,7 +770,6 @@ export function Step3FieldsPanel({
               dataSource="נשלף מתוך נסח טאבו"
               provenanceInfo={getProvenanceForField('buildingWingNumber')}
             />
-          </div>
         </div>
       )}
 
