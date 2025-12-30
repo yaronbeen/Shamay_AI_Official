@@ -350,12 +350,13 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
   }, [updateData])
 
   // Helper to compute input class with visual feedback for unfilled required fields
+  // Note: Classes written explicitly for Tailwind JIT to find them
+  const inputBaseClass = "w-full px-4 py-3 border rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+  const inputUnfilledClass = "w-full px-4 py-3 border rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent border-orange-300 bg-orange-50"
+  const inputFilledClass = "w-full px-4 py-3 border rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent border-gray-300"
+
   const getInputClass = (fieldName: string, isFilled: boolean) => {
-    const baseClass = "w-full px-4 py-3 border rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-    if (!isFilled) {
-      return `${baseClass} border-amber-300 bg-amber-50/30`
-    }
-    return `${baseClass} border-gray-300`
+    return isFilled ? inputFilledClass : inputUnfilledClass
   }
 
   // Check if required fields are filled
