@@ -1,22 +1,37 @@
 'use client'
 
-import { 
-  CheckCircle, 
-  XCircle, 
-  FileText, 
-  Building, 
-  Edit3, 
-  Save, 
-  Loader2, 
-  ChevronLeft, 
-  RotateCcw, 
-  History, 
+import {
+  CheckCircle,
+  XCircle,
+  FileText,
+  Building,
+  Edit3,
+  Save,
+  Loader2,
+  ChevronLeft,
+  RotateCcw,
+  History,
   ChevronRightCircleIcon,
   Info,
-  X
+  X,
+  Plus,
+  MapPin,
+  ScrollText,
+  FileCheck,
+  Home
 } from 'lucide-react'
 import { ValuationData } from '../ValuationWizard'
 import React, { useState, useEffect, useRef, useMemo } from 'react'
+
+// Document tab types
+type DocumentTab = 'tabu' | 'condo' | 'permit' | 'parcel'
+
+const DOCUMENT_TABS: { id: DocumentTab; label: string; icon: React.ReactNode }[] = [
+  { id: 'tabu', label: 'נסח טאבו', icon: <ScrollText className="w-4 h-4" /> },
+  { id: 'condo', label: 'צו בית משותף', icon: <Building className="w-4 h-4" /> },
+  { id: 'permit', label: 'היתר בנייה', icon: <FileCheck className="w-4 h-4" /> },
+  { id: 'parcel', label: 'תיאור החלקה', icon: <MapPin className="w-4 h-4" /> },
+]
 
 interface Step3ValidationProps {
   data: ValuationData
@@ -254,11 +269,45 @@ function EditableField({
   )
 }
 
+// Section Header Component for visual dividers
+function SectionHeader({ title }: { title: string }) {
+  return (
+    <div className="flex items-center gap-3 my-6">
+      <div className="flex-1 h-px bg-gray-300"></div>
+      <h4 className="text-sm font-semibold text-gray-700 whitespace-nowrap">{title}</h4>
+      <div className="flex-1 h-px bg-gray-300"></div>
+    </div>
+  )
+}
+
+// Document Info Note Component
+function DocumentInfoNote({ documentType }: { documentType: string }) {
+  const notes: Record<string, string> = {
+    tabu: 'השדות המפורטים לעיל הם שדות אפשריים מנסח טאבו. לא בכל נסח מופיעים כל השדות, והיעדר שדה אינו מהווה חוסר נתון אלא מצב רישומי תקין.',
+    condo: 'השדות המפורטים לעיל הם שדות אפשריים מצו בית משותף. לא בכל צו מופיעים כל השדות, והיעדר שדה אינו מהווה חוסר נתון.',
+    permit: 'לכל נכס יכולים להיות 0, 1 או יותר היתרי בנייה. לא בכל היתר מופיעים כל השדות.',
+    parcel: 'תיאור החלקה מבוסס על נתונים ידניים ומידע GIS.'
+  }
+
+  return (
+    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6" dir="rtl">
+      <div className="flex items-start gap-2">
+        <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+        <p className="text-sm text-blue-800">{notes[documentType]}</p>
+      </div>
+    </div>
+  )
+}
+
 export function Step3Validation({ data, updateData, onValidationChange, sessionId }: Step3ValidationProps) {
   const [extractedData, setExtractedData] = useState<ExtractedData>({})
   const [editingField, setEditingField] = useState<string | null>(null)
   const [tempValue, setTempValue] = useState<string>('')
   const [currentFileIndex, setCurrentFileIndex] = useState(0)
+
+  // Document-based tab navigation
+  const [selectedDocumentTab, setSelectedDocumentTab] = useState<DocumentTab>('tabu')
+  const [selectedPermitIndex, setSelectedPermitIndex] = useState(0)
   const [allFiles, setAllFiles] = useState<Array<{
     type: string
     name: string
@@ -653,511 +702,322 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
         </div>
       </div>
 
-      {/* Document Viewer */}
-      <div className="grid grid-cols-1 gap-6 mb-6">
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2 text-right">צפייה במסמכים</h3>
-            
-            {/* Document Tabs */}
-            {pdfFiles.length > 0 && (
-              <div className="flex space-x-reverse space-x-1 mb-4">
-                {pdfFiles.map((file, index) => (
-                  <button
-                    key={index}
-                    onClick={() => {
-                      setCurrentFileIndex(index)
-                      setPdfViewerPage(1)
-                    }}
-                    className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                      currentFileIndex === index
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    {getStep3FileTypeLabel(file.type || '')}
-                  </button>
-                ))}
+      {/* Split Layout: Fields Panel (Left) + PDF Panel (Right) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* LEFT PANEL - Document Fields */}
+        <div className="bg-white rounded-lg border border-gray-200 p-6 order-2 lg:order-1">
+          {/* Document Tabs */}
+          <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-200 pb-4">
+            {DOCUMENT_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setSelectedDocumentTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  selectedDocumentTab === tab.id
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {tab.icon}
+                <span>{tab.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Document Info Note */}
+          <DocumentInfoNote documentType={selectedDocumentTab} />
+
+          {/* Tab Content */}
+          <div className="space-y-4" dir="rtl">
+            {/* TABU TAB */}
+            {selectedDocumentTab === 'tabu' && (
+              <div className="space-y-4">
+                {/* זיהוי ורישום */}
+                <SectionHeader title="זיהוי ורישום" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <EditableField field="gush" label="גוש" value={extractedData.gush} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('gush')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="chelka" label="חלקה" value={extractedData.chelka || extractedData.parcel} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('chelka')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="sub_chelka" label="תת־חלקה" value={extractedData.sub_chelka || extractedData.subChelka} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('sub_chelka')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="address_from_tabu" label="כתובת" value={extractedData.address_from_tabu || extractedData.addressFromTabu} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('address_from_tabu')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="registration_office" label="לשכת רישום מקרקעין" value={extractedData.registration_office || extractedData.registrationOffice} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('registration_office')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="tabu_extract_date" label="תאריך הפקת נסח" value={extractedData.tabu_extract_date || extractedData.issue_date} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('tabu_extract_date')} onNavigateToDocument={navigateToDocument} />
+                </div>
+
+                {/* מבנה וחלוקה */}
+                <SectionHeader title="מבנה וחלוקה" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <EditableField field="buildings_count" label="מספר מבנים" value={extractedData.buildings_count || extractedData.buildingsCount} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('buildings_count')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="building_number" label="מספר מבנה / אגף" value={extractedData.building_number || extractedData.buildingNumber} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('building_number')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="sub_plots_count" label="מספר תתי־חלקות" value={extractedData.sub_plots_count || extractedData.subPlotsCount} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('sub_plots_count')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="registered_area" label="שטח קרקע כולל של החלקה" value={extractedData.registered_area || extractedData.registeredArea} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('registered_area')} onNavigateToDocument={navigateToDocument} />
+                </div>
+
+                {/* זכויות ובעלות */}
+                <SectionHeader title="זכויות ובעלות" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <EditableField field="ownership_type" label="סוג הבעלות" value={extractedData.ownership_type || extractedData.ownershipType} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('ownership_type')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="rights" label="זכויות בנכס" value={extractedData.rights} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('rights')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="owners" label="בעלי זכויות" value={Array.isArray(extractedData.owners) ? extractedData.owners.map((o: any) => o.name || o).join(', ') : extractedData.owners} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('owners')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="shared_property" label="החלק ברכוש המשותף" value={extractedData.shared_property || extractedData.sharedProperty} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('shared_property')} onNavigateToDocument={navigateToDocument} />
+                </div>
+
+                {/* הצמדות */}
+                <SectionHeader title="הצמדות" />
+                <div className="grid grid-cols-1 gap-4">
+                  <EditableField field="attachments" label="הצמדות" value={typeof extractedData.attachments === 'string' ? extractedData.attachments : Array.isArray(extractedData.attachments) ? (extractedData.attachments as any[]).map(a => `${a.description || a.type || ''} ${a.area ? `(${a.area} מ"ר)` : ''}`).join(', ') : ''} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('attachments')} onNavigateToDocument={navigateToDocument} type="textarea" />
+                </div>
+
+                {/* משכנתאות */}
+                <SectionHeader title="משכנתאות" />
+                <div className="grid grid-cols-1 gap-4">
+                  <EditableField field="mortgages" label="משכנתאות" value={Array.isArray(extractedData.mortgages) ? extractedData.mortgages.map((m: any) => `${m.essence || ''} - ${m.amount || ''} (${m.rank || ''})`).join('; ') : extractedData.mortgages || extractedData.mortgage_essence} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('mortgages')} onNavigateToDocument={navigateToDocument} type="textarea" />
+                </div>
+
+                {/* הערות רישומיות – לכלל החלקה */}
+                <SectionHeader title="הערות רישומיות – לכלל החלקה" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <EditableField field="plot_notes" label="הערות לחלקה" value={extractedData.plot_notes || extractedData.plotNotes} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('plot_notes')} onNavigateToDocument={navigateToDocument} type="textarea" />
+                  <EditableField field="notes_action_type" label="מהות הפעולה" value={extractedData.notes_action_type || extractedData.notesActionType} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('notes_action_type')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="notes_beneficiary" label="שם המוטב" value={extractedData.notes_beneficiary || extractedData.notesBeneficiary} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('notes_beneficiary')} onNavigateToDocument={navigateToDocument} />
+                </div>
+
+                {/* הערות רישומיות – לתת־חלקה */}
+                <SectionHeader title="הערות רישומיות – לתת־חלקה" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <EditableField field="sub_chelka_notes_action_type" label="מהות הפעולה (תת־חלקה)" value={extractedData.sub_chelka_notes_action_type} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('sub_chelka_notes_action_type')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="sub_chelka_notes_beneficiary" label="שם המוטב (תת־חלקה)" value={extractedData.sub_chelka_notes_beneficiary} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('sub_chelka_notes_beneficiary')} onNavigateToDocument={navigateToDocument} />
+                </div>
+
+                {/* זיקות הנאה – לכלל החלקה */}
+                <SectionHeader title="זיקות הנאה – לכלל החלקה" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <EditableField field="easements_essence" label="מהות" value={extractedData.easements_essence || extractedData.easementsEssence} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('easements_essence')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="easements_description" label="תיאור" value={extractedData.easements_description || extractedData.easementsDescription} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('easements_description')} onNavigateToDocument={navigateToDocument} />
+                </div>
+
+                {/* זיקות הנאה – לתת־חלקה */}
+                <SectionHeader title="זיקות הנאה – לתת־חלקה" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <EditableField field="sub_parcel_easements_essence" label="מהות (תת־חלקה)" value={extractedData.sub_parcel_easements_essence} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('sub_parcel_easements_essence')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="sub_parcel_easements_description" label="תיאור (תת־חלקה)" value={extractedData.sub_parcel_easements_description} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('sub_parcel_easements_description')} onNavigateToDocument={navigateToDocument} />
+                </div>
+
+                {/* נתוני יחידה */}
+                <SectionHeader title="נתוני יחידה כפי שמופיעים בנסח" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <EditableField field="floor" label="קומה" value={extractedData.floor || data.floor} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('floor')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="apartment_registered_area" label="שטח דירה רשום" value={extractedData.apartment_registered_area || extractedData?.land_registry?.apartment_registered_area} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('apartment_registered_area')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="balcony_area" label="שטח מרפסת" value={extractedData.balcony_area || extractedData.balconyArea} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('balcony_area')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="additional_areas" label="שטחים נוספים" value={Array.isArray(extractedData.additional_areas) ? extractedData.additional_areas.join(', ') : extractedData.additional_areas} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('additional_areas')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="unit_description" label="תיאור הדירה" value={extractedData.unit_description || extractedData.unitDescription} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('unit_description')} onNavigateToDocument={navigateToDocument} />
+                </div>
+
+                {/* תקנון */}
+                <SectionHeader title="תקנון" />
+                <div className="grid grid-cols-1 gap-4">
+                  <EditableField field="regulation_type" label="סוג התקנון" value={extractedData.regulation_type || extractedData.bylaws} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="נסח טאבו" provenanceInfo={getProvenanceForField('regulation_type')} onNavigateToDocument={navigateToDocument} />
+                </div>
               </div>
             )}
 
-            {/* Document Display */}
-            <div className="border border-gray-300 rounded-lg bg-gray-50">
-              {filesLoading ? (
-                <div className="flex items-center justify-center h-96">
-                  <div className="text-center">
-                    <Loader2 className="w-8 h-8 mx-auto mb-4 animate-spin text-blue-600" />
-                    <p className="text-gray-600">טוען מסמכים...</p>
-                  </div>
+            {/* CONDO TAB */}
+            {selectedDocumentTab === 'condo' && (
+              <div className="space-y-4">
+                {/* זיהוי ומסמך */}
+                <SectionHeader title="זיהוי ומסמך" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <EditableField field="order_issue_date" label="תאריך הפקת צו בית משותף" value={extractedData.order_issue_date || extractedData.orderIssueDate} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="צו בית משותף" provenanceInfo={getProvenanceForField('order_issue_date')} onNavigateToDocument={navigateToDocument} />
                 </div>
-              ) : currentFile?.url ? (
-                <div className="relative">
-                  <iframe
-                    key={`${currentFile.url}#page=${pdfViewerPage}`}
-                    src={`${currentFile.url}#page=${pdfViewerPage}&view=FitH`}
-                    title={currentFile.name || 'מסמך PDF'}
-                    className="w-full h-[700px] rounded-lg bg-white"
-                    allow="fullscreen"
-                  />
-                </div>
-              ) : (
-                <div className="flex items-center justify-center h-96 text-gray-500">
-                  <div className="text-center">
-                    <FileText className="w-16 h-16 mx-auto mb-4" />
-                    <p className="text-lg">אין מסמכים להצגה</p>
-                    <p className="text-sm">העלה מסמכים בשלב הקודם</p>
-                  </div>
-                </div>
-              )}
-            </div>
 
-            {/* File Navigation */}
-            {pdfFiles.length > 1 && (
-              <div className="flex justify-between items-center mt-4">
-                <button
-                  onClick={() => {
-                    const nextIndex = Math.max(0, currentFileIndex - 1)
-                    setCurrentFileIndex(nextIndex)
-                    setPdfViewerPage(1)
-                  }}
-                  disabled={currentFileIndex === 0}
-                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ChevronRightCircleIcon className="w-4 h-4" />
-                  <span>הקודם</span>
-                </button>
-                <div className="text-sm text-gray-600">
-                  {currentFileIndex + 1} מתוך {pdfFiles.length}
+                {/* תיאור הבניין */}
+                <SectionHeader title="תיאור הבניין" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <EditableField field="building_address" label="כתובת הבניין" value={extractedData.building_address || extractedData.buildingAddress} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="צו בית משותף" provenanceInfo={getProvenanceForField('building_address')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="building_number" label="מספר מבנה" value={extractedData.building_number || extractedData.buildingNumber} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="צו בית משותף" provenanceInfo={getProvenanceForField('building_number')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="building_floors" label="מספר קומות בבניין" value={extractedData.building_floors || extractedData.buildingFloors} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="צו בית משותף" provenanceInfo={getProvenanceForField('building_floors')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="total_sub_plots" label="מספר תתי־חלקות כולל בבניין" value={extractedData.total_sub_plots || extractedData.totalSubPlots || extractedData.building_sub_plots_count} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="צו בית משותף" provenanceInfo={getProvenanceForField('total_sub_plots')} onNavigateToDocument={navigateToDocument} />
                 </div>
-                <button
-                  onClick={() => {
-                    const nextIndex = Math.min(pdfFiles.length - 1, currentFileIndex + 1)
-                    setCurrentFileIndex(nextIndex)
-                    setPdfViewerPage(1)
-                  }}
-                  disabled={currentFileIndex >= pdfFiles.length - 1}
-                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <span>הבא</span>
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
+
+                {/* זיהוי תת־חלקה */}
+                <SectionHeader title="זיהוי תת־חלקה" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <EditableField field="specific_sub_plot_number" label="מספר תת־חלקה" value={extractedData.specific_sub_plot?.number || extractedData.sub_chelka} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="צו בית משותף" provenanceInfo={getProvenanceForField('specific_sub_plot')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="specific_sub_plot_floor" label="קומה של תת־החלקה" value={extractedData.specific_sub_plot?.floor || extractedData.floor} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="צו בית משותף" provenanceInfo={getProvenanceForField('specific_sub_plot')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="specific_sub_plot_area" label="שטח תת־החלקה" value={extractedData.specific_sub_plot?.area} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="צו בית משותף" provenanceInfo={getProvenanceForField('specific_sub_plot')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="specific_sub_plot_description" label="תיאור מילולי של תת־החלקה" value={extractedData.specific_sub_plot?.description} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="צו בית משותף" provenanceInfo={getProvenanceForField('specific_sub_plot')} onNavigateToDocument={navigateToDocument} type="textarea" />
+                </div>
+
+                {/* רכוש משותף */}
+                <SectionHeader title="רכוש משותף" />
+                <div className="grid grid-cols-1 gap-4">
+                  <EditableField field="shared_property_parts" label="חלקים ברכוש המשותף המיוחסים לתת־החלקה" value={extractedData.specific_sub_plot?.shared_property_parts || extractedData.shared_property} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="צו בית משותף" provenanceInfo={getProvenanceForField('shared_property_parts')} onNavigateToDocument={navigateToDocument} />
+                </div>
+
+                {/* הצמדות לתת־חלקה */}
+                <SectionHeader title="הצמדות לתת־חלקה" />
+                <div className="grid grid-cols-1 gap-4">
+                  <EditableField field="condo_attachments" label="הצמדות" value={Array.isArray(extractedData.specific_sub_plot?.attachments) ? extractedData.specific_sub_plot.attachments.map((a: any) => `${a.description || a.type || ''} ${a.area ? `(${a.area} מ"ר)` : ''}`).join(', ') : extractedData.specific_sub_plot?.attachments || ''} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="צו בית משותף" provenanceInfo={getProvenanceForField('condo_attachments')} onNavigateToDocument={navigateToDocument} type="textarea" />
+                </div>
+              </div>
+            )}
+
+            {/* PERMIT TAB */}
+            {selectedDocumentTab === 'permit' && (
+              <div className="space-y-4">
+                {/* Permit Tabs - for multiple permits */}
+                {(() => {
+                  const permits = Array.isArray(extractedData.permits) ? extractedData.permits : (extractedData.permit_number ? [extractedData] : [])
+                  return (
+                    <>
+                      {permits.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-4 border-b border-gray-200 pb-3">
+                          {permits.map((_, index) => (
+                            <button
+                              key={index}
+                              onClick={() => setSelectedPermitIndex(index)}
+                              className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                                selectedPermitIndex === index
+                                  ? 'bg-green-600 text-white'
+                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                              }`}
+                            >
+                              היתר {index + 1}
+                            </button>
+                          ))}
+                          <button className="px-3 py-1.5 text-sm font-medium rounded-lg bg-gray-50 text-gray-500 border border-dashed border-gray-300 hover:bg-gray-100">
+                            <Plus className="w-4 h-4 inline" />
+                          </button>
+                        </div>
+                      )}
+
+                      {permits.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500">
+                          <FileCheck className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                          <p>לא הועלו היתרי בנייה</p>
+                          <p className="text-sm">העלה היתר בנייה בשלב הקודם</p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <EditableField field="permit_number" label="מספר היתר" value={permits[selectedPermitIndex]?.permit_number || permits[selectedPermitIndex]?.permitNumber} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="היתר בנייה" provenanceInfo={getProvenanceForField('permit_number')} onNavigateToDocument={navigateToDocument} />
+                          <EditableField field="permit_date" label="תאריך היתר" value={permits[selectedPermitIndex]?.permit_date || permits[selectedPermitIndex]?.permitDate} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="היתר בנייה" provenanceInfo={getProvenanceForField('permit_date')} onNavigateToDocument={navigateToDocument} />
+                          <EditableField field="permit_issue_date" label="תאריך הפקת היתר" value={permits[selectedPermitIndex]?.permit_issue_date || permits[selectedPermitIndex]?.permitIssueDate} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="היתר בנייה" provenanceInfo={getProvenanceForField('permit_issue_date')} onNavigateToDocument={navigateToDocument} />
+                          <EditableField field="local_committee_name" label="שם הוועדה המקומית" value={permits[selectedPermitIndex]?.local_committee_name || permits[selectedPermitIndex]?.localCommitteeName} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="היתר בנייה" provenanceInfo={getProvenanceForField('local_committee_name')} onNavigateToDocument={navigateToDocument} />
+                          <div className="md:col-span-2">
+                            <EditableField field="permitted_usage" label="תיאור מותר (מילולי)" value={permits[selectedPermitIndex]?.permitted_usage || permits[selectedPermitIndex]?.permittedUsage || permits[selectedPermitIndex]?.permitted_description} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="היתר בנייה" provenanceInfo={getProvenanceForField('permitted_usage')} onNavigateToDocument={navigateToDocument} type="textarea" />
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
+              </div>
+            )}
+
+            {/* PARCEL TAB */}
+            {selectedDocumentTab === 'parcel' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <EditableField field="parcelShape" label="צורת החלקה" value={extractedData.parcelShape || data.parcelShape} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="תיאור ידני / GIS" provenanceInfo={getProvenanceForField('parcelShape')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="parcelSurface" label="פני הקרקע" value={extractedData.parcelSurface || data.parcelSurface} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="תיאור ידני / GIS" provenanceInfo={getProvenanceForField('parcelSurface')} onNavigateToDocument={navigateToDocument} />
+                </div>
+
+                <SectionHeader title="גבולות החלקה" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <EditableField field="plotBoundaryNorth" label="גבול צפון" value={extractedData.plotBoundaryNorth || extractedData.boundary_north} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="תיאור ידני / GIS" provenanceInfo={getProvenanceForField('plotBoundaryNorth')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="plotBoundarySouth" label="גבול דרום" value={extractedData.plotBoundarySouth || extractedData.boundary_south} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="תיאור ידני / GIS" provenanceInfo={getProvenanceForField('plotBoundarySouth')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="plotBoundaryEast" label="גבול מזרח" value={extractedData.plotBoundaryEast || extractedData.boundary_east} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="תיאור ידני / GIS" provenanceInfo={getProvenanceForField('plotBoundaryEast')} onNavigateToDocument={navigateToDocument} />
+                  <EditableField field="plotBoundaryWest" label="גבול מערב" value={extractedData.plotBoundaryWest || extractedData.boundary_west} editingField={editingField} tempValue={tempValue} onEdit={handleFieldEdit} onSave={handleFieldSave} onCancel={handleFieldCancel} onValueChange={setTempValue} dataSource="תיאור ידני / GIS" provenanceInfo={getProvenanceForField('plotBoundaryWest')} onNavigateToDocument={navigateToDocument} />
+                </div>
               </div>
             )}
           </div>
+        </div>
+
+        {/* RIGHT PANEL - PDF Viewer */}
+        <div className="bg-white rounded-lg border border-gray-200 p-6 order-1 lg:order-2">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">צפייה במסמכים</h3>
+
+          {/* PDF Document Tabs */}
+          {pdfFiles.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-4">
+              {pdfFiles.map((file, index) => (
+                <button
+                  key={index}
+                  onClick={() => {
+                    setCurrentFileIndex(index)
+                    setPdfViewerPage(1)
+                  }}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                    currentFileIndex === index
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {getStep3FileTypeLabel(file.type || '')}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* PDF Display */}
+          <div className="border border-gray-300 rounded-lg bg-gray-50">
+            {filesLoading ? (
+              <div className="flex items-center justify-center h-[600px]">
+                <div className="text-center">
+                  <Loader2 className="w-8 h-8 mx-auto mb-4 animate-spin text-blue-600" />
+                  <p className="text-gray-600">טוען מסמכים...</p>
+                </div>
+              </div>
+            ) : currentFile?.url ? (
+              <iframe
+                key={`${currentFile.url}#page=${pdfViewerPage}`}
+                src={`${currentFile.url}#page=${pdfViewerPage}&view=FitH`}
+                title={currentFile.name || 'מסמך PDF'}
+                className="w-full h-[600px] rounded-lg bg-white"
+                allow="fullscreen"
+              />
+            ) : (
+              <div className="flex items-center justify-center h-[600px] text-gray-500">
+                <div className="text-center">
+                  <FileText className="w-16 h-16 mx-auto mb-4" />
+                  <p className="text-lg">אין מסמכים להצגה</p>
+                  <p className="text-sm">העלה מסמכים בשלב הקודם</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* File Navigation */}
+          {pdfFiles.length > 1 && (
+            <div className="flex justify-between items-center mt-4">
+              <button
+                onClick={() => {
+                  setCurrentFileIndex(Math.max(0, currentFileIndex - 1))
+                  setPdfViewerPage(1)
+                }}
+                disabled={currentFileIndex === 0}
+                className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 text-sm"
+              >
+                <ChevronRightCircleIcon className="w-4 h-4" />
+                <span>הקודם</span>
+              </button>
+              <span className="text-sm text-gray-600">{currentFileIndex + 1} / {pdfFiles.length}</span>
+              <button
+                onClick={() => {
+                  setCurrentFileIndex(Math.min(pdfFiles.length - 1, currentFileIndex + 1))
+                  setPdfViewerPage(1)
+                }}
+                disabled={currentFileIndex >= pdfFiles.length - 1}
+                className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 text-sm"
+              >
+                <span>הבא</span>
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Extraction Summary */}
-      {hasExtractedData && (
-        <div className="bg-blue-50 rounded-lg border border-blue-200 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-blue-900 mb-4 text-right">סיכום חילוץ נתונים</h3>
-          <div className="grid grid-cols-1 gap-4">
-            <div className="bg-white rounded-lg p-4 border border-blue-200">
-              <div className="flex items-center gap-2 mb-2">
-                <FileText className="w-5 h-5 text-blue-600" />
-                <h4 className="font-medium text-gray-900">מצב משפטי</h4>
-              </div>
-              <div className="text-sm text-gray-600">
-                <p>גוש: {extractedData.gush || 'לא נמצא'}</p>
-                <p>חלקה: {extractedData.chelka || extractedData.parcel || 'לא נמצא'}</p>
-                <p>בעלות: {extractedData.ownershipType || 'לא נמצא'}</p>
-              </div>
-            </div>
-            <div className="bg-white rounded-lg p-4 border border-blue-200">
-              <div className="flex items-center gap-2 mb-2">
-                <Building className="w-5 h-5 text-green-600" />
-                <h4 className="font-medium text-gray-900">פרטי בנייה</h4>
-              </div>
-              <div className="text-sm text-gray-600">
-                <p>שנה: {extractedData.buildingYear || 'לא נמצא'}</p>
-                <p>שטח: {extractedData?.land_registry?.apartment_registered_area || 'לא נמצא'} מ"ר</p>
-                <p>שימוש: {extractedData.permittedUse || 'לא נמצא'}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Legal Status Section */}
-      {hasExtractedData && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">מצב משפטי</h3>
-          <div className="grid grid-cols-1 gap-4">
-            <div className="space-y-4">
-              <EditableField
-                field="registrationOffice"
-                label="משרד רישום מקרקעין"
-                value={extractedData.registrationOffice}
-                editingField={editingField}
-                tempValue={tempValue}
-                onEdit={handleFieldEdit}
-                onSave={handleFieldSave}
-                onCancel={handleFieldCancel}
-                onValueChange={setTempValue}
-                dataSource={getDataSource('registrationOffice')}
-                provenanceInfo={getProvenanceForField('registrationOffice')}
-                onNavigateToDocument={navigateToDocument}
-                type="select"
-              />
-              <EditableField
-                field="gush"
-                label="מספר גוש"
-                value={extractedData.gush}
-                editingField={editingField}
-                tempValue={tempValue}
-                onEdit={handleFieldEdit}
-                onSave={handleFieldSave}
-                onCancel={handleFieldCancel}
-                onValueChange={setTempValue}
-                dataSource={getDataSource('gush')}
-                provenanceInfo={getProvenanceForField('gush')}
-                onNavigateToDocument={navigateToDocument}
-              />
-              <EditableField
-                field="chelka"
-                label="מספר חלקה"
-                value={extractedData.chelka || extractedData.parcel}
-                editingField={editingField}
-                tempValue={tempValue}
-                onEdit={handleFieldEdit}
-                onSave={handleFieldSave}
-                onCancel={handleFieldCancel}
-                onValueChange={setTempValue}
-                dataSource={getDataSource('chelka')}
-                provenanceInfo={getProvenanceForField('chelka') || getProvenanceForField('parcel')}
-                onNavigateToDocument={navigateToDocument}
-              />
-            </div>
-            <div className="space-y-4">
-              <EditableField
-                field="ownershipType"
-                label="סוג בעלות"
-                value={extractedData.ownershipType}
-                editingField={editingField}
-                tempValue={tempValue}
-                onEdit={handleFieldEdit}
-                onSave={handleFieldSave}
-                onCancel={handleFieldCancel}
-                onValueChange={setTempValue}
-                dataSource={getDataSource('ownershipType')}
-                provenanceInfo={getProvenanceForField('ownershipType')}
-                onNavigateToDocument={navigateToDocument}
-                type="select"
-              />
-              <EditableField
-                field="attachments"
-                label="נספחים"
-                value={typeof extractedData.attachments === 'string' 
-                  ? extractedData.attachments 
-                  : Array.isArray(extractedData.attachments) 
-                    ? (extractedData.attachments as any[]).map(a => a.description || a.type).join(', ')
-                    : ''}
-                editingField={editingField}
-                tempValue={tempValue}
-                onEdit={handleFieldEdit}
-                onSave={handleFieldSave}
-                onCancel={handleFieldCancel}
-                onValueChange={setTempValue}
-                dataSource={getDataSource('attachments')}
-                provenanceInfo={getProvenanceForField('attachments')}
-                onNavigateToDocument={navigateToDocument}
-              />
-              <EditableField
-                field="sharedAreas"
-                label="שטחים משותפים"
-                value={extractedData.sharedAreas}
-                editingField={editingField}
-                tempValue={tempValue}
-                onEdit={handleFieldEdit}
-                onSave={handleFieldSave}
-                onCancel={handleFieldCancel}
-                onValueChange={setTempValue}
-                dataSource={getDataSource('sharedAreas')}
-                provenanceInfo={getProvenanceForField('sharedAreas')}
-                onNavigateToDocument={navigateToDocument}
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Building Details Section */}
-      {hasExtractedData && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">פרטי הבניין</h3>
-          <div className="grid grid-cols-1 gap-4">
-            <div className="space-y-4">
-              <EditableField
-                field="buildingYear"
-                label="שנת בנייה"
-                value={extractedData.buildingYear}
-                editingField={editingField}
-                tempValue={tempValue}
-                onEdit={handleFieldEdit}
-                onSave={handleFieldSave}
-                onCancel={handleFieldCancel}
-                onValueChange={setTempValue}
-                dataSource={getDataSource('buildingYear')}
-                provenanceInfo={getProvenanceForField('buildingYear')}
-                onNavigateToDocument={navigateToDocument}
-              />
-              <EditableField
-                field="floor"
-                label="קומה"
-                value={extractedData.floor || data.floor}
-                editingField={editingField}
-                tempValue={tempValue}
-                onEdit={handleFieldEdit}
-                onSave={handleFieldSave}
-                onCancel={handleFieldCancel}
-                onValueChange={setTempValue}
-                dataSource={getDataSource('floor')}
-                provenanceInfo={getProvenanceForField('floor')}
-                onNavigateToDocument={navigateToDocument}
-              />
-            </div>
-            <div className="space-y-4">
-              <EditableField
-                field="builtArea"
-                label="שטח בנוי (מ'ר)"
-                value={extractedData.builtArea}
-                editingField={editingField}
-                tempValue={tempValue}
-                onEdit={handleFieldEdit}
-                onSave={handleFieldSave}
-                onCancel={handleFieldCancel}
-                onValueChange={setTempValue}
-                dataSource={getDataSource('builtArea')}
-                provenanceInfo={getProvenanceForField('builtArea')}
-                onNavigateToDocument={navigateToDocument}
-              />
-              <EditableField
-                field="buildingDescription"
-                label="תיאור הבניין"
-                value={extractedData.buildingDescription}
-                editingField={editingField}
-                tempValue={tempValue}
-                onEdit={handleFieldEdit}
-                onSave={handleFieldSave}
-                onCancel={handleFieldCancel}
-                onValueChange={setTempValue}
-                dataSource={getDataSource('buildingDescription')}
-                provenanceInfo={getProvenanceForField('buildingDescription')}
-                onNavigateToDocument={navigateToDocument}
-              />
-              <EditableField
-                field="permittedUse"
-                label="שימוש מותר"
-                value={extractedData.permittedUse}
-                editingField={editingField}
-                tempValue={tempValue}
-                onEdit={handleFieldEdit}
-                onSave={handleFieldSave}
-                onCancel={handleFieldCancel}
-                onValueChange={setTempValue}
-                dataSource={getDataSource('permittedUse')}
-                provenanceInfo={getProvenanceForField('permittedUse')}
-                onNavigateToDocument={navigateToDocument}
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Property Characteristics */}
-      {hasExtractedData && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">מאפייני הנכס</h3>
-          <div className="grid grid-cols-1 gap-4">
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                  מספר חדרים
-                </label>
-                <div className="flex items-center gap-2">
-                  <span className="flex-1 text-right">{data.rooms || '3'}</span>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">נשלף מנתוני המשתמש</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                  קומה
-                </label>
-                <div className="flex items-center gap-2">
-                  <span className="flex-1 text-right">{data.floor || '3'}</span>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">נשלף מנתוני המשתמש</p>
-              </div>
-            </div>
-            <div className="space-y-4">
-              <EditableField
-                field="propertyCondition"
-                label="מצב הנכס"
-                value={extractedData.propertyCondition}
-                editingField={editingField}
-                tempValue={tempValue}
-                onEdit={handleFieldEdit}
-                onSave={handleFieldSave}
-                onCancel={handleFieldCancel}
-                onValueChange={setTempValue}
-                dataSource={getDataSource('propertyCondition')}
-                provenanceInfo={getProvenanceForField('propertyCondition')}
-                onNavigateToDocument={navigateToDocument}
-                type="select"
-                options={['מצוין', 'טוב', 'בינוני', 'גרוע', 'דורש שיפוץ']}
-              />
-              <EditableField
-                field="finishLevel"
-                label="רמת גימור"
-                value={extractedData.finishLevel}
-                editingField={editingField}
-                tempValue={tempValue}
-                onEdit={handleFieldEdit}
-                onSave={handleFieldSave}
-                onCancel={handleFieldCancel}
-                onValueChange={setTempValue}
-                dataSource={getDataSource('finishLevel')}
-                provenanceInfo={getProvenanceForField('finishLevel')}
-                onNavigateToDocument={navigateToDocument}
-                type="select"
-                options={['בסיסי', 'בינוני', 'גבוה', 'יוקרתי', 'לוקסוס']}
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Interior Analysis */}
-      {hasExtractedData && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">ניתוח פנים הנכס</h3>
-          <div className="space-y-4">
-            <EditableField
-              field="propertyLayoutDescription"
-              label="תיאור תכנון הנכס"
-              value={extractedData.propertyLayoutDescription}
-              editingField={editingField}
-              tempValue={tempValue}
-              onEdit={handleFieldEdit}
-              onSave={handleFieldSave}
-              onCancel={handleFieldCancel}
-              onValueChange={setTempValue}
-              dataSource="נשלף מניתוח תמונות פנים"
-              provenanceInfo={getProvenanceForField('propertyLayoutDescription')}
-              onNavigateToDocument={navigateToDocument}
-              type="textarea"
-            />
-            <EditableField
-              field="conditionAssessment"
-              label="הערכת מצב כללי"
-              value={extractedData.conditionAssessment}
-              editingField={editingField}
-              tempValue={tempValue}
-              onEdit={handleFieldEdit}
-              onSave={handleFieldSave}
-              onCancel={handleFieldCancel}
-              onValueChange={setTempValue}
-              dataSource="נשלף מניתוח תמונות פנים"
-              provenanceInfo={getProvenanceForField('conditionAssessment')}
-              onNavigateToDocument={navigateToDocument}
-              type="textarea"
-            />
-            {extractedData.roomAnalysis && extractedData.roomAnalysis.length > 0 && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                  ניתוח חדרים
-                </label>
-                <div className="space-y-3">
-                  {extractedData.roomAnalysis.map((room: any, index: number) => (
-                    <div key={index} className="bg-gray-50 rounded-lg p-4">
-                      <div className="flex justify-between items-start mb-2">
-                        <h4 className="font-medium text-gray-900">{room.room_type}</h4>
-                        <span className="text-sm text-gray-600">{room.condition}</span>
-                      </div>
-                      <div className="text-sm text-gray-700">
-                        <p><strong>תכונות:</strong> {room.features}</p>
-                        <p><strong>הערכת גודל:</strong> {room.size_estimate}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Exterior Analysis */}
-      {hasExtractedData && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right">ניתוח חוץ הנכס</h3>
-          <div className="grid grid-cols-1 gap-4">
-            <div className="space-y-4">
-              <EditableField
-                field="buildingCondition"
-                label="מצב הבניין"
-                value={extractedData.buildingCondition}
-                editingField={editingField}
-                tempValue={tempValue}
-                onEdit={handleFieldEdit}
-                onSave={handleFieldSave}
-                onCancel={handleFieldCancel}
-                onValueChange={setTempValue}
-                dataSource="נשלף מניתוח תמונות חוץ"
-                provenanceInfo={getProvenanceForField('buildingCondition')}
-                onNavigateToDocument={navigateToDocument}
-                type="select"
-                options={['מצוין', 'טוב', 'בינוני', 'גרוע', 'דורש שיפוץ']}
-              />
-              <EditableField
-                field="buildingType"
-                label="סוג הבניין"
-                value={extractedData.buildingType}
-                editingField={editingField}
-                tempValue={tempValue}
-                onEdit={handleFieldEdit}
-                onSave={handleFieldSave}
-                onCancel={handleFieldCancel}
-                onValueChange={setTempValue}
-                dataSource="נשלף מניתוח תמונות חוץ"
-                provenanceInfo={getProvenanceForField('buildingType')}
-                onNavigateToDocument={navigateToDocument}
-                type="select"
-                options={['מגדל מגורים', 'בניין מגורים נמוך', 'בית פרטי', 'דופלקס', 'נטהאוז', 'וילה', 'קוטג']}
-              />
-            </div>
-            <div className="space-y-4">
-              <EditableField
-                field="buildingFeatures"
-                label="תכונות הבניין"
-                value={extractedData.buildingFeatures}
-                editingField={editingField}
-                tempValue={tempValue}
-                onEdit={handleFieldEdit}
-                onSave={handleFieldSave}
-                onCancel={handleFieldCancel}
-                onValueChange={setTempValue}
-                dataSource="נשלף מניתוח תמונות חוץ"
-                provenanceInfo={getProvenanceForField('buildingFeatures')}
-                onNavigateToDocument={navigateToDocument}
-              />
-              <EditableField
-                field="overallAssessment"
-                label="הערכה כללית"
-                value={extractedData.overallAssessment}
-                editingField={editingField}
-                tempValue={tempValue}
-                onEdit={handleFieldEdit}
-                onSave={handleFieldSave}
-                onCancel={handleFieldCancel}
-                onValueChange={setTempValue}
-                dataSource="נשלף מניתוח תמונות חוץ"
-                provenanceInfo={getProvenanceForField('overallAssessment')}
-                onNavigateToDocument={navigateToDocument}
-                type="textarea"
-              />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
