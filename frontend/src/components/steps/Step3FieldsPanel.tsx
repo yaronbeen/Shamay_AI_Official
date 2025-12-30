@@ -1050,15 +1050,18 @@ export function Step3FieldsPanel({
       {/* Shared Building Order Section (צו בית משותף) */}
       {hasExtractedData && (
         <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="mb-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+          <h3 className="text-lg font-bold text-gray-900 mb-2">צו בית משותף</h3>
+          <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
             השדות המפורטים לעיל הם שדות אפשריים מצו בית משותף. לא בכל צו מופיעים כל השדות, והיעדר שדה אינו מהווה חוסר נתון.
           </div>
-          <h3 className="text-base font-semibold text-gray-900 mb-3">צו בית משותף</h3>
+
+          {/* זיהוי ומסמך */}
+          <h4 className="text-base font-semibold text-gray-800 mb-3 mt-4 border-b pb-2">זיהוי ומסמך</h4>
           <div className="space-y-3">
             <EditableField
               field="sharedBuildingOrderDate"
               label="תאריך הפקת צו בית משותף"
-              value={getValueFromPaths(['sharedBuildingOrderDate', 'shared_building_order_date', 'land_registry.shared_building_order_date'], extractedData, data)}
+              value={getValueFromPaths(['sharedBuildingOrderDate', 'shared_building_order_date', 'shared_building.order_date', 'land_registry.shared_building_order_date'], extractedData, data)}
               editingField={editingField}
               tempValue={tempValue}
               onEdit={handleFieldEdit}
@@ -1068,10 +1071,15 @@ export function Step3FieldsPanel({
               dataSource="נשלף מתוך צו בית משותף"
               provenanceInfo={getProvenanceForField('sharedBuildingOrderDate')}
             />
+          </div>
+
+          {/* תיאור הבניין */}
+          <h4 className="text-base font-semibold text-gray-800 mb-3 mt-6 border-b pb-2">תיאור הבניין</h4>
+          <div className="space-y-3">
             <EditableField
               field="buildingAddressFromOrder"
               label="כתובת הבניין"
-              value={getValueFromPaths(['buildingAddressFromOrder', 'building_address', 'land_registry.building_address'], extractedData, data)}
+              value={getValueFromPaths(['buildingAddressFromOrder', 'building_address', 'shared_building.address', 'land_registry.building_address'], extractedData, data)}
               editingField={editingField}
               tempValue={tempValue}
               onEdit={handleFieldEdit}
@@ -1082,9 +1090,22 @@ export function Step3FieldsPanel({
               provenanceInfo={getProvenanceForField('buildingAddressFromOrder')}
             />
             <EditableField
+              field="buildingNumberFromOrder"
+              label="מספר מבנה"
+              value={getValueFromPaths(['buildingNumberFromOrder', 'building_number', 'shared_building.building_number'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך צו בית משותף"
+              provenanceInfo={getProvenanceForField('buildingNumberFromOrder')}
+            />
+            <EditableField
               field="floorsCountInBuilding"
               label="מספר קומות בבניין"
-              value={getValueFromPaths(['floorsCountInBuilding', 'floors_count_in_building', 'land_registry.floors_count_in_building'], extractedData, data)}
+              value={getValueFromPaths(['floorsCountInBuilding', 'floors_count_in_building', 'shared_building.floors_count', 'buildingFloors'], extractedData, data)}
               editingField={editingField}
               tempValue={tempValue}
               onEdit={handleFieldEdit}
@@ -1097,7 +1118,7 @@ export function Step3FieldsPanel({
             <EditableField
               field="subPlotsTotalInBuilding"
               label="מספר תתי־חלקות כולל בבניין"
-              value={getValueFromPaths(['subPlotsTotalInBuilding', 'sub_plots_total_in_building', 'land_registry.sub_plots_total_in_building'], extractedData, data)}
+              value={getValueFromPaths(['subPlotsTotalInBuilding', 'sub_plots_total_in_building', 'shared_building.total_sub_plots', 'buildingUnits'], extractedData, data)}
               editingField={editingField}
               tempValue={tempValue}
               onEdit={handleFieldEdit}
@@ -1107,10 +1128,28 @@ export function Step3FieldsPanel({
               dataSource="נשלף מתוך צו בית משותף"
               provenanceInfo={getProvenanceForField('subPlotsTotalInBuilding')}
             />
+          </div>
+
+          {/* זיהוי תת־חלקה */}
+          <h4 className="text-base font-semibold text-gray-800 mb-3 mt-6 border-b pb-2">זיהוי תת־חלקה</h4>
+          <div className="space-y-3">
+            <EditableField
+              field="subPlotNumber"
+              label="מספר תת־חלקה"
+              value={getValueFromPaths(['subPlotNumber', 'sub_plot_number', 'shared_building.sub_plot_number', 'subParcel'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך צו בית משותף"
+              provenanceInfo={getProvenanceForField('subPlotNumber')}
+            />
             <EditableField
               field="subPlotFloor"
               label="קומה של תת־החלקה"
-              value={getValueFromPaths(['subPlotFloor', 'sub_plot_floor', 'land_registry.sub_plot_floor'], extractedData, data)}
+              value={getValueFromPaths(['subPlotFloor', 'sub_plot_floor', 'shared_building.floor', 'floor'], extractedData, data)}
               editingField={editingField}
               tempValue={tempValue}
               onEdit={handleFieldEdit}
@@ -1123,7 +1162,7 @@ export function Step3FieldsPanel({
             <EditableField
               field="subPlotArea"
               label="שטח תת־החלקה"
-              value={getValueFromPaths(['subPlotArea', 'sub_plot_area', 'land_registry.sub_plot_area'], extractedData, data)}
+              value={getValueFromPaths(['subPlotArea', 'sub_plot_area', 'shared_building.area', 'registeredArea'], extractedData, data)}
               editingField={editingField}
               tempValue={tempValue}
               onEdit={handleFieldEdit}
@@ -1136,7 +1175,7 @@ export function Step3FieldsPanel({
             <EditableField
               field="subPlotDescription"
               label="תיאור מילולי של תת־החלקה"
-              value={getValueFromPaths(['subPlotDescription', 'sub_plot_description', 'land_registry.sub_plot_description'], extractedData, data)}
+              value={getValueFromPaths(['subPlotDescription', 'sub_plot_description', 'shared_building.description', 'unitDescription'], extractedData, data)}
               editingField={editingField}
               tempValue={tempValue}
               onEdit={handleFieldEdit}
@@ -1147,10 +1186,15 @@ export function Step3FieldsPanel({
               provenanceInfo={getProvenanceForField('subPlotDescription')}
               type="textarea"
             />
+          </div>
+
+          {/* רכוש משותף */}
+          <h4 className="text-base font-semibold text-gray-800 mb-3 mt-6 border-b pb-2">רכוש משותף</h4>
+          <div className="space-y-3">
             <EditableField
               field="sharedPropertyParts"
               label="חלקים ברכוש המשותף המיוחסים לתת־החלקה"
-              value={getValueFromPaths(['sharedPropertyParts', 'shared_property_parts', 'land_registry.shared_property_parts'], extractedData, data)}
+              value={getValueFromPaths(['sharedPropertyParts', 'shared_property_parts', 'shared_building.common_parts', 'commonParts'], extractedData, data)}
               editingField={editingField}
               tempValue={tempValue}
               onEdit={handleFieldEdit}
@@ -1160,10 +1204,48 @@ export function Step3FieldsPanel({
               dataSource="נשלף מתוך צו בית משותף"
               provenanceInfo={getProvenanceForField('sharedPropertyParts')}
             />
+          </div>
+
+          {/* הצמדות לתת־חלקה */}
+          <h4 className="text-base font-semibold text-gray-800 mb-3 mt-6 border-b pb-2">הצמדות לתת־חלקה</h4>
+          <div className="space-y-3">
+            <EditableField
+              field="subPlotAttachments"
+              label="הצמדות (תיאור, שטח, סימון בתשריט, צבע)"
+              value={(() => {
+                const attachments = getValueFromPaths(['subPlotAttachments', 'sub_plot_attachments', 'shared_building.attachments', 'attachments'], extractedData, data)
+                if (typeof attachments === 'string') return attachments
+                if (Array.isArray(attachments) && attachments.length > 0) {
+                  return attachments.map((a: any) => {
+                    const parts = []
+                    if (a.description || a.type) parts.push(a.description || a.type)
+                    if (a.area || a.size) parts.push(`שטח: ${a.area || a.size} מ"ר`)
+                    if (a.symbol) parts.push(`סימון: ${a.symbol}`)
+                    if (a.color) parts.push(`צבע: ${a.color}`)
+                    return parts.join(', ')
+                  }).join('; ')
+                }
+                return attachments
+              })()}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך צו בית משותף"
+              provenanceInfo={getProvenanceForField('subPlotAttachments')}
+              type="textarea"
+            />
+          </div>
+
+          {/* שטחים נוספים */}
+          <h4 className="text-base font-semibold text-gray-800 mb-3 mt-6 border-b pb-2">שטחים נוספים</h4>
+          <div className="space-y-3">
             <EditableField
               field="nonAttachmentAreas"
               label="שטחים שאינם בהצמדות"
-              value={getValueFromPaths(['nonAttachmentAreas', 'non_attachment_areas', 'land_registry.non_attachment_areas'], extractedData, data)}
+              value={getValueFromPaths(['nonAttachmentAreas', 'non_attachment_areas', 'shared_building.additional_areas', 'additionalAreas'], extractedData, data)}
               editingField={editingField}
               tempValue={tempValue}
               onEdit={handleFieldEdit}
@@ -1181,28 +1263,49 @@ export function Step3FieldsPanel({
       {/* Building Permits Section (היתרי בנייה) */}
       {hasExtractedData && (
         <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="text-base font-semibold text-gray-900 mb-3">היתרי בנייה</h3>
-          <p className="text-xs text-gray-500 mb-3">היתר בנייה הוא אובייקט חוזר - יכולים להיות 0/1/N היתרים. אין הכרעה בין היתרים.</p>
-          <div className="space-y-3">
+          <h3 className="text-lg font-bold text-gray-900 mb-2">טבלת היתר בנייה</h3>
+          <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+            היתר בנייה הוא אובייקט חוזר - יכולים להיות 0/1/N היתרים. אין הכרעה בין היתרים, כל היתר מוצג בנפרד.
+          </div>
+          <div className="space-y-4">
             {/* Show permits array if exists */}
             {(() => {
-              const permits = getValueFromPaths(['permits', 'land_registry.permits'], extractedData, data);
+              const permits = getValueFromPaths(['permits', 'land_registry.permits', 'building_permit.permits'], extractedData, data);
               if (Array.isArray(permits) && permits.length > 0) {
                 return permits.map((permit: any, index: number) => (
                   <div key={index} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                    <h4 className="font-medium text-gray-900 mb-2">היתר {index + 1}</h4>
-                    <div className="space-y-2 text-sm">
-                      {permit.permit_number && <p><strong>מספר היתר:</strong> {permit.permit_number}</p>}
-                      {permit.permit_date && <p><strong>תאריך היתר:</strong> {permit.permit_date}</p>}
-                      {permit.permit_issue_date && <p><strong>תאריך הפקת היתר:</strong> {permit.permit_issue_date}</p>}
-                      {permit.permitted_description && <p><strong>תיאור מותר:</strong> {permit.permitted_description}</p>}
-                      {permit.local_committee_name && <p><strong>שם הוועדה המקומית:</strong> {permit.local_committee_name}</p>}
+                    <h4 className="text-base font-semibold text-gray-800 mb-3 border-b pb-2">היתר {index + 1}</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">מספר היתר:</span>
+                          <span className="text-sm font-medium">{permit.permit_number || '-'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">תאריך היתר:</span>
+                          <span className="text-sm font-medium">{permit.permit_date || '-'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">תאריך הפקת היתר:</span>
+                          <span className="text-sm font-medium">{permit.permit_issue_date || '-'}</span>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">שם הוועדה המקומית:</span>
+                          <span className="text-sm font-medium">{permit.local_committee_name || '-'}</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-sm text-gray-600 mb-1">תיאור מותר:</span>
+                          <span className="text-sm font-medium bg-white p-2 rounded border">{permit.permitted_description || '-'}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ));
               }
               return (
-                <p className="text-gray-500 text-sm">לא נמצאו היתרי בנייה</p>
+                <p className="text-gray-500 text-sm text-center py-4">לא נמצאו היתרי בנייה</p>
               );
             })()}
           </div>
