@@ -107,6 +107,25 @@ MORTGAGES (משכנתאות):
 ATTACHMENTS SHARED WITH (שיוך הצמדות):
 - attachments_shared_with: Which units/properties share the attachment (שיוך - לאילו יחידות משויכת ההצמדה)
 
+SHARED BUILDING ORDER (צו בית משותף):
+- shared_building_order_date: Date of shared building order (תאריך הפקת צו בית משותף)
+- building_address: Building address (כתובת הבניין)
+- floors_count_in_building: Number of floors in building (מספר קומות בבניין)
+- sub_plots_total_in_building: Total sub-plots in building (מספר תתי־חלקות כולל בבניין)
+- sub_plot_floor: Sub-plot floor (קומה של תת־החלקה)
+- sub_plot_area: Sub-plot area (שטח תת־החלקה)
+- sub_plot_description: Sub-plot verbal description (תיאור מילולי של תת־החלקה)
+- shared_property_parts: Shared property parts attributed to sub-plot (חלקים ברכוש המשותף המיוחסים לתת־החלקה)
+- non_attachment_areas: Areas not in attachments (שטחים שאינם בהצמדות)
+
+BUILDING PERMITS (היתרי בנייה) - This is a REPEATING object (0/1/N permits):
+- permits: Array of building permits, each containing:
+  * permit_number: Permit number (מספר היתר)
+  * permit_date: Permit date (תאריך היתר)
+  * permit_issue_date: Permit issue date (תאריך הפקת היתר)
+  * permitted_description: Permitted description (תיאור מותר) - store AS IS without parsing
+  * local_committee_name: Local committee name (שם הוועדה המקומית)
+
 FIELD LOCATIONS:
 For EACH field you extract, also provide its location in the document:
 - page: page number (1, 2, 3...)
@@ -224,7 +243,17 @@ Return ONLY the JSON object with this structure:
     "mortgage_amount": number or null,
     "mortgage_property_share": "primary share or null",
     "mortgage_date": "YYYY-MM-DD or null",
-    "attachments_shared_with": "shared units or null"
+    "attachments_shared_with": "shared units or null",
+    "shared_building_order_date": "YYYY-MM-DD or null",
+    "building_address": "address or null",
+    "floors_count_in_building": number or null,
+    "sub_plots_total_in_building": number or null,
+    "sub_plot_floor": "floor or null",
+    "sub_plot_area": number or null,
+    "sub_plot_description": "description or null",
+    "shared_property_parts": "fraction or description or null",
+    "non_attachment_areas": "description or null",
+    "permits": [{"permit_number": "number", "permit_date": "YYYY-MM-DD or null", "permit_issue_date": "YYYY-MM-DD or null", "permitted_description": "description", "local_committee_name": "name or null"}]
   },
   "locations": {
     "gush": {"page": 1, "y_percent": 8},
@@ -616,6 +645,142 @@ Focus on finding the Hebrew text and extracting the required fields. For each fi
           context: extractionContexts.attachments || '',
           pattern: 'ai_extraction'
         },
+
+        // Missing Tabu fields
+        mortgage_lenders: {
+          value: data.mortgage_lenders || null,
+          confidence: (confidenceScores.mortgages || 0) * 100,
+          context: extractionContexts.mortgages || '',
+          pattern: 'ai_extraction'
+        },
+
+        mortgage_borrowers: {
+          value: data.mortgage_borrowers || null,
+          confidence: (confidenceScores.mortgages || 0) * 100,
+          context: extractionContexts.mortgages || '',
+          pattern: 'ai_extraction'
+        },
+
+        mortgage_essence: {
+          value: data.mortgage_essence || null,
+          confidence: (confidenceScores.mortgages || 0) * 100,
+          context: extractionContexts.mortgages || '',
+          pattern: 'ai_extraction'
+        },
+
+        mortgage_rank: {
+          value: data.mortgage_rank || null,
+          confidence: (confidenceScores.mortgages || 0) * 100,
+          context: extractionContexts.mortgages || '',
+          pattern: 'ai_extraction'
+        },
+
+        mortgage_amount: {
+          value: data.mortgage_amount || null,
+          confidence: (confidenceScores.mortgages || 0) * 100,
+          context: extractionContexts.mortgages || '',
+          pattern: 'ai_extraction'
+        },
+
+        mortgage_property_share: {
+          value: data.mortgage_property_share || null,
+          confidence: (confidenceScores.mortgages || 0) * 100,
+          context: extractionContexts.mortgages || '',
+          pattern: 'ai_extraction'
+        },
+
+        // Mortgages array
+        mortgages: data.mortgages || [],
+
+        issue_date: {
+          value: data.issue_date || null,
+          confidence: (confidenceScores.document_info || 0) * 100,
+          context: extractionContexts.document_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        tabu_extract_date: {
+          value: data.tabu_extract_date || null,
+          confidence: (confidenceScores.document_info || 0) * 100,
+          context: extractionContexts.document_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        unit_description: {
+          value: data.unit_description || null,
+          confidence: (confidenceScores.unit_info || 0) * 100,
+          context: extractionContexts.unit_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        additional_areas: data.additional_areas || [],
+
+        // Shared Building Order (צו בית משותף) fields
+        shared_building_order_date: {
+          value: data.shared_building_order_date || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        building_address: {
+          value: data.building_address || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        floors_count_in_building: {
+          value: data.floors_count_in_building || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        sub_plots_total_in_building: {
+          value: data.sub_plots_total_in_building || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        sub_plot_floor: {
+          value: data.sub_plot_floor || null,
+          confidence: (confidenceScores.unit_info || 0) * 100,
+          context: extractionContexts.unit_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        sub_plot_area: {
+          value: data.sub_plot_area || null,
+          confidence: (confidenceScores.unit_info || 0) * 100,
+          context: extractionContexts.unit_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        sub_plot_description: {
+          value: data.sub_plot_description || null,
+          confidence: (confidenceScores.unit_info || 0) * 100,
+          context: extractionContexts.unit_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        shared_property_parts: {
+          value: data.shared_property_parts || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        non_attachment_areas: {
+          value: data.non_attachment_areas || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        // Building Permits (היתרי בנייה) - repeating object array
+        permits: data.permits || [],
 
         // Field locations for scroll-to-source
         fieldLocations: locations,

@@ -345,6 +345,19 @@ export function Step3FieldsPanel({
               provenanceInfo={getProvenanceForField('registrationOffice')}
             />
             <EditableField
+              field="tabuExtractDate"
+              label="תאריך הפקת נסח"
+              value={getValueFromPaths(['tabuExtractDate', 'tabu_extract_date', 'land_registry.tabu_extract_date', 'issue_date', 'land_registry.issue_date'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('tabuExtractDate')}
+            />
+            <EditableField
               field="gush"
               label="מספר גוש"
               value={extractedData.gush || extractedData.land_registry?.gush || data.gush}
@@ -382,6 +395,19 @@ export function Step3FieldsPanel({
               onValueChange={setTempValue}
               dataSource={getDataSource('ownershipType')}
               provenanceInfo={getProvenanceForField('ownershipType')}
+            />
+            <EditableField
+              field="rights"
+              label="זכויות בנכס"
+              value={getValueFromPaths(['rights', 'land_registry.rights'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('rights')}
             />
             <EditableField
               field="attachments"
@@ -438,6 +464,21 @@ export function Step3FieldsPanel({
               onValueChange={setTempValue}
               dataSource={getDataSource('bylaws')}
               provenanceInfo={getProvenanceForField('bylaws')}
+            />
+            <EditableField
+              field="regulationType"
+              label="סוג התקנון"
+              value={getValueFromPaths(['regulationType', 'regulation_type', 'land_registry.regulation_type'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('regulationType')}
+              type="select"
+              options={['מוסכם', 'לא מוסכם', 'מצוי']}
             />
             <EditableField
               field="subParcel"
@@ -827,6 +868,181 @@ export function Step3FieldsPanel({
               dataSource="נשלף מתוך נסח טאבו"
               provenanceInfo={getProvenanceForField('mortgageBorrowers')}
             />
+            <EditableField
+              field="mortgageDate"
+              label="תאריך"
+              value={getValueFromPaths(['mortgageDate', 'mortgage_date', 'land_registry.mortgage_date'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('mortgageDate')}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Shared Building Order Section (צו בית משותף) */}
+      {hasExtractedData && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <div className="mb-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+            השדות המפורטים לעיל הם שדות אפשריים מצו בית משותף. לא בכל צו מופיעים כל השדות, והיעדר שדה אינו מהווה חוסר נתון.
+          </div>
+          <h3 className="text-base font-semibold text-gray-900 mb-3">צו בית משותף</h3>
+          <div className="space-y-3">
+            <EditableField
+              field="sharedBuildingOrderDate"
+              label="תאריך הפקת צו בית משותף"
+              value={getValueFromPaths(['sharedBuildingOrderDate', 'shared_building_order_date', 'land_registry.shared_building_order_date'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך צו בית משותף"
+              provenanceInfo={getProvenanceForField('sharedBuildingOrderDate')}
+            />
+            <EditableField
+              field="buildingAddressFromOrder"
+              label="כתובת הבניין"
+              value={getValueFromPaths(['buildingAddressFromOrder', 'building_address', 'land_registry.building_address'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך צו בית משותף"
+              provenanceInfo={getProvenanceForField('buildingAddressFromOrder')}
+            />
+            <EditableField
+              field="floorsCountInBuilding"
+              label="מספר קומות בבניין"
+              value={getValueFromPaths(['floorsCountInBuilding', 'floors_count_in_building', 'land_registry.floors_count_in_building'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך צו בית משותף"
+              provenanceInfo={getProvenanceForField('floorsCountInBuilding')}
+            />
+            <EditableField
+              field="subPlotsTotalInBuilding"
+              label="מספר תתי־חלקות כולל בבניין"
+              value={getValueFromPaths(['subPlotsTotalInBuilding', 'sub_plots_total_in_building', 'land_registry.sub_plots_total_in_building'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך צו בית משותף"
+              provenanceInfo={getProvenanceForField('subPlotsTotalInBuilding')}
+            />
+            <EditableField
+              field="subPlotFloor"
+              label="קומה של תת־החלקה"
+              value={getValueFromPaths(['subPlotFloor', 'sub_plot_floor', 'land_registry.sub_plot_floor'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך צו בית משותף"
+              provenanceInfo={getProvenanceForField('subPlotFloor')}
+            />
+            <EditableField
+              field="subPlotArea"
+              label="שטח תת־החלקה"
+              value={getValueFromPaths(['subPlotArea', 'sub_plot_area', 'land_registry.sub_plot_area'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך צו בית משותף"
+              provenanceInfo={getProvenanceForField('subPlotArea')}
+            />
+            <EditableField
+              field="subPlotDescription"
+              label="תיאור מילולי של תת־החלקה"
+              value={getValueFromPaths(['subPlotDescription', 'sub_plot_description', 'land_registry.sub_plot_description'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך צו בית משותף"
+              provenanceInfo={getProvenanceForField('subPlotDescription')}
+              type="textarea"
+            />
+            <EditableField
+              field="sharedPropertyParts"
+              label="חלקים ברכוש המשותף המיוחסים לתת־החלקה"
+              value={getValueFromPaths(['sharedPropertyParts', 'shared_property_parts', 'land_registry.shared_property_parts'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך צו בית משותף"
+              provenanceInfo={getProvenanceForField('sharedPropertyParts')}
+            />
+            <EditableField
+              field="nonAttachmentAreas"
+              label="שטחים שאינם בהצמדות"
+              value={getValueFromPaths(['nonAttachmentAreas', 'non_attachment_areas', 'land_registry.non_attachment_areas'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך צו בית משותף"
+              provenanceInfo={getProvenanceForField('nonAttachmentAreas')}
+              type="textarea"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Building Permits Section (היתרי בנייה) */}
+      {hasExtractedData && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <h3 className="text-base font-semibold text-gray-900 mb-3">היתרי בנייה</h3>
+          <p className="text-xs text-gray-500 mb-3">היתר בנייה הוא אובייקט חוזר - יכולים להיות 0/1/N היתרים. אין הכרעה בין היתרים.</p>
+          <div className="space-y-3">
+            {/* Show permits array if exists */}
+            {(() => {
+              const permits = getValueFromPaths(['permits', 'land_registry.permits'], extractedData, data);
+              if (Array.isArray(permits) && permits.length > 0) {
+                return permits.map((permit: any, index: number) => (
+                  <div key={index} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <h4 className="font-medium text-gray-900 mb-2">היתר {index + 1}</h4>
+                    <div className="space-y-2 text-sm">
+                      {permit.permit_number && <p><strong>מספר היתר:</strong> {permit.permit_number}</p>}
+                      {permit.permit_date && <p><strong>תאריך היתר:</strong> {permit.permit_date}</p>}
+                      {permit.permit_issue_date && <p><strong>תאריך הפקת היתר:</strong> {permit.permit_issue_date}</p>}
+                      {permit.permitted_description && <p><strong>תיאור מותר:</strong> {permit.permitted_description}</p>}
+                      {permit.local_committee_name && <p><strong>שם הוועדה המקומית:</strong> {permit.local_committee_name}</p>}
+                    </div>
+                  </div>
+                ));
+              }
+              return (
+                <p className="text-gray-500 text-sm">לא נמצאו היתרי בנייה</p>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -1106,6 +1322,26 @@ export function Step3FieldsPanel({
               dataSource={getDataSource('balconyArea')}
               provenanceInfo={getProvenanceForField('balconyArea')}
             />
+            {/* Additional Areas Display */}
+            {(() => {
+              const additionalAreas = getValueFromPaths(['additionalAreas', 'additional_areas', 'land_registry.additional_areas'], extractedData, data);
+              if (Array.isArray(additionalAreas) && additionalAreas.length > 0) {
+                return (
+                  <div className="p-3 rounded-lg bg-gray-50">
+                    <label className="block text-sm font-medium text-gray-700 mb-2 text-right">שטחים נוספים</label>
+                    <div className="space-y-1">
+                      {additionalAreas.map((area: any, index: number) => (
+                        <div key={index} className="text-sm text-gray-900 text-right">
+                          {area.type}: {area.area} מ״ר
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">נשלף מתוך נסח טאבו</p>
+                  </div>
+                );
+              }
+              return null;
+            })()}
             <EditableField
               field="buildingDescription"
               label="תיאור הבניין"
