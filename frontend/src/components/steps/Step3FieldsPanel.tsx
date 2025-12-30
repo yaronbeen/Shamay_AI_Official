@@ -541,6 +541,380 @@ export function Step3FieldsPanel({
               dataSource={getDataSource('sharedAreas')}
               provenanceInfo={getProvenanceForField('sharedAreas')}
             />
+            <EditableField
+              field="wingsCount"
+              label="מספר אגפים / כניסות"
+              value={getValueFromPaths(['wingsCount', 'wings_count', 'land_registry.wings_count', 'entrances_count'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('wingsCount')}
+            />
+            <EditableField
+              field="buildingWingNumber"
+              label="מספר מבנה / אגף של תת־החלקה"
+              value={getValueFromPaths(['buildingWingNumber', 'building_wing_number', 'land_registry.building_wing_number'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('buildingWingNumber')}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Notes - Plot Level Section */}
+      {hasExtractedData && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <div className="mb-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+            השדות המפורטים לעיל הם שדות אפשריים מנסח טאבו. לא בכל נסח מופיעים כל השדות, והיעדר שדה אינו מהווה חוסר נתון אלא מצב רישומי תקין.
+          </div>
+          <h3 className="text-base font-semibold text-gray-900 mb-3">הערות רישומיות – לכלל החלקה</h3>
+          <div className="space-y-3">
+            <EditableField
+              field="plotNotes"
+              label="הערות לחלקה"
+              value={getValueFromPaths(['plotNotes', 'plot_notes', 'land_registry.plot_notes'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('plotNotes')}
+              type="textarea"
+            />
+            <EditableField
+              field="plotNotesActionType"
+              label="מהות הפעולה"
+              value={getValueFromPaths(['plotNotesActionType', 'plot_notes_action_type', 'land_registry.plot_notes_action_type'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('plotNotesActionType')}
+            />
+            <EditableField
+              field="plotNotesBeneficiary"
+              label="שם המוטב"
+              value={getValueFromPaths(['plotNotesBeneficiary', 'plot_notes_beneficiary', 'land_registry.plot_notes_beneficiary'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('plotNotesBeneficiary')}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Notes - Sub-chelka Level Section */}
+      {hasExtractedData && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <h3 className="text-base font-semibold text-gray-900 mb-3">הערות רישומיות – לתת־חלקה</h3>
+          <div className="space-y-3">
+            <EditableField
+              field="subChelkaNotes"
+              label="הערות לתת־חלקה"
+              value={getValueFromPaths(['subChelkaNotes', 'sub_chelka_notes', 'land_registry.sub_chelka_notes'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('subChelkaNotes')}
+              type="textarea"
+            />
+            <EditableField
+              field="subChelkaNotesActionType"
+              label="מהות הפעולה"
+              value={getValueFromPaths(['subChelkaNotesActionType', 'sub_chelka_notes_action_type', 'land_registry.sub_chelka_notes_action_type'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('subChelkaNotesActionType')}
+            />
+            <EditableField
+              field="subChelkaNotesBeneficiary"
+              label="שם המוטב"
+              value={getValueFromPaths(['subChelkaNotesBeneficiary', 'sub_chelka_notes_beneficiary', 'land_registry.sub_chelka_notes_beneficiary'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('subChelkaNotesBeneficiary')}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Easements - Plot Level Section */}
+      {hasExtractedData && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <h3 className="text-base font-semibold text-gray-900 mb-3">זיקות הנאה – לכלל החלקה</h3>
+          <div className="space-y-3">
+            <EditableField
+              field="plotEasementsEssence"
+              label="מהות"
+              value={getValueFromPaths(['plotEasementsEssence', 'plot_easements_essence', 'land_registry.plot_easements_essence', 'easements_essence'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('plotEasementsEssence')}
+            />
+            <EditableField
+              field="plotEasementsDescription"
+              label="תיאור"
+              value={getValueFromPaths(['plotEasementsDescription', 'plot_easements_description', 'land_registry.plot_easements_description', 'easements_description'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('plotEasementsDescription')}
+              type="textarea"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Easements - Sub-chelka Level Section */}
+      {hasExtractedData && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <h3 className="text-base font-semibold text-gray-900 mb-3">זיקות הנאה – לתת־חלקה</h3>
+          <div className="space-y-3">
+            <EditableField
+              field="subChelkaEasementsEssence"
+              label="מהות"
+              value={getValueFromPaths(['subChelkaEasementsEssence', 'sub_chelka_easements_essence', 'land_registry.sub_chelka_easements_essence'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('subChelkaEasementsEssence')}
+            />
+            <EditableField
+              field="subChelkaEasementsDescription"
+              label="תיאור"
+              value={getValueFromPaths(['subChelkaEasementsDescription', 'sub_chelka_easements_description', 'land_registry.sub_chelka_easements_description'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('subChelkaEasementsDescription')}
+              type="textarea"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Mortgages Section */}
+      {hasExtractedData && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <h3 className="text-base font-semibold text-gray-900 mb-3">משכנתאות</h3>
+          <div className="space-y-3">
+            <EditableField
+              field="mortgageEssence"
+              label="מהות"
+              value={getValueFromPaths(['mortgageEssence', 'mortgage_essence', 'land_registry.mortgage_essence'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('mortgageEssence')}
+            />
+            <EditableField
+              field="mortgageAmount"
+              label="סכום"
+              value={getValueFromPaths(['mortgageAmount', 'mortgage_amount', 'land_registry.mortgage_amount'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('mortgageAmount')}
+            />
+            <EditableField
+              field="mortgageRank"
+              label="דרגה"
+              value={getValueFromPaths(['mortgageRank', 'mortgage_rank', 'land_registry.mortgage_rank'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('mortgageRank')}
+            />
+            <EditableField
+              field="mortgagePropertyShare"
+              label="חלק בנכס"
+              value={getValueFromPaths(['mortgagePropertyShare', 'mortgage_property_share', 'land_registry.mortgage_property_share'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('mortgagePropertyShare')}
+            />
+            <EditableField
+              field="mortgageLenders"
+              label="בעלי המשכנתא"
+              value={getValueFromPaths(['mortgageLenders', 'mortgage_lenders', 'land_registry.mortgage_lenders'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('mortgageLenders')}
+            />
+            <EditableField
+              field="mortgageBorrowers"
+              label="לווים"
+              value={getValueFromPaths(['mortgageBorrowers', 'mortgage_borrowers', 'land_registry.mortgage_borrowers'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="נשלף מתוך נסח טאבו"
+              provenanceInfo={getProvenanceForField('mortgageBorrowers')}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Parcel Description Section (Manual Fields) */}
+      {hasExtractedData && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <h3 className="text-base font-semibold text-gray-900 mb-3">תיאור החלקה</h3>
+          <p className="text-xs text-gray-500 mb-3">שדות אלו הם שדות ידניים למילוי על ידי השמאי</p>
+          <div className="space-y-3">
+            <EditableField
+              field="parcelShape"
+              label="צורת החלקה"
+              value={getValueFromPaths(['parcelShape', 'parcel_shape'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="הזנה ידנית"
+              provenanceInfo={getProvenanceForField('parcelShape')}
+            />
+            <EditableField
+              field="parcelTerrain"
+              label="פני הקרקע"
+              value={getValueFromPaths(['parcelTerrain', 'parcel_terrain', 'parcelSurface'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="הזנה ידנית"
+              provenanceInfo={getProvenanceForField('parcelTerrain')}
+            />
+            <EditableField
+              field="parcelBoundaryNorth"
+              label="גבול צפון"
+              value={getValueFromPaths(['parcelBoundaryNorth', 'parcel_boundary_north', 'plotBoundaryNorth'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="הזנה ידנית"
+              provenanceInfo={getProvenanceForField('parcelBoundaryNorth')}
+            />
+            <EditableField
+              field="parcelBoundarySouth"
+              label="גבול דרום"
+              value={getValueFromPaths(['parcelBoundarySouth', 'parcel_boundary_south', 'plotBoundarySouth'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="הזנה ידנית"
+              provenanceInfo={getProvenanceForField('parcelBoundarySouth')}
+            />
+            <EditableField
+              field="parcelBoundaryEast"
+              label="גבול מזרח"
+              value={getValueFromPaths(['parcelBoundaryEast', 'parcel_boundary_east', 'plotBoundaryEast'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="הזנה ידנית"
+              provenanceInfo={getProvenanceForField('parcelBoundaryEast')}
+            />
+            <EditableField
+              field="parcelBoundaryWest"
+              label="גבול מערב"
+              value={getValueFromPaths(['parcelBoundaryWest', 'parcel_boundary_west', 'plotBoundaryWest'], extractedData, data)}
+              editingField={editingField}
+              tempValue={tempValue}
+              onEdit={handleFieldEdit}
+              onSave={handleFieldSave}
+              onCancel={handleFieldCancel}
+              onValueChange={setTempValue}
+              dataSource="הזנה ידנית"
+              provenanceInfo={getProvenanceForField('parcelBoundaryWest')}
+            />
           </div>
         </div>
       )}

@@ -40,10 +40,12 @@ CORE PROPERTY IDENTIFIERS:
 - sub_chelka: Sub-plot number (תת חלקה)
 
 PROPERTY DETAILS:
-- total_plot_area: Total plot area (שטח קרקע כולל)
-- regulation_type: Regulation type - מוסכם/לא מוסכם/מצוי
+- total_plot_area: Total plot area (שטח קרקע כולל של החלקה)
+- regulation_type: Regulation type - מוסכם/לא מוסכם/מצוי (סוג התקנון)
 - sub_plots_count: Number of sub-plots (מספר תתי חלקות)
 - buildings_count: Number of buildings (מספר מבנים)
+- wings_count: Number of wings/entrances (מספר אגפים / כניסות)
+- building_wing_number: Building/wing number of sub-plot (מספר מבנה / אגף של תת־החלקה)
 - address_from_tabu: Address from tabu document (כתובת מהנסח)
 
 UNIT/APARTMENT INFORMATION:
@@ -74,14 +76,23 @@ OWNERSHIP (בעלויות):
 - ownership_type: Ownership type (סוג בעלות)
 - rights: Rights description (זכויות)
 
-NOTES AND COMMENTS (הערות):
-- plot_notes: Notes for the entire plot (הערות לכל החלקה)
-- notes_action_type: Action type in notes (מהות פעולה)
-- notes_beneficiary: Beneficiary in notes (שם המוטב)
+NOTES AND COMMENTS - FOR ENTIRE PLOT (הערות רישומיות – לכלל החלקה):
+- plot_notes: Notes for the entire plot (הערות לחלקה)
+- plot_notes_action_type: Action type in plot notes (מהות הפעולה - לחלקה)
+- plot_notes_beneficiary: Beneficiary in plot notes (שם המוטב - לחלקה)
 
-EASEMENTS (זיקות הנאה):
-- easements_essence: Easement essence (זיקות הנאה - מהות)
-- easements_description: Easement description (זיקות הנאה - תיאור)
+NOTES AND COMMENTS - FOR SUB-PLOT (הערות רישומיות – לתת־חלקה):
+- sub_chelka_notes: Notes for sub-plot (הערות לתת־חלקה)
+- sub_chelka_notes_action_type: Action type for sub-plot notes (מהות הפעולה - לתת חלקה)
+- sub_chelka_notes_beneficiary: Beneficiary for sub-plot notes (שם המוטב - לתת חלקה)
+
+EASEMENTS FOR ENTIRE PLOT (זיקות הנאה – לכלל החלקה):
+- plot_easements_essence: Easement essence for plot (זיקות הנאה לחלקה - מהות)
+- plot_easements_description: Easement description for plot (זיקות הנאה לחלקה - תיאור)
+
+EASEMENTS FOR SUB-PLOT (זיקות הנאה – לתת־חלקה):
+- sub_chelka_easements_essence: Easement essence for sub-plot (זיקות הנאה לתת־חלקה - מהות)
+- sub_chelka_easements_description: Easement description for sub-plot (זיקות הנאה לתת־חלקה - תיאור)
 
 MORTGAGES (משכנתאות):
 - mortgages: Complete mortgages array
@@ -166,6 +177,8 @@ Return ONLY the JSON object with this structure:
     "regulation_type": "מוסכם/לא מוסכם/מצוי or null",
     "sub_plots_count": number or null,
     "buildings_count": number or null,
+    "wings_count": number or null,
+    "building_wing_number": "number or null",
     "address_from_tabu": "address or null",
     "unit_description": "description or null",
     "floor": "floor or null",
@@ -190,10 +203,15 @@ Return ONLY the JSON object with this structure:
     "ownership_type": "type or null",
     "rights": "rights or null",
     "plot_notes": "notes or null",
-    "notes_action_type": "action or null",
-    "notes_beneficiary": "beneficiary or null",
-    "easements_essence": "essence or null",
-    "easements_description": "description or null",
+    "plot_notes_action_type": "action or null",
+    "plot_notes_beneficiary": "beneficiary or null",
+    "sub_chelka_notes": "notes or null",
+    "sub_chelka_notes_action_type": "action or null",
+    "sub_chelka_notes_beneficiary": "beneficiary or null",
+    "plot_easements_essence": "essence or null",
+    "plot_easements_description": "description or null",
+    "sub_chelka_easements_essence": "essence or null",
+    "sub_chelka_easements_description": "description or null",
     "mortgages": [{"essence": "type", "rank": "rank", "lenders": "lenders", "borrowers": "borrowers", "amount": number, "share": "share"}],
     "mortgage_essence": "primary essence or null",
     "mortgage_rank": "primary rank or null",
@@ -426,7 +444,96 @@ Focus on finding the Hebrew text and extracting the required fields. For each fi
           context: extractionContexts.ownership || '',
           pattern: 'ai_extraction'
         },
-        
+
+        // Wings/entrances count
+        wings_count: {
+          value: data.wings_count || null,
+          confidence: data.wings_count ? 70 : 0,
+          context: data.wings_count ? 'Found in document' : '',
+          pattern: 'ai_extraction'
+        },
+
+        building_wing_number: {
+          value: data.building_wing_number || null,
+          confidence: data.building_wing_number ? 70 : 0,
+          context: data.building_wing_number ? 'Found in document' : '',
+          pattern: 'ai_extraction'
+        },
+
+        // Plot notes
+        plot_notes: {
+          value: data.plot_notes || null,
+          confidence: (confidenceScores.notes || 0) * 100,
+          context: extractionContexts.notes || '',
+          pattern: 'ai_extraction'
+        },
+
+        plot_notes_action_type: {
+          value: data.plot_notes_action_type || null,
+          confidence: (confidenceScores.notes || 0) * 100,
+          context: extractionContexts.notes || '',
+          pattern: 'ai_extraction'
+        },
+
+        plot_notes_beneficiary: {
+          value: data.plot_notes_beneficiary || null,
+          confidence: (confidenceScores.notes || 0) * 100,
+          context: extractionContexts.notes || '',
+          pattern: 'ai_extraction'
+        },
+
+        // Sub-chelka notes
+        sub_chelka_notes: {
+          value: data.sub_chelka_notes || null,
+          confidence: (confidenceScores.notes || 0) * 100,
+          context: extractionContexts.notes || '',
+          pattern: 'ai_extraction'
+        },
+
+        sub_chelka_notes_action_type: {
+          value: data.sub_chelka_notes_action_type || null,
+          confidence: (confidenceScores.notes || 0) * 100,
+          context: extractionContexts.notes || '',
+          pattern: 'ai_extraction'
+        },
+
+        sub_chelka_notes_beneficiary: {
+          value: data.sub_chelka_notes_beneficiary || null,
+          confidence: (confidenceScores.notes || 0) * 100,
+          context: extractionContexts.notes || '',
+          pattern: 'ai_extraction'
+        },
+
+        // Plot easements
+        plot_easements_essence: {
+          value: data.plot_easements_essence || null,
+          confidence: (confidenceScores.easements || 0) * 100,
+          context: extractionContexts.easements || '',
+          pattern: 'ai_extraction'
+        },
+
+        plot_easements_description: {
+          value: data.plot_easements_description || null,
+          confidence: (confidenceScores.easements || 0) * 100,
+          context: extractionContexts.easements || '',
+          pattern: 'ai_extraction'
+        },
+
+        // Sub-chelka easements
+        sub_chelka_easements_essence: {
+          value: data.sub_chelka_easements_essence || null,
+          confidence: (confidenceScores.easements || 0) * 100,
+          context: extractionContexts.easements || '',
+          pattern: 'ai_extraction'
+        },
+
+        sub_chelka_easements_description: {
+          value: data.sub_chelka_easements_description || null,
+          confidence: (confidenceScores.easements || 0) * 100,
+          context: extractionContexts.easements || '',
+          pattern: 'ai_extraction'
+        },
+
         // Field locations for scroll-to-source
         fieldLocations: locations,
         
