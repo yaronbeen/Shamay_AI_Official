@@ -44,6 +44,11 @@ const nextConfig = {
         source: '/api/ai/:path*',
         destination: `${backendUrl}/api/ai/:path*`,
       },
+      // Proxy GIS screenshot capture to backend
+      {
+        source: '/api/gis-screenshot',
+        destination: `${backendUrl}/api/gis-screenshot`,
+      },
     ];
   },
   // Keep existing configuration

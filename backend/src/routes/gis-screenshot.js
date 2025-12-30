@@ -6,17 +6,20 @@ const router = express.Router();
  * Captures a screenshot of a GIS map URL using Puppeteer
  */
 router.post('/', async (req, res) => {
-  const { govmapUrl, cropMode, sessionId } = req.body;
+  const { govmapUrl, cropMode, screenshotType, sessionId } = req.body;
 
-  if (!govmapUrl || !cropMode) {
+  // Support both cropMode (legacy) and screenshotType (new)
+  const mode = screenshotType || cropMode;
+
+  if (!govmapUrl || !mode) {
     return res.status(400).json({
       success: false,
       error: 'Missing required fields',
-      message: 'govmapUrl and cropMode are required'
+      message: 'govmapUrl and screenshotType (or cropMode) are required'
     });
   }
 
-  console.log(`📸 GIS Screenshot request - cropMode: ${cropMode}, URL: ${govmapUrl}`);
+  console.log(`📸 GIS Screenshot request - type: ${mode}, URL: ${govmapUrl}`);
 
   let browser;
   try {
@@ -114,7 +117,7 @@ router.post('/', async (req, res) => {
       try {
         const { ShumaDB } = require('../models/ShumaDB');
         
-        savedFilename = `gis-screenshot-mode${cropMode}-${Date.now()}.png`;
+        savedFilename = `gis-screenshot-${mode}-${Date.now()}.png`;
         
         // Use ShumaDB's save method which handles local/Vercel automatically
         // Convert buffer to base64 for the save function
@@ -138,7 +141,8 @@ router.post('/', async (req, res) => {
       screenshot: base64Screenshot,
       screenshotUrl,
       filename: savedFilename,
-      cropMode,
+      screenshotType: mode,
+      cropMode: mode, // Legacy support
       message: 'Screenshot captured successfully'
     });
 
