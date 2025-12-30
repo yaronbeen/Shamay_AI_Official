@@ -44,9 +44,15 @@ PROPERTY DETAILS:
 - regulation_type: Regulation type - מוסכם/לא מוסכם/מצוי (סוג התקנון)
 - sub_plots_count: Number of sub-plots (מספר תתי חלקות)
 - buildings_count: Number of buildings (מספר מבנים)
+- building_units: Number of units in building (מספר יחידות בבניין)
 - wings_count: Number of wings/entrances (מספר אגפים / כניסות)
 - building_wing_number: Building/wing number of sub-plot (מספר מבנה / אגף של תת־החלקה)
 - address_from_tabu: Address from tabu document (כתובת מהנסח)
+- bylaws: Bylaws/regulations text (תקנון - טקסט)
+- general_notes: General notes about property (הערות כלליות)
+- building_description: Building description (תיאור הבניין)
+- air_directions: Air directions/orientation (כיווני אוויר - צפון/דרום/מזרח/מערב)
+- property_essence: Property essence/type (מהות הנכס - דירה/משרד/חנות)
 
 UNIT/APARTMENT INFORMATION:
 - unit_description: Unit description (תיאור הדירה - דירה/חנות/משרד)
@@ -62,6 +68,7 @@ UNIT/APARTMENT INFORMATION:
 - construction_year: Year of construction (שנת בנייה)
 - property_condition: Property condition/state (מצב הנכס)
 - finish_standard: Finish level/standard (רמת גימור)
+- finish_details: Finish details description (פרטי גימור)
 
 ATTACHMENTS (הצמדות):
 - attachments: Complete attachments data with all details
@@ -200,9 +207,15 @@ Return ONLY the JSON object with this structure:
     "regulation_type": "מוסכם/לא מוסכם/מצוי or null",
     "sub_plots_count": number or null,
     "buildings_count": number or null,
+    "building_units": number or null,
     "wings_count": number or null,
     "building_wing_number": "number or null",
     "address_from_tabu": "address or null",
+    "bylaws": "bylaws text or null",
+    "general_notes": "notes or null",
+    "building_description": "description or null",
+    "air_directions": "N/S/E/W or null",
+    "property_essence": "type or null",
     "unit_description": "description or null",
     "floor": "floor or null",
     "registered_area": number or null,
@@ -216,6 +229,7 @@ Return ONLY the JSON object with this structure:
     "construction_year": number or null,
     "property_condition": "condition or null",
     "finish_standard": "finish level or null",
+    "finish_details": "finish details or null",
     "attachments": [{"type": "type", "area": number, "symbol": "symbol", "color": "color", "description": "desc"}],
     "attachments_symbol": "primary symbol or null",
     "attachments_color": "primary color or null", 
@@ -781,6 +795,91 @@ Focus on finding the Hebrew text and extracting the required fields. For each fi
 
         // Building Permits (היתרי בנייה) - repeating object array
         permits: data.permits || [],
+
+        // New fields added for Step3 UI alignment
+        building_units: {
+          value: data.building_units || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        bylaws: {
+          value: data.bylaws || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        general_notes: {
+          value: data.general_notes || null,
+          confidence: (confidenceScores.notes || 0) * 100,
+          context: extractionContexts.notes || '',
+          pattern: 'ai_extraction'
+        },
+
+        building_description: {
+          value: data.building_description || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        air_directions: {
+          value: data.air_directions || null,
+          confidence: (confidenceScores.unit_info || 0) * 100,
+          context: extractionContexts.unit_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        property_essence: {
+          value: data.property_essence || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        finish_details: {
+          value: data.finish_details || null,
+          confidence: (confidenceScores.unit_info || 0) * 100,
+          context: extractionContexts.unit_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        built_area: {
+          value: data.built_area || null,
+          confidence: (confidenceScores.unit_info || 0) * 100,
+          context: extractionContexts.unit_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        shared_areas: {
+          value: data.shared_areas || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        construction_year: {
+          value: data.construction_year || null,
+          confidence: (confidenceScores.property_info || 0) * 100,
+          context: extractionContexts.property_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        property_condition: {
+          value: data.property_condition || null,
+          confidence: (confidenceScores.unit_info || 0) * 100,
+          context: extractionContexts.unit_info || '',
+          pattern: 'ai_extraction'
+        },
+
+        finish_standard: {
+          value: data.finish_standard || null,
+          confidence: (confidenceScores.unit_info || 0) * 100,
+          context: extractionContexts.unit_info || '',
+          pattern: 'ai_extraction'
+        },
 
         // Field locations for scroll-to-source
         fieldLocations: locations,
