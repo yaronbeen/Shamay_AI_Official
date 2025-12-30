@@ -2,13 +2,84 @@ import { NextRequest, NextResponse } from 'next/server'
 import { ShumaDB } from '../../../../../lib/shumadb'
 import { FileStorageService } from '../../../../../lib/file-storage'
 
+/**
+ * Fetch static map image from GovMap WMS service
+ * Works on Vercel serverless - no Puppeteer needed!
+ */
+async function fetchWMSMapImage(
+  easting: number,
+  northing: number,
+  screenshotType: string
+): Promise<{ success: boolean; imageBase64?: string; error?: string }> {
+  try {
+    // Determine size based on screenshot type
+    // wideArea = larger area (1000m), zoomed = smaller area (300m)
+    const size = screenshotType === 'wideArea' ? 1000 : 300
+    const halfSize = size / 2
+
+    // Calculate bounding box
+    const bbox = [
+      easting - halfSize,
+      northing - halfSize,
+      easting + halfSize,
+      northing + halfSize
+    ].join(',')
+
+    // Determine layers - with or without aerial imagery (תצ״א)
+    // PARCEL_ALL = parcels layer
+    // For zoomedWithTazea we'd need the aerial layer too
+    const layers = 'PARCEL_ALL'
+
+    console.log(`📍 WMS Request: type=${screenshotType}, center=(${easting}, ${northing}), size=${size}m`)
+
+    // Construct WMS GetMap URL
+    const wmsUrl = new URL('https://open.govmap.gov.il/geoserver/opendata/wms')
+    wmsUrl.searchParams.set('SERVICE', 'WMS')
+    wmsUrl.searchParams.set('VERSION', '1.1.1')
+    wmsUrl.searchParams.set('REQUEST', 'GetMap')
+    wmsUrl.searchParams.set('LAYERS', layers)
+    wmsUrl.searchParams.set('BBOX', bbox)
+    wmsUrl.searchParams.set('WIDTH', '800')
+    wmsUrl.searchParams.set('HEIGHT', '800')
+    wmsUrl.searchParams.set('SRS', 'EPSG:2039')  // ITM projection
+    wmsUrl.searchParams.set('FORMAT', 'image/png')
+
+    console.log(`🌐 Fetching WMS: ${wmsUrl.toString()}`)
+
+    const response = await fetch(wmsUrl.toString())
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error(`❌ WMS Error: ${response.status}`, errorText)
+      return { success: false, error: `WMS request failed: ${response.status}` }
+    }
+
+    const contentType = response.headers.get('content-type')
+    if (!contentType?.includes('image')) {
+      const errorText = await response.text()
+      return { success: false, error: `WMS returned non-image: ${errorText.substring(0, 200)}` }
+    }
+
+    // Convert to base64
+    const arrayBuffer = await response.arrayBuffer()
+    const base64 = Buffer.from(arrayBuffer).toString('base64')
+
+    console.log(`✅ WMS Success: ${arrayBuffer.byteLength} bytes`)
+
+    return { success: true, imageBase64: base64 }
+  } catch (error) {
+    console.error('❌ WMS fetch error:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  }
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: { sessionId: string } }
 ) {
   try {
     const contentType = request.headers.get('content-type')
-    
+
     // Handle JSON request (for server screenshot)
     if (contentType?.includes('application/json')) {
       const body = await request.json()
@@ -17,15 +88,41 @@ export async function POST(
       // Support both screenshotType (new) and cropMode (legacy)
       const mode = screenshotType || cropMode
 
-      if (!govmapUrl) {
-        return NextResponse.json({ error: 'GovMap URL is required' }, { status: 400 })
-      }
-
       if (!mode) {
         return NextResponse.json({ error: 'Screenshot type is required' }, { status: 400 })
       }
 
-      // Call backend service to capture screenshot
+      // Use WMS if we have coordinates
+      if (coordinates?.easting && coordinates?.northing) {
+        console.log(`📸 Using WMS for screenshot: ${mode}`)
+
+        const wmsResult = await fetchWMSMapImage(
+          coordinates.easting,
+          coordinates.northing,
+          mode
+        )
+
+        if (wmsResult.success && wmsResult.imageBase64) {
+          return NextResponse.json({
+            success: true,
+            screenshot: wmsResult.imageBase64,
+            message: 'WMS screenshot captured successfully'
+          })
+        } else {
+          console.warn('⚠️ WMS failed, coordinates were:', coordinates)
+          return NextResponse.json({
+            success: false,
+            error: wmsResult.error || 'WMS capture failed',
+            message: 'צילום WMS נכשל. נסה להעלות צילום מסך ידנית.'
+          }, { status: 500 })
+        }
+      }
+
+      // Fallback: If no coordinates, try backend (won't work on Vercel but might locally)
+      if (!govmapUrl) {
+        return NextResponse.json({ error: 'GovMap URL or coordinates required' }, { status: 400 })
+      }
+
       try {
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
         const screenshotResponse = await fetch(`${backendUrl}/api/gis-screenshot`, {
@@ -34,31 +131,28 @@ export async function POST(
           body: JSON.stringify({
             govmapUrl,
             screenshotType: mode,
-            cropMode: mode, // Legacy support
+            cropMode: mode,
             sessionId: params.sessionId,
             viewport: { width: 1200, height: 800 }
           })
         })
 
         if (!screenshotResponse.ok) {
-          // Check for 501 (serverless limitation)
           if (screenshotResponse.status === 501) {
             return NextResponse.json({
               success: false,
               error: 'Server screenshot not available',
-              message: 'צילום שרת אינו זמין בסביבת ענן. השתמש בהעלאת צילום מסך ידנית.'
+              message: 'צילום שרת אינו זמין. השתמש בהעלאת צילום מסך ידנית.'
             }, { status: 501 })
           }
           throw new Error(`Backend screenshot failed: ${screenshotResponse.statusText}`)
         }
 
         const screenshotData = await screenshotResponse.json()
-        
-        // Return the screenshot as base64 for immediate display
-        // The actual saving to DB will happen after annotation
+
         return NextResponse.json({
           success: true,
-          screenshot: screenshotData.screenshot, // Return base64 data URL
+          screenshot: screenshotData.screenshot,
           message: 'Server screenshot captured successfully'
         })
 

@@ -1199,7 +1199,12 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
         body: JSON.stringify({
           govmapUrl: urlToCapture,
           screenshotType, // New field for screenshot type
-          sessionId: mapSessionId
+          sessionId: mapSessionId,
+          // Send ITM coordinates for WMS-based capture
+          coordinates: coords.itm ? {
+            easting: coords.itm.easting,
+            northing: coords.itm.northing
+          } : undefined
         })
       })
 
