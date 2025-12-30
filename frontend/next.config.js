@@ -16,11 +16,8 @@ const nextConfig = {
         source: '/api/sessions/:path*',
         destination: `${backendUrl}/api/sessions/:path*`,
       },
-      // Proxy file uploads to backend (GET for serving files handled by Next.js)
-      {
-        source: '/api/files/:sessionId/upload',
-        destination: `${backendUrl}/api/files/:sessionId/upload`,
-      },
+      // File uploads now handled by Next.js API route (uses Vercel Blob in production)
+      // GET requests for serving files still go to backend
       {
         source: '/api/garmushka/:path*',
         destination: `${backendUrl}/api/garmushka/:path*`,
