@@ -2740,7 +2740,25 @@ export function generateDocumentHTML(
             <li>נשוא חוות הדעת: ${data.propertyEssence || 'דירת מגורים'} ${formatFloor(data.floor)}.</li>
             ${(() => {
               // Include measured area from Garmushka if available
-              const measuredArea = (data as any).apartmentSqm || (data as any).garmushkaMeasurements?.totalArea
+              // Try apartmentSqm first, then calculate from measurementTable
+              let measuredArea = (data as any).apartmentSqm
+
+              // Fallback: calculate from garmushkaMeasurements.measurementTable
+              if (!measuredArea && (data as any).garmushkaMeasurements?.measurementTable) {
+                const table = (data as any).garmushkaMeasurements.measurementTable
+                measuredArea = table
+                  .filter((m: any) => m && m.type === 'polygon' && m.measurement)
+                  .reduce((sum: number, m: any) => {
+                    const match = m.measurement.match(/([\d.,]+)\s*m[²2]?/i)
+                    if (match) {
+                      const numStr = match[1].replace(',', '.')
+                      const parsed = parseFloat(numStr)
+                      return sum + (isFinite(parsed) ? parsed : 0)
+                    }
+                    return sum
+                  }, 0)
+              }
+
               const registeredArea = getValueFromPaths(data, ['extractedData.registeredArea', 'extractedData.registered_area', 'extractedData.apartment_registered_area', 'registeredArea'])
 
               if (measuredArea && measuredArea > 0) {
