@@ -469,60 +469,92 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
 
   const extractLandRegistryData = async (): Promise<any> => {
     try {
-      // Get the tabu document file URL
+      // Get ALL tabu document file URLs
       const tabuUploads = getUploadsByType('tabu').filter((u: any) => u.status === 'completed')
       if (tabuUploads.length === 0) {
         console.warn('⚠️ No tabu document found for extraction')
         throw new Error('No tabu document available')
       }
 
-      // Use the first completed tabu upload
-      const fileUrl = tabuUploads[0].url
-      console.log('📄 Extracting from tabu file:', fileUrl)
+      console.log(`📄 Found ${tabuUploads.length} tabu documents to process`)
 
-      const response = await fetch(`/api/ai/land-registry`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileUrl, sessionId })
-      })
+      // Process ALL tabu documents and merge results
+      const allResults: any[] = []
 
-      if (response.ok) {
-        const result = await response.json()
-        console.log('🏛️ Land registry API response:', result)
-        
-        if (result.success && result.extractedData) {
-          const data = result.extractedData
-          // Return ALL fields from API - both structured and flat
-          return {
-            land_registry: data,
-            // Flat fields for UI compatibility
-            registrationOffice: data.registration_office || data.registrationOffice || 'לא נמצא',
-            gush: data.gush || 'לא נמצא',
-            parcel: data.chelka || data.parcel || 'לא נמצא',
-            subParcel: data.subParcel || data.sub_parcel || data.sub_chelka || null,
-            ownershipType: data.ownership_type || data.ownershipType || 'לא נמצא',
-            attachments: data.attachments_description || (Array.isArray(data.attachments) ? data.attachments.map((a: any) => a.description || a.type).join(', ') : data.attachments) || 'לא נמצא',
-            balconyArea: data.balcony_area || data.balconyArea || 0,
-            buildingNumber: data.building_number || data.buildingNumber || '',
-            registeredArea: data.registered_area || data.apartment_registered_area || data.registeredArea || data.apartmentArea || 0,
-            builtArea: data.built_area || data.builtArea || 'לא נמצא',
-            finishLevel: data.finish_standard || data.finishStandard || 'לא נמצא',
-            sharedAreas: data.shared_areas || data.shared_property || data.sharedAreas || data.sharedProperty || 'לא נמצא',
-            constructionYear: data.construction_year || data.constructionYear || 'לא נמצא',
-            propertyCondition: data.property_condition || data.propertyCondition || 'לא נמצא',
-            floor: data.floor || null,
-            unitDescription: data.unit_description || data.unitDescription || null,
-            owners: data.owners || [],
-            mortgages: data.mortgages || [],
-            easementsEssence: data.easements_essence || data.easementsEssence || null,
-            easementsDescription: data.easements_description || data.easementsDescription || null
+      for (const upload of tabuUploads) {
+        const fileUrl = upload.url
+        console.log(`📄 Extracting from tabu file: ${fileUrl}`)
+
+        const response = await fetch(`/api/ai/land-registry`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileUrl, sessionId })
+        })
+
+        if (response.ok) {
+          const result = await response.json()
+          console.log('🏛️ Land registry API response:', result)
+
+          if (result.success) {
+            allResults.push(result)
           }
         }
+      }
+
+      if (allResults.length === 0) {
+        throw new Error('No successful extractions from tabu documents')
+      }
+
+      // Merge all results - prefer non-null values from later documents
+      const mergedData: any = {}
+      for (const result of allResults) {
+        const data = result.extractedData || result
+        Object.entries(data).forEach(([key, value]) => {
+          // Keep existing value if new value is null/undefined/empty
+          if (value !== null && value !== undefined && value !== '' && value !== 'לא נמצא') {
+            // For arrays, merge them
+            if (Array.isArray(value) && Array.isArray(mergedData[key])) {
+              mergedData[key] = [...mergedData[key], ...value]
+            } else {
+              mergedData[key] = value
+            }
+          } else if (mergedData[key] === undefined) {
+            mergedData[key] = value
+          }
+        })
+      }
+
+      console.log(`📦 Merged data from ${allResults.length} tabu documents`)
+
+      // Return ALL fields from merged data - both structured and flat
+      return {
+        land_registry: mergedData,
+        // Flat fields for UI compatibility
+        registrationOffice: mergedData.registration_office || mergedData.registrationOffice || 'לא נמצא',
+        gush: mergedData.gush || 'לא נמצא',
+        parcel: mergedData.chelka || mergedData.parcel || 'לא נמצא',
+        subParcel: mergedData.subParcel || mergedData.sub_parcel || mergedData.sub_chelka || null,
+        ownershipType: mergedData.ownership_type || mergedData.ownershipType || 'לא נמצא',
+        attachments: mergedData.attachments_description || (Array.isArray(mergedData.attachments) ? mergedData.attachments.map((a: any) => a.description || a.type).join(', ') : mergedData.attachments) || 'לא נמצא',
+        balconyArea: mergedData.balcony_area || mergedData.balconyArea || 0,
+        buildingNumber: mergedData.building_number || mergedData.buildingNumber || '',
+        registeredArea: mergedData.registered_area || mergedData.apartment_registered_area || mergedData.registeredArea || mergedData.apartmentArea || 0,
+        builtArea: mergedData.built_area || mergedData.builtArea || 'לא נמצא',
+        finishLevel: mergedData.finish_standard || mergedData.finishStandard || 'לא נמצא',
+        sharedAreas: mergedData.shared_areas || mergedData.shared_property || mergedData.sharedAreas || mergedData.sharedProperty || 'לא נמצא',
+        constructionYear: mergedData.construction_year || mergedData.constructionYear || 'לא נמצא',
+        propertyCondition: mergedData.property_condition || mergedData.propertyCondition || 'לא נמצא',
+        floor: mergedData.floor || null,
+        unitDescription: mergedData.unit_description || mergedData.unitDescription || null,
+        owners: mergedData.owners || [],
+        mortgages: mergedData.mortgages || [],
+        easementsEssence: mergedData.easements_essence || mergedData.easementsEssence || null,
+        easementsDescription: mergedData.easements_description || mergedData.easementsDescription || null
       }
     } catch (error) {
       console.error('Land registry extraction failed:', error)
     }
-    
+
     return {
       land_registry: null,
       registrationOffice: 'לא נמצא',
@@ -543,62 +575,92 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
 
   const extractBuildingPermitData = async (): Promise<any> => {
     try {
-      // Get the building permit document file URL
+      // Get ALL building permit document file URLs
       const permitUploads = getUploadsByType('permit').filter((u: any) => u.status === 'completed')
       if (permitUploads.length === 0) {
         console.warn('⚠️ No building permit document found for extraction')
         throw new Error('No building permit document available')
       }
 
-      // Use the first completed permit upload
-      const fileUrl = permitUploads[0].url
-      console.log('📄 Extracting from building permit file:', fileUrl)
+      console.log(`📄 Found ${permitUploads.length} building permit documents to process`)
 
-      const response = await fetch(`/api/ai/building-permit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileUrl, sessionId })
-      })
+      // Process ALL permit documents and merge results
+      const allResults: any[] = []
 
-      if (response.ok) {
-        const result = await response.json()
-        console.log('🏗️ Building permit API response:', result)
-        
-        if (result.success && result.extractedData) {
-          const data = result.extractedData
-          // Extract year from permit date if available
-          let buildingYear = 'לא נמצא'
-          if (data.permit_date) {
-            const dateMatch = data.permit_date.match(/(\d{4})/)
-            if (dateMatch) {
-              buildingYear = dateMatch[1]
-            }
-          }
-          
-          // Return ALL fields from API - both structured and flat
-          return {
-            building_permit: data,
-            // Flat fields for UI compatibility
-            buildingYear: buildingYear !== 'לא נמצא' ? buildingYear : (data.building_year || 'לא נמצא'),
-            buildingRights: data.permitted_usage || data.permitted_description || data.building_description || data.permittedUsage || data.permittedDescription || 'לא נמצא',
-            permittedUse: data.permitted_usage || data.permitted_description || data.permittedUsage || data.permittedDescription || 'לא נמצא',
-            buildingDescription: data.building_description || data.buildingDescription || 'לא נמצא',
-            buildingPermitNumber: data.permit_number || data.permitNumber || 'לא נמצא',
-            buildingPermitDate: data.permit_date || data.permitDate || 'לא נמצא',
-            permitIssueDate: data.permit_issue_date || data.permitIssueDate || null,
-            localCommitteeName: data.local_committee_name || data.localCommitteeName || null,
-            propertyAddress: data.property_address || data.propertyAddress || null,
-            gush: data.gush || null,
-            chelka: data.chelka || null,
-            subParcel: data.subParcel || data.sub_parcel || data.sub_chelka || null,
-            buildingType: 'לא מזוהה' // Not in permit - will be filled from exterior analysis
+      for (const upload of permitUploads) {
+        const fileUrl = upload.url
+        console.log(`📄 Extracting from building permit file: ${fileUrl}`)
+
+        const response = await fetch(`/api/ai/building-permit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileUrl, sessionId })
+        })
+
+        if (response.ok) {
+          const result = await response.json()
+          console.log('🏗️ Building permit API response:', result)
+
+          if (result.success) {
+            allResults.push(result)
           }
         }
+      }
+
+      if (allResults.length === 0) {
+        throw new Error('No successful extractions from building permit documents')
+      }
+
+      // Merge all results - prefer non-null values from later documents
+      const mergedData: any = {}
+      for (const result of allResults) {
+        const data = result.extractedData || result
+        Object.entries(data).forEach(([key, value]) => {
+          if (value !== null && value !== undefined && value !== '' && value !== 'לא נמצא') {
+            if (Array.isArray(value) && Array.isArray(mergedData[key])) {
+              mergedData[key] = [...mergedData[key], ...value]
+            } else {
+              mergedData[key] = value
+            }
+          } else if (mergedData[key] === undefined) {
+            mergedData[key] = value
+          }
+        })
+      }
+
+      console.log(`📦 Merged data from ${allResults.length} building permit documents`)
+
+      // Extract year from permit date if available
+      let buildingYear = 'לא נמצא'
+      if (mergedData.permit_date) {
+        const dateMatch = mergedData.permit_date.match(/(\d{4})/)
+        if (dateMatch) {
+          buildingYear = dateMatch[1]
+        }
+      }
+
+      // Return ALL fields from merged data - both structured and flat
+      return {
+        building_permit: mergedData,
+        // Flat fields for UI compatibility
+        buildingYear: buildingYear !== 'לא נמצא' ? buildingYear : (mergedData.building_year || 'לא נמצא'),
+        buildingRights: mergedData.permitted_usage || mergedData.permitted_description || mergedData.building_description || mergedData.permittedUsage || mergedData.permittedDescription || 'לא נמצא',
+        permittedUse: mergedData.permitted_usage || mergedData.permitted_description || mergedData.permittedUsage || mergedData.permittedDescription || 'לא נמצא',
+        buildingDescription: mergedData.building_description || mergedData.buildingDescription || 'לא נמצא',
+        buildingPermitNumber: mergedData.permit_number || mergedData.permitNumber || 'לא נמצא',
+        buildingPermitDate: mergedData.permit_date || mergedData.permitDate || 'לא נמצא',
+        permitIssueDate: mergedData.permit_issue_date || mergedData.permitIssueDate || null,
+        localCommitteeName: mergedData.local_committee_name || mergedData.localCommitteeName || null,
+        propertyAddress: mergedData.property_address || mergedData.propertyAddress || null,
+        gush: mergedData.gush || null,
+        chelka: mergedData.chelka || null,
+        subParcel: mergedData.subParcel || mergedData.sub_parcel || mergedData.sub_chelka || null,
+        buildingType: 'לא מזוהה' // Not in permit - will be filled from exterior analysis
       }
     } catch (error) {
       console.error('Building permit extraction failed:', error)
     }
-    
+
     return {
       building_permit: null,
       buildingYear: 'לא נמצא',
@@ -613,48 +675,78 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
 
   const extractSharedBuildingData = async (): Promise<any> => {
     try {
-      // Get the condo document file URL
+      // Get ALL condo document file URLs
       const condoUploads = getUploadsByType('condo').filter((u: any) => u.status === 'completed')
       if (condoUploads.length === 0) {
         console.warn('⚠️ No condo document found for extraction')
         throw new Error('No condo document available')
       }
 
-      // Use the first completed condo upload
-      const fileUrl = condoUploads[0].url
-      console.log('📄 Extracting from condo file:', fileUrl)
+      console.log(`📄 Found ${condoUploads.length} condo documents to process`)
 
-      const response = await fetch(`/api/ai/shared-building`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileUrl, sessionId })
-      })
+      // Process ALL condo documents and merge results
+      const allResults: any[] = []
 
-      if (response.ok) {
-        const result = await response.json()
-        console.log('🏢 Shared building API response:', result)
-        
-        if (result.success && result.extractedData) {
-          const data = result.extractedData
-          // Return ALL fields from API - both structured and flat
-          return {
-            shared_building: data,
-            // Flat fields for UI compatibility
-            buildingDescription: data.building_description || data.buildingDescription || 'לא נמצא',
-            buildingFloors: data.building_floors || data.buildingFloors || 'לא נמצא',
-            buildingUnits: data.building_sub_plots_count || data.total_sub_plots || data.buildingSubPlotsCount || data.totalSubPlots || 'לא נמצא',
-            buildingAddress: data.building_address || data.buildingAddress || null,
-            orderIssueDate: data.order_issue_date || data.orderIssueDate || null,
-            totalSubPlots: data.total_sub_plots || data.totalSubPlots || null,
-            buildingsInfo: data.buildings_info || data.buildingsInfo || [],
-            subPlots: data.sub_plots || data.subPlots || []
+      for (const upload of condoUploads) {
+        const fileUrl = upload.url
+        console.log(`📄 Extracting from condo file: ${fileUrl}`)
+
+        const response = await fetch(`/api/ai/shared-building`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileUrl, sessionId })
+        })
+
+        if (response.ok) {
+          const result = await response.json()
+          console.log('🏢 Shared building API response:', result)
+
+          if (result.success) {
+            allResults.push(result)
           }
         }
+      }
+
+      if (allResults.length === 0) {
+        throw new Error('No successful extractions from condo documents')
+      }
+
+      // Merge all results - prefer non-null values from later documents
+      const mergedData: any = {}
+      for (const result of allResults) {
+        const data = result.extractedData || result
+        Object.entries(data).forEach(([key, value]) => {
+          if (value !== null && value !== undefined && value !== '' && value !== 'לא נמצא') {
+            if (Array.isArray(value) && Array.isArray(mergedData[key])) {
+              mergedData[key] = [...mergedData[key], ...value]
+            } else {
+              mergedData[key] = value
+            }
+          } else if (mergedData[key] === undefined) {
+            mergedData[key] = value
+          }
+        })
+      }
+
+      console.log(`📦 Merged data from ${allResults.length} condo documents`)
+
+      // Return ALL fields from merged data - both structured and flat
+      return {
+        shared_building: mergedData,
+        // Flat fields for UI compatibility
+        buildingDescription: mergedData.building_description || mergedData.buildingDescription || 'לא נמצא',
+        buildingFloors: mergedData.building_floors || mergedData.buildingFloors || 'לא נמצא',
+        buildingUnits: mergedData.building_sub_plots_count || mergedData.total_sub_plots || mergedData.buildingSubPlotsCount || mergedData.totalSubPlots || 'לא נמצא',
+        buildingAddress: mergedData.building_address || mergedData.buildingAddress || null,
+        orderIssueDate: mergedData.order_issue_date || mergedData.orderIssueDate || null,
+        totalSubPlots: mergedData.total_sub_plots || mergedData.totalSubPlots || null,
+        buildingsInfo: mergedData.buildings_info || mergedData.buildingsInfo || [],
+        subPlots: mergedData.sub_plots || mergedData.subPlots || []
       }
     } catch (error) {
       console.error('Shared building extraction failed:', error)
     }
-    
+
     return {
       shared_building: null,
       buildingDescription: 'לא נמצא',

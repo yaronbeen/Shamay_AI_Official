@@ -37,6 +37,11 @@ const nextConfig = {
         source: '/api/asset-details/:path*',
         destination: `${backendUrl}/api/asset-details/:path*`,
       },
+      // Proxy AI extraction calls to backend
+      {
+        source: '/api/ai/:path*',
+        destination: `${backendUrl}/api/ai/:path*`,
+      },
     ];
   },
   // Keep existing configuration
