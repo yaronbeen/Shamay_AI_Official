@@ -469,11 +469,23 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
 
   const extractLandRegistryData = async (): Promise<any> => {
     try {
-      const response = await fetch(`/api/session/${sessionId}/land-registry-analysis`, {
+      // Get the tabu document file URL
+      const tabuUploads = getUploadsByType('tabu').filter((u: any) => u.status === 'completed')
+      if (tabuUploads.length === 0) {
+        console.warn('⚠️ No tabu document found for extraction')
+        throw new Error('No tabu document available')
+      }
+
+      // Use the first completed tabu upload
+      const fileUrl = tabuUploads[0].url
+      console.log('📄 Extracting from tabu file:', fileUrl)
+
+      const response = await fetch(`/api/ai/land-registry`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileUrl, sessionId })
       })
-      
+
       if (response.ok) {
         const result = await response.json()
         console.log('🏛️ Land registry API response:', result)
@@ -531,11 +543,23 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
 
   const extractBuildingPermitData = async (): Promise<any> => {
     try {
-      const response = await fetch(`/api/session/${sessionId}/building-permit-analysis`, {
+      // Get the building permit document file URL
+      const permitUploads = getUploadsByType('permit').filter((u: any) => u.status === 'completed')
+      if (permitUploads.length === 0) {
+        console.warn('⚠️ No building permit document found for extraction')
+        throw new Error('No building permit document available')
+      }
+
+      // Use the first completed permit upload
+      const fileUrl = permitUploads[0].url
+      console.log('📄 Extracting from building permit file:', fileUrl)
+
+      const response = await fetch(`/api/ai/building-permit`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileUrl, sessionId })
       })
-      
+
       if (response.ok) {
         const result = await response.json()
         console.log('🏗️ Building permit API response:', result)
@@ -589,11 +613,23 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
 
   const extractSharedBuildingData = async (): Promise<any> => {
     try {
-      const response = await fetch(`/api/session/${sessionId}/shared-building-analysis`, {
+      // Get the condo document file URL
+      const condoUploads = getUploadsByType('condo').filter((u: any) => u.status === 'completed')
+      if (condoUploads.length === 0) {
+        console.warn('⚠️ No condo document found for extraction')
+        throw new Error('No condo document available')
+      }
+
+      // Use the first completed condo upload
+      const fileUrl = condoUploads[0].url
+      console.log('📄 Extracting from condo file:', fileUrl)
+
+      const response = await fetch(`/api/ai/shared-building`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileUrl, sessionId })
       })
-      
+
       if (response.ok) {
         const result = await response.json()
         console.log('🏢 Shared building API response:', result)
@@ -629,22 +665,30 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
 
   const extractImageAnalysisData = async (): Promise<any> => {
     try {
+      // Get interior and exterior images
+      const interiorImages = getUploadsByType('interior_image').filter((u: any) => u.status === 'completed').map((u: any) => ({ url: u.url }))
+      const exteriorImages = getUploadsByType('building_image').filter((u: any) => u.status === 'completed').map((u: any) => ({ url: u.url }))
+
+      console.log('📸 Interior images:', interiorImages.length, 'Exterior images:', exteriorImages.length)
+
       // Call both interior and exterior analysis APIs
       const [interiorResponse, exteriorResponse] = await Promise.allSettled([
-        fetch(`/api/session/${sessionId}/interior-analysis`, {
+        fetch(`/api/ai/interior-analysis`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ images: interiorImages, sessionId })
         }),
-        fetch(`/api/session/${sessionId}/exterior-analysis`, {
+        fetch(`/api/ai/exterior-analysis`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ images: exteriorImages, sessionId })
         })
       ])
       
       const result: any = {}
       
       // Process interior analysis results
-      if (interiorResponse.status === 'fulfilled' && interiorResponse.value.ok) {
+      if (interiorResponse.status === 'fulfilled' && interiorResponse.value.ok && 'json' in interiorResponse.value) {
         const interiorData = await interiorResponse.value.json()
         console.log('📸 Interior API response:', interiorData)
         
@@ -672,7 +716,7 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
       }
       
       // Process exterior analysis results
-      if (exteriorResponse.status === 'fulfilled' && exteriorResponse.value.ok) {
+      if (exteriorResponse.status === 'fulfilled' && exteriorResponse.value.ok && 'json' in exteriorResponse.value) {
         const exteriorData = await exteriorResponse.value.json()
         console.log('📸 Exterior API response:', exteriorData)
         
@@ -792,7 +836,7 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
 
       console.log(`🚀 Uploading ${upload.type} file: ${upload.file.name}`)
 
-      const response = await fetch(`/api/session/${sessionId}/upload`, {
+      const response = await fetch(`/api/files/${sessionId}/upload`, {
         method: 'POST',
         body: formData
       })
@@ -1317,11 +1361,11 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
                     ref={(el) => { fileInputRefs.current[type] = el }}
             type="file"
                     accept={type === 'building_image' || type === 'interior_image' ? 'image/*' : '.pdf,.doc,.docx'}
-                    multiple={type === 'building_image' || type === 'interior_image'}
+                    multiple={true}
                     onChange={(e) => handleFileSelect(type, e.target.files)}
             className="hidden"
                   />
-                  
+
                   <button
                     onClick={() => fileInputRefs.current[type]?.click()}
                     className={`
@@ -1329,7 +1373,7 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
                       bg-${config.color}-600 text-white hover:bg-${config.color}-700
                     `}
                   >
-                    בחר קובץ{(type === 'building_image' || type === 'interior_image') ? 'ים' : ''}
+                    בחר קבצים
                   </button>
 
                   <p className="text-xs text-gray-500">
@@ -1532,11 +1576,8 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
                   )}
                 </div>
                 
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
-                  <p className="text-yellow-800 text-xs">
-                    💰 עלות משוערת: $0.50-2.00 למסמך נבחר
-                  </p>
-                  <p className="text-blue-800 text-xs mt-1">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                  <p className="text-blue-800 text-xs">
                     ℹ️ נתונים ממסמכים שלא נבחרו יישמרו
                   </p>
                 </div>
@@ -1582,7 +1623,6 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
                       לחץ על "עבד מסמכים" כדי לחלץ נתונים מהמסמכים שהועלו באמצעות AI
                     </p>
                     <div className="mt-2 text-xs text-yellow-600">
-                      <p> 💰 עלות משוערת: $0.50-2.00 למסמך</p>
                       {(() => {
                         const uploadedTypes = new Set(data.uploads?.map((upload: any) => upload.type) || [])
                         const processableTypes = []
@@ -1648,26 +1688,10 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
                   <div className="text-sm text-blue-600">%</div>
                 </div>
                 
-                {/* Info Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                  <div className="bg-white/70 rounded-lg p-4 border border-blue-200">
-                    <div className="flex items-center gap-2 text-blue-700">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                      <span className="text-sm font-medium">⏱️ זה עשוי לקחת מספר דקות</span>
-                    </div>
-                  </div>
-                  <div className="bg-white/70 rounded-lg p-4 border border-blue-200">
-                    <div className="flex items-center gap-2 text-blue-700">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                      <span className="text-sm font-medium">💰 עלות: ~$0.50-2.00 למסמך</span>
-                    </div>
-                  </div>
-                </div>
-                
                 {/* Tips */}
                 <div className="mt-6 pt-6 border-t border-blue-200">
-                  <p className="text-xs text-blue-600 italic">
-                    💡 טיפ: תוכל להמשיך לעבוד על שומות אחרות בזמן שהעיבוד מתבצע
+                  <p className="text-sm text-blue-600 italic">
+                    ☕ טיפ: זה ייקח כמה דקות, לך תעשה קפה
                   </p>
                 </div>
               </div>

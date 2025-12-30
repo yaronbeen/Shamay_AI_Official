@@ -5,20 +5,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 interface Step1InitialDataProps {
   data: any
   updateData: (updates: Partial<any>, options?: { skipAutoSave?: boolean }) => void
-  onValidationChange: (isValid: boolean, missingFields?: string[]) => void
-}
-
-// Field labels for user-friendly messages
-const FIELD_LABELS: Record<string, string> = {
-  valuationType: 'סוג השומה',
-  clientName: 'שם מזמין',
-  street: 'רחוב',
-  buildingNumber: 'מספר בניין',
-  city: 'עיר',
-  rooms: 'מספר חדרים',
-  floor: 'קומה',
-  shamayName: 'שם השמאי',
-  shamaySerialNumber: 'מספר רישיון שמאי'
+  onValidationChange: (isValid: boolean) => void
 }
 
 const DATE_FIELDS = new Set(['valuationDate', 'valuationEffectiveDate'])
@@ -74,7 +61,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
   const isInitialLoad = useRef(true)
   const [formData, setFormData] = useState({
     // סוג שומה ומועד כתיבתה
-    valuationType: data.valuationType || '',
+    valuationType: data.valuationType || 'שווי שוק',
     valuationDate: normalizeDateToISO(data.valuationDate) || '',
     
     // זהות מזמין השומה והקשר שלו לנכס
@@ -225,7 +212,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
       setFormData(prev => {
         const updated = {
           // סוג שומה ומועד כתיבתה
-          valuationType: data.valuationType ?? prev.valuationType ?? '',
+          valuationType: data.valuationType || prev.valuationType || 'שווי שוק',
           valuationDate: normalizeDateToISO(data.valuationDate) || prev.valuationDate || '',
           
           // זהות מזמין השומה והקשר שלו לנכס
@@ -289,36 +276,31 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
     data.shamaySerialNumber
   ])
 
-  const validateForm = useCallback((): { isValid: boolean; missingFields: string[] } => {
-    const missing: string[] = []
+  const validateForm = useCallback(() => {
+    const isValid = formData.valuationType.trim() !== '' &&
+                   formData.clientName.trim() !== '' &&
+                   formData.street.trim() !== '' &&
+                   formData.buildingNumber.trim() !== '' &&
+                   formData.city.trim() !== '' &&
+                   formData.rooms > 0 &&
+                   String(formData.floor || '').trim() !== '' &&
+                   // שטח יבוא מהטאבו - לא נדרש כאן
+                   formData.shamayName.trim() !== '' &&
+                   formData.shamaySerialNumber.trim() !== ''
 
-    if (!formData.valuationType?.trim()) missing.push(FIELD_LABELS.valuationType)
-    if (!formData.clientName?.trim()) missing.push(FIELD_LABELS.clientName)
-    if (!formData.street?.trim()) missing.push(FIELD_LABELS.street)
-    if (!formData.buildingNumber?.trim()) missing.push(FIELD_LABELS.buildingNumber)
-    if (!formData.city?.trim()) missing.push(FIELD_LABELS.city)
-    if (!(formData.rooms > 0)) missing.push(FIELD_LABELS.rooms)
-    if (formData.floor === '' || formData.floor === undefined || formData.floor === null) missing.push(FIELD_LABELS.floor)
-    // שטח יבוא מהטאבו - לא נדרש כאן
-    if (!formData.shamayName?.trim()) missing.push(FIELD_LABELS.shamayName)
-    if (!formData.shamaySerialNumber?.trim()) missing.push(FIELD_LABELS.shamaySerialNumber)
-
-    return { isValid: missing.length === 0, missingFields: missing }
+    return isValid
   }, [formData])
 
   // CRITICAL: Use ref to prevent infinite loops - track last validation state
   const lastValidationStateRef = useRef<boolean | null>(null)
-  const lastMissingFieldsRef = useRef<string[]>([])
-
+  
   // Validate only when formData changes and update validation if it changed
   useEffect(() => {
-    const { isValid, missingFields } = validateForm()
-    // Only call onValidationChange if validation state or missing fields actually changed
-    const missingFieldsChanged = JSON.stringify(lastMissingFieldsRef.current) !== JSON.stringify(missingFields)
-    if (lastValidationStateRef.current !== isValid || missingFieldsChanged) {
-      onValidationChange(isValid, missingFields)
+    const isValid = validateForm()
+    // Only call onValidationChange if validation state actually changed
+    if (lastValidationStateRef.current !== isValid) {
+      onValidationChange(isValid)
       lastValidationStateRef.current = isValid
-      lastMissingFieldsRef.current = missingFields
     }
   }, [formData]) // Only depend on formData, not onValidationChange or validateForm
 
@@ -349,27 +331,6 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
     })
   }, [updateData])
 
-  // Helper to compute input class with visual feedback for unfilled required fields
-  // Note: Classes written explicitly for Tailwind JIT to find them
-  const inputUnfilledClass = "w-full px-4 py-3 border rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent border-orange-300 bg-orange-50"
-  const inputFilledClass = "w-full px-4 py-3 border rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent border-gray-300"
-
-  const getInputClass = (isFilled: boolean) => {
-    return isFilled ? inputFilledClass : inputUnfilledClass
-  }
-
-  // Check if required fields are filled
-  const isFieldFilled = {
-    valuationType: !!formData.valuationType?.trim(),
-    clientName: !!formData.clientName?.trim(),
-    street: !!formData.street?.trim(),
-    buildingNumber: !!formData.buildingNumber?.trim(),
-    city: !!formData.city?.trim(),
-    rooms: formData.rooms > 0,
-    floor: formData.floor !== '' && formData.floor !== undefined && formData.floor !== null,
-    shamayName: !!formData.shamayName?.trim(),
-    shamaySerialNumber: !!formData.shamaySerialNumber?.trim()
-  }
 
   return (
     <div className="max-w-4xl mx-auto p-6">
@@ -394,18 +355,19 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
               </label>
               <select
                 name="valuationType"
-                value={formData.valuationType || ''}
+                value={formData.valuationType || 'שווי שוק'}
                 onChange={(e) => updateField('valuationType', e.target.value)}
-                className={getInputClass(isFieldFilled.valuationType)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 dir="rtl"
               >
-                <option value="">בחר סוג שומה</option>
-                <option value="שומת מקרקעין">שומת מקרקעין</option>
                 <option value="שווי שוק">שווי שוק</option>
+                {/* TODO: Add more valuation types later:
+                <option value="שומת מקרקעין">שומת מקרקעין</option>
                 <option value="שווי השקעה">שווי השקעה</option>
                 <option value="שווי ביטוח">שווי ביטוח</option>
                 <option value="שווי מס">שווי מס</option>
                 <option value="שווי הפקעה">שווי הפקעה</option>
+                */}
               </select>
             </div>
 
@@ -455,7 +417,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 autoComplete="name"
                 value={formData.clientName}
                 onChange={(e) => updateField('clientName', e.target.value)}
-                className={getInputClass(isFieldFilled.clientName)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="הזן שם מלא"
                 dir="rtl"
               />
@@ -535,7 +497,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 autoComplete="address-line1"
                 value={formData.street}
                 onChange={(e) => updateField('street', e.target.value)}
-                className={getInputClass(isFieldFilled.street)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="הזן שם רחוב"
                 dir="rtl"
               />
@@ -551,7 +513,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 autoComplete="address-line2"
                 value={formData.buildingNumber}
                 onChange={(e) => updateField('buildingNumber', e.target.value)}
-                className={getInputClass(isFieldFilled.buildingNumber)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="הזן מספר בניין"
                 dir="rtl"
               />
@@ -583,7 +545,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 autoComplete="address-level1"
                 value={formData.city}
                 onChange={(e) => updateField('city', e.target.value)}
-                className={getInputClass(isFieldFilled.city)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="הזן שם עיר"
                 dir="rtl"
               />
@@ -653,7 +615,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                   const val = e.target.value === '' ? '' : parseInt(e.target.value)
                   updateField('rooms', val)
                 }}
-                className={getInputClass(isFieldFilled.rooms)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="הזן מספר חדרים"
               />
             </div>
@@ -663,18 +625,13 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 קומה *
               </label>
               <input
-                type="number"
+                type="text"
                 name="floor"
                 autoComplete="off"
-                min="0"
-                max="99"
-                value={formData.floor === '' || formData.floor === 0 ? '' : formData.floor}
-                onChange={(e) => {
-                  const val = e.target.value === '' ? '' : parseInt(e.target.value)
-                  updateField('floor', val)
-                }}
-                className={getInputClass(isFieldFilled.floor)}
-                placeholder="הזן מספר קומה"
+                value={formData.floor || ''}
+                onChange={(e) => updateField('floor', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="לדוגמה: 1, א, קומה ראשונה"
               />
             </div>
             
@@ -682,21 +639,38 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
               <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
                 כיווני אוויר (אופציונלי)
               </label>
-              <input
-                type="number"
-                name="airDirections"
-                autoComplete="off"
-                min="1"
-                max="4"
-                value={(formData as any).airDirections === '' || (formData as any).airDirections === 0 ? '' : (formData as any).airDirections}
-                onChange={(e) => {
-                  const val = e.target.value === '' ? '' : parseInt(e.target.value)
-                  updateField('airDirections', val)
-                }}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="למשל: 3"
-              />
-              <p className="text-xs text-gray-500 mt-1 text-right">מספר כיווני האוויר (1-4)</p>
+              <div className="flex flex-wrap gap-3 justify-end">
+                {['צפון', 'מזרח', 'דרום', 'מערב'].map((direction) => {
+                  const currentDirections = (formData as any).airDirections ? String((formData as any).airDirections).split('-').filter(Boolean) : []
+                  const isSelected = currentDirections.includes(direction)
+                  return (
+                    <label key={direction} className="flex items-center gap-2 cursor-pointer">
+                      <span className="text-sm text-gray-700">{direction}</span>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => {
+                          let newDirections = [...currentDirections]
+                          if (e.target.checked) {
+                            newDirections.push(direction)
+                          } else {
+                            newDirections = newDirections.filter(d => d !== direction)
+                          }
+                          // Sort to avoid opposite directions next to each other
+                          // Order: צפון → מערב → דרום → מזרח (alternating pattern)
+                          const nonOppositeOrder = ['צפון', 'מערב', 'דרום', 'מזרח']
+                          newDirections.sort((a, b) => nonOppositeOrder.indexOf(a) - nonOppositeOrder.indexOf(b))
+                          updateField('airDirections', newDirections.join('-'))
+                        }}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                    </label>
+                  )
+                })}
+              </div>
+              {(formData as any).airDirections && (
+                <p className="text-xs text-gray-500 mt-2 text-right">נבחר: {(formData as any).airDirections}</p>
+              )}
             </div>
             
           </div>
@@ -769,7 +743,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 autoComplete="name"
                 value={formData.shamayName}
                 onChange={(e) => updateField('shamayName', e.target.value)}
-                className={getInputClass(isFieldFilled.shamayName)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="הזן שם מלא של השמאי"
                 dir="rtl"
               />
@@ -785,7 +759,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 autoComplete="off"
                 value={formData.shamaySerialNumber}
                 onChange={(e) => updateField('shamaySerialNumber', e.target.value)}
-                className={getInputClass(isFieldFilled.shamaySerialNumber)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="הזן מספר רישיון"
                 dir="rtl"
               />

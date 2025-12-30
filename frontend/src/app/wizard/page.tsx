@@ -103,12 +103,6 @@ export default function WizardPage() {
     step3: false,
     step4: false
   })
-  const [stepMissingFields, setStepMissingFields] = useState<Record<string, string[]>>({
-    step1: [],
-    step2: [],
-    step3: [],
-    step4: []
-  })
   const [data, setData] = useState<ValuationData>({
     street: '',
     buildingNumber: '',
@@ -608,7 +602,7 @@ export default function WizardPage() {
   }, [valuationId, saveFinalResults])
 
   // Memoize the validation handler to prevent infinite loops
-  const handleValidationChange = useCallback((step: number, isValid: boolean, missingFields?: string[]) => {
+  const handleValidationChange = useCallback((step: number, isValid: boolean) => {
     setStepValidation(prev => {
       const key = `step${step}` as keyof typeof prev
       if (prev[key] !== isValid) {
@@ -616,13 +610,6 @@ export default function WizardPage() {
       }
       return prev
     })
-    // Update missing fields for this step
-    if (missingFields !== undefined) {
-      setStepMissingFields(prev => {
-        const key = `step${step}`
-        return { ...prev, [key]: missingFields }
-      })
-    }
   }, [])
 
   const nextStep = async () => {
@@ -671,10 +658,10 @@ export default function WizardPage() {
     switch (currentStep) {
       case 1:
         return (
-          <Step1InitialData
-            data={data}
-            updateData={updateData}
-            onValidationChange={(isValid, missingFields) => handleValidationChange(1, isValid, missingFields)}
+          <Step1InitialData 
+            data={data} 
+            updateData={updateData} 
+            onValidationChange={(isValid) => handleValidationChange(1, isValid)}
           />
         )
       case 2:
@@ -715,10 +702,10 @@ export default function WizardPage() {
         )
       default:
         return (
-          <Step1InitialData
-            data={data}
-            updateData={updateData}
-            onValidationChange={(isValid, missingFields) => handleValidationChange(1, isValid, missingFields)}
+          <Step1InitialData 
+            data={data} 
+            updateData={updateData} 
+            onValidationChange={(isValid) => handleValidationChange(1, isValid)}
           />
         )
     }
@@ -800,7 +787,6 @@ export default function WizardPage() {
                 onPrevious={prevStep}
                 canProceed={stepValidation[`step${currentStep}` as keyof typeof stepValidation]}
                 isLoading={isTransitioning}
-                missingFields={stepMissingFields[`step${currentStep}`] || []}
               />
             </div>
           </div>

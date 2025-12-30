@@ -166,8 +166,8 @@ const formatRooms = (rooms?: number | string, airDirections?: string | number) =
   if (!rooms) {
     return 'דירת מגורים'
   }
-  const airDirectionsNum = typeof airDirections === 'number' ? airDirections : (typeof airDirections === 'string' ? parseInt(airDirections) : 0)
-  const airText = airDirectionsNum > 0 ? ` עם ${airDirectionsNum} כיווני אוויר` : ''
+  // airDirections is now a string like "צפון-מזרח"
+  const airText = typeof airDirections === 'string' && airDirections.trim() ? ` הפונה לכיוונים ${airDirections.trim()}` : ''
   return `דירת מגורים בת ${rooms} חדרים${airText}`
 }
 
@@ -1677,9 +1677,9 @@ export function generateDocumentHTML(
   if (buildingIdentifier) {
     propertyDescriptionParts.push(`במבנה ${buildingIdentifier}`)
   }
-  const airDirectionsNum = typeof data.airDirections === 'number' ? data.airDirections : (typeof data.airDirections === 'string' ? parseInt(data.airDirections) : 0)
-  const airDirectionsText = airDirectionsNum > 0 
-    ? `עם ${airDirectionsNum} כיווני אוויר`
+  // airDirections is now a string like "צפון-מזרח"
+  const airDirectionsText = typeof data.airDirections === 'string' && data.airDirections.trim()
+    ? `הפונה לכיוונים ${data.airDirections.trim()}`
     : ''
   if (airDirectionsText) {
     propertyDescriptionParts.push(airDirectionsText)
@@ -2160,14 +2160,10 @@ export function generateDocumentHTML(
           <p>נשוא השומה הינו תת חלקה ${formatNumber(
             getSubParcelValue(data, landRegistry)
           ) || '—'} המהווה ${unitDescription || 'דירת מגורים'}${floorText ? ` ${floorText}` : ''}${data.rooms ? ` בת ${data.rooms} חד'` : ''}${(() => {
-            const airDir = typeof data.airDirections === 'number' ? data.airDirections : (typeof data.airDirections === 'string' ? parseInt(data.airDirections) : 0)
-            if (airDir > 0) {
-              const directions = []
-              if (airDir >= 1) directions.push('צפון')
-              if (airDir >= 2) directions.push('דרום')
-              if (airDir >= 3) directions.push('מזרח')
-              if (airDir >= 4) directions.push('מערב')
-              return ` ולה כיווני אוויר ${directions.join('-')}`
+            // airDirections is now a string like "צפון-מזרח-דרום"
+            const airDir = typeof data.airDirections === 'string' && data.airDirections.trim() ? data.airDirections.trim() : ''
+            if (airDir) {
+              return ` הפונה לכיוונים ${airDir}`
             }
             return ''
           })()}${(() => {
@@ -2762,7 +2758,7 @@ export function generateDocumentHTML(
           <div class="sub-title">מצב הזכויות</div>
           <ul class="bullet-list">
             <li>הזכויות בנכס – ${formatOwnership(data)}.</li>
-            <li>בהתאם לתשריט הבית המשותף הדירה זוהתה כתת חלקה ${formatNumber(getSubParcelValue(data, landRegistry))} בקומה ${normalizeText(data.floor?.toString(), '—')} הפונה לכיוונים צפון דרום ומערב.</li>
+            <li>בהתאם לתשריט הבית המשותף הדירה זוהתה כתת חלקה ${formatNumber(getSubParcelValue(data, landRegistry))} בקומה ${normalizeText(data.floor?.toString(), '—')}${typeof data.airDirections === 'string' && data.airDirections.trim() ? ` הפונה לכיוונים ${data.airDirections.trim()}` : ''}.</li>
           </ul>
               </div>
         

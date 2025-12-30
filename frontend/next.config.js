@@ -16,12 +16,11 @@ const nextConfig = {
         source: '/api/sessions/:path*',
         destination: `${backendUrl}/api/sessions/:path*`,
       },
-      // Note: /api/files is handled by Next.js route handler for local file serving
-      // Only proxy specific backend file routes if needed
-      // {
-      //   source: '/api/files/:path*',
-      //   destination: `${backendUrl}/api/files/:path*`,
-      // },
+      // Proxy file uploads to backend (GET for serving files handled by Next.js)
+      {
+        source: '/api/files/:sessionId/upload',
+        destination: `${backendUrl}/api/files/:sessionId/upload`,
+      },
       {
         source: '/api/garmushka/:path*',
         destination: `${backendUrl}/api/garmushka/:path*`,
