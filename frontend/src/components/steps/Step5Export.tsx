@@ -8,6 +8,7 @@ import { ValuationData } from '../ValuationWizard'
 interface Step5ExportProps {
   data: ValuationData
   updateData?: (updates: Partial<ValuationData>) => void
+  sessionId?: string
   onSaveFinalResults?: (finalValuation: number, pricePerSqm: number, comparableData: any, propertyAnalysis: any) => Promise<void>
 }
 
@@ -35,7 +36,7 @@ const formatNumber = (num: number): string => {
   return num.toLocaleString('he-IL')
 }
 
-export function Step5Export({ data, updateData }: Step5ExportProps) {
+export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
   const [exporting, setExporting] = useState(false)
   const [exportStatus, setExportStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null)
@@ -46,13 +47,16 @@ export function Step5Export({ data, updateData }: Step5ExportProps) {
   const [editMeasuredArea, setEditMeasuredArea] = useState<number>(0)
   const [editPricePerSqm, setEditPricePerSqm] = useState<number>(0)
 
+  // Use prop sessionId or fall back to data.sessionId
+  const effectiveSessionId = sessionId || data.sessionId
+
   // Load latest data from session when component mounts
   useEffect(() => {
     const loadSessionData = async () => {
-      if (!data.sessionId) return
+      if (!effectiveSessionId) return
 
       try {
-        const response = await fetch(`/api/session/${data.sessionId}`)
+        const response = await fetch(`/api/session/${effectiveSessionId}`)
         if (response.ok) {
           const result = await response.json()
           if (result.data) {
@@ -70,7 +74,7 @@ export function Step5Export({ data, updateData }: Step5ExportProps) {
     }
 
     loadSessionData()
-  }, [data.sessionId])
+  }, [effectiveSessionId])
 
   // Use session data if available, otherwise fall back to props data
   const displayData = sessionData || data
@@ -130,15 +134,17 @@ export function Step5Export({ data, updateData }: Step5ExportProps) {
     }
 
     // Save to session
-    if (data.sessionId) {
+    if (effectiveSessionId) {
       try {
-        await fetch(`/api/session/${data.sessionId}`, {
+        await fetch(`/api/session/${effectiveSessionId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            apartmentSqm: editMeasuredArea,
-            pricePerSqm: editPricePerSqm,
-            finalValuation: newFinalValue
+            data: {
+              apartmentSqm: editMeasuredArea,
+              pricePerSqm: editPricePerSqm,
+              finalValuation: newFinalValue
+            }
           })
         })
         console.log('✅ Saved updated valuation to session')
@@ -151,7 +157,7 @@ export function Step5Export({ data, updateData }: Step5ExportProps) {
   }
 
   const handleExportPDF = async () => {
-    if (!data.sessionId) {
+    if (!effectiveSessionId) {
       console.error('No session ID available')
       return
     }
@@ -162,7 +168,7 @@ export function Step5Export({ data, updateData }: Step5ExportProps) {
 
       console.log('📄 Starting PDF export...')
 
-      const response = await fetch(`/api/session/${data.sessionId}/export-pdf`, {
+      const response = await fetch(`/api/session/${effectiveSessionId}/export-pdf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       })
@@ -184,7 +190,7 @@ export function Step5Export({ data, updateData }: Step5ExportProps) {
         const url = URL.createObjectURL(pdfBlob)
         const link = document.createElement('a')
         link.href = url
-        link.download = `shamay-valuation-${data.sessionId}.pdf`
+        link.download = `shamay-valuation-${effectiveSessionId}.pdf`
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)

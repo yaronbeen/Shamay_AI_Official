@@ -664,7 +664,7 @@ export function ValuationWizard() {
       case 4:
         return <Step4AIAnalysis data={data} updateData={updateData} sessionId={sessionId || undefined} onValidationChange={onValidationChange} />
       case 5:
-        return <Step5Export data={data} />
+        return <Step5Export data={data} updateData={updateData} sessionId={sessionId || undefined} />
       default:
         return <Step1InitialData data={data} updateData={updateData} onValidationChange={onValidationChange} />
     }
