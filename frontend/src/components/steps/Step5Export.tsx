@@ -76,8 +76,23 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
     loadSessionData()
   }, [effectiveSessionId])
 
-  // Use session data if available, otherwise fall back to props data
-  const displayData = sessionData || data
+  // Merge session data with props data - props data is more up-to-date for recent changes
+  const displayData = {
+    ...sessionData,
+    ...data,
+    // Prefer non-zero values from either source
+    apartmentSqm: data.apartmentSqm || sessionData?.apartmentSqm,
+    pricePerSqm: data.pricePerSqm || sessionData?.pricePerSqm,
+    finalValuation: data.finalValuation || sessionData?.finalValuation,
+  }
+
+  console.log('📊 Step5Export displayData:', {
+    'data.apartmentSqm': data.apartmentSqm,
+    'sessionData?.apartmentSqm': sessionData?.apartmentSqm,
+    'displayData.apartmentSqm': displayData.apartmentSqm,
+    'data.pricePerSqm': data.pricePerSqm,
+    'sessionData?.pricePerSqm': sessionData?.pricePerSqm,
+  })
 
   // Get measured area from Garmushka (apartmentSqm) or fall back to area field
   const measuredArea = parseNumeric(
