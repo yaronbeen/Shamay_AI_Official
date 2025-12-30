@@ -681,29 +681,47 @@ export function ValuationWizard() {
     )
   }
 
+  // Step 3 uses full width (has its own PDF viewer + fields layout)
+  const isFullWidthStep = currentStep === 3
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className={`mx-auto px-4 sm:px-6 lg:px-8 py-8 ${isFullWidthStep ? 'max-w-full' : 'max-w-7xl'}`}>
+        <div className={`grid gap-8 ${isFullWidthStep ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-3'}`}>
           {/* Main Content */}
-          <div className="lg:col-span-2">
+          <div className={isFullWidthStep ? '' : 'lg:col-span-2'}>
             <StepIndicator currentStep={currentStep} />
-            <div className="bg-white rounded-lg shadow-md p-6 mt-6">
+            <div className={`bg-white rounded-lg shadow-md mt-6 ${isFullWidthStep ? 'p-0' : 'p-6'}`}>
               {renderStep()}
-        <NavigationButtons
-          currentStep={currentStep}
-          totalSteps={5}
-          onNext={nextStep}
-          onPrevious={prevStep}
-          canProceed={true}
-        />
+              {!isFullWidthStep && (
+                <NavigationButtons
+                  currentStep={currentStep}
+                  totalSteps={5}
+                  onNext={nextStep}
+                  onPrevious={prevStep}
+                  canProceed={true}
+                />
+              )}
             </div>
+            {isFullWidthStep && (
+              <div className="mt-4 px-6">
+                <NavigationButtons
+                  currentStep={currentStep}
+                  totalSteps={5}
+                  onNext={nextStep}
+                  onPrevious={prevStep}
+                  canProceed={true}
+                />
+              </div>
+            )}
           </div>
 
-          {/* Document Preview */}
-          <div className="lg:col-span-1">
-            <DocumentPreview data={data} />
-          </div>
+          {/* Document Preview - Hidden on Step 3 (has its own document viewer) */}
+          {!isFullWidthStep && (
+            <div className="lg:col-span-1">
+              <DocumentPreview data={data} />
+            </div>
+          )}
         </div>
       </div>
     </div>
