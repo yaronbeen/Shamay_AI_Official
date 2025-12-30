@@ -1,0 +1,1042 @@
+{
+  "sessionId": "1765372941999",
+  "startedAt": "2025-12-22T08:24:30.777Z",
+  "traces": [
+    {
+      "traceId": "trace_1766391870789_jb2t1c8",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:24:30.789Z",
+      "type": "user_message",
+      "data": {
+        "message": "ניסוח נירטלי, תיאורי יותר. חשוב לי ההקשר העירוני הרחב. ושהכל יסתיים במשפט תיאורי כללי. לגביי תיאור הסביבה שיהיה קצר ותמציתי בבקשה",
+        "attachments": []
+      }
+    },
+    {
+      "traceId": "trace_1766391888437_hzeajkb",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:24:48.437Z",
+      "type": "assistant_response",
+      "data": {
+        "response": "מצוין! תודה על ההבהרות.\n\nכדי שאוכל לכתוב את סעיף 1.1 בצורה מדויקת, אני צריך קצת מידע נוסף על הסביבה בפועל:\n\nשאלות תכיילות לסעיף 1.1:\n\n1. מיקום בעיר: באיזה אזור בנתניה ממוקם הנכס? (למשל: צפון/דרום/מרכז העיר, קרוב לים/רחוק מהים)\n\n2. אופי הסביבה: מה האופי הבנוי הדומיננטי בסביבה? (למשל: בתי מגורים רב-קומתיים, בניה נמוכה, שילוב של שניהם)\n\n3. שימושים בסביבה: מה השימושים העיקריים בסביבה הקרובה? (למשל: מגורים בלבד, מגורים ומסחר, יש מבני ציבור)\n\n4. נגישות: איך הנגישות התחבורתית לאזור? (למשל: צירי תנועה מרכזיים, תחבורה ציבורית, מרחק ממוקדי העיר)\n\n5. מאפיינים סביבתיים: האם יש מאפיינים סביבתיים בולטים שכדאי לציין? (למשל: קרבה לפארק, קרבה לים, אזור שקט/תעשייה בסביבה)\n\nענה על השאלות האלה ואני אכתוב עבורך את סעיף 1.1 מוכן להעתקה."
+      },
+      "metadata": {
+        "model": "claude-sonnet-4-5-20250929",
+        "inputTokens": 8741,
+        "outputTokens": 517,
+        "latencyMs": 17662
+      }
+    },
+    {
+      "traceId": "trace_1766391947840_pp2umkh",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:25:47.840Z",
+      "type": "user_message",
+      "data": {
+        "message": "1- שכונת קרית שרונים. 2. בתי מגורים רב קמתייים. 3. מגורים ומסחר, תוודא אותי בעזרת חיפוש באינרטנטר. 4. אחלה נגישות. 5. לא עולה לי משהו קונקרטי.",
+        "attachments": []
+      }
+    },
+    {
+      "traceId": "trace_1766391956518_41afa3l",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:25:56.518Z",
+      "type": "tool_call",
+      "data": {
+        "toolName": "web_search",
+        "input": {
+          "query": "שכונת קריית שרונים נתניה רחוב אייר שימושי קרקע מסחר שירותים",
+          "num_results": 5
+        }
+      },
+      "metadata": {
+        "toolName": "web_search"
+      }
+    },
+    {
+      "traceId": "trace_1766391957002_keygnpi",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:25:57.002Z",
+      "type": "tool_result",
+      "data": {
+        "toolName": "web_search",
+        "result": "{\"success\":true,\"query\":\"שכונת קריית שרונים נתניה רחוב אייר שימושי קרקע מסחר שירותים\",\"resultsCount\":0,\"message\":\"לא נמצאו תוצאות ישירות. נסה לנסח את השאילתה באנגלית או בצורה אחרת.\",\"suggestion\":\"ניתן לחפש ידנית ב: https://www.google.com/search?q=%D7%A9%D7%9B%D7%95%D7%A0%D7%AA%20%D7%A7%D7%A8%D7%99%D7%99%D7%AA%20%D7%A9%D7%A8%D7%95%D7%A0%D7%99%D7%9D%20%D7%A0%D7%AA%D7%A0%D7%99%D7%94%20%D7%A8%D7%97%D7%95%D7%91%20%D7%90%D7%99%D7%99%D7%A8%20%D7%A9%D7%99%D7%9E%D7%95%D7%A9%D7%99%20%D7%A7%D7%A8%D7%A7%D7%A2%20%D7%9E%D7%A1%D7%97%D7%A8%20%D7%A9%D7%99%D7%A8%D7%95%D7%AA%D7%99%D7%9D\"}"
+      },
+      "metadata": {
+        "toolName": "web_search",
+        "latencyMs": 484
+      }
+    },
+    {
+      "traceId": "trace_1766391957008_82hndre",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:25:57.008Z",
+      "type": "tool_call",
+      "data": {
+        "toolName": "web_search",
+        "input": {
+          "query": "קריית שרונים נתניה מאפיינים סביבה אזור",
+          "num_results": 5
+        }
+      },
+      "metadata": {
+        "toolName": "web_search"
+      }
+    },
+    {
+      "traceId": "trace_1766391957232_q4zwy6v",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:25:57.232Z",
+      "type": "tool_result",
+      "data": {
+        "toolName": "web_search",
+        "result": "{\"success\":true,\"query\":\"קריית שרונים נתניה מאפיינים סביבה אזור\",\"resultsCount\":0,\"message\":\"לא נמצאו תוצאות ישירות. נסה לנסח את השאילתה באנגלית או בצורה אחרת.\",\"suggestion\":\"ניתן לחפש ידנית ב: https://www.google.com/search?q=%D7%A7%D7%A8%D7%99%D7%99%D7%AA%20%D7%A9%D7%A8%D7%95%D7%A0%D7%99%D7%9D%20%D7%A0%D7%AA%D7%A0%D7%99%D7%94%20%D7%9E%D7%90%D7%A4%D7%99%D7%99%D7%A0%D7%99%D7%9D%20%D7%A1%D7%91%D7%99%D7%91%D7%94%20%D7%90%D7%96%D7%95%D7%A8\"}"
+      },
+      "metadata": {
+        "toolName": "web_search",
+        "latencyMs": 224
+      }
+    },
+    {
+      "traceId": "trace_1766391961222_8mau1aq",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:26:01.222Z",
+      "type": "tool_call",
+      "data": {
+        "toolName": "web_search",
+        "input": {
+          "query": "Kiryat Sharonim Netanya neighborhood characteristics",
+          "num_results": 5
+        }
+      },
+      "metadata": {
+        "toolName": "web_search"
+      }
+    },
+    {
+      "traceId": "trace_1766391961456_iy3bbwa",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:26:01.456Z",
+      "type": "tool_result",
+      "data": {
+        "toolName": "web_search",
+        "result": "{\"success\":true,\"query\":\"Kiryat Sharonim Netanya neighborhood characteristics\",\"resultsCount\":0,\"message\":\"לא נמצאו תוצאות ישירות. נסה לנסח את השאילתה באנגלית או בצורה אחרת.\",\"suggestion\":\"ניתן לחפש ידנית ב: https://www.google.com/search?q=Kiryat%20Sharonim%20Netanya%20neighborhood%20characteristics\"}"
+      },
+      "metadata": {
+        "toolName": "web_search",
+        "latencyMs": 234
+      }
+    },
+    {
+      "traceId": "trace_1766391973169_k3zytd3",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:26:13.170Z",
+      "type": "assistant_response",
+      "data": {
+        "response": "\n[מבצע: חיפוש באינטרנט...]\n\n[מבצע: חיפוש באינטרנט...]\n\n[מבצע: חיפוש באינטרנט...]\nבסדר, לא מצאתי מידע ספציפי באינטרנט, אבל לפי מה שאמרת - מגורים ומסחר - זה נשמע הגיוני לשכונה עירונית בנתניה.\n\nהנה סעיף 1.1 - תיאור הסביבה מוכן להעתקה:\n\nהנכס ממוקם ברחוב אייר בשכונת קריית שרונים בעיר נתניה. נתניה היא עיר חוף במרכז מישור החוף הישראלי, ומהווה מרכז עירוני אזורי עם מגוון שירותים, תשתיות ציבוריות ומוקדי תעסוקה.\n\nהשכונה מאופיינת בבנייה רב-קומתית למגורים, והסביבה הקרובה משלבת שימושי מגורים ומסחר. הנגישות התחבורתית לאזור היא טובה, והסביבה מהווה חלק מרקמה העירוני המפותח של נתניה.\n\nהאם הסעיף מתאים לך או שתרצה שינויים? אם הכל בסדר, נעבור לסעיף 1.2 - תיאור החלקה."
+      },
+      "metadata": {
+        "model": "claude-sonnet-4-5-20250929",
+        "inputTokens": 30252,
+        "outputTokens": 676,
+        "latencyMs": 25339
+      }
+    },
+    {
+      "traceId": "trace_1766391988530_hl61qz3",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:26:28.530Z",
+      "type": "user_message",
+      "data": {
+        "message": "כן, בוא נעבור לסעיף 2.",
+        "attachments": []
+      }
+    },
+    {
+      "traceId": "trace_1766392003861_7uxy18l",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:26:43.861Z",
+      "type": "assistant_response",
+      "data": {
+        "response": "מעולה!\n\nעוברים לסעיף 1.2 - תיאור החלקה.\n\nלפני שאכתוב, אני צריך כמה פרטים:\n\nשאלות תכיילות לסעיף 1.2:\n\n1. שטח החלקה: מה שטח החלקה במ\"ר? (אם אתה לא בטוח, אני יכול לנסות לשלוף מנסח הטאבו)\n\n2. צורת החלקה: מה צורת החלקה? (למשל: מלבנית, מרובעת, לא סדירה)\n\n3. טופוגרפיה: מה מצב הקרקע? (למשל: מישורית, מדרון קל, שיפועים)\n\n4. בנייה על החלקה: מה בנוי על החלקה? (למשל: בניין מגורים אחד, מספר בניינים, כמה קומות)\n\n5. חזיתות ופתיחות: האם לחלקה יש חזית לרחוב? כמה חזיתות? \n\n6. מאפיינים נוספים: האם יש מאפיינים פיזיים מיוחדים בחלקה? (למשל: גינה משותפת, חניון, שטחים פתוחים)\n\nתן לי את המידע שיש ברשותך ואני אשלוף מהטאבו מה שניתן."
+      },
+      "metadata": {
+        "model": "claude-sonnet-4-5-20250929",
+        "inputTokens": 9837,
+        "outputTokens": 443,
+        "latencyMs": 15343
+      }
+    },
+    {
+      "traceId": "trace_1766392053334_q14ot25",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:27:33.334Z",
+      "type": "voice_transcription",
+      "data": {
+        "audioFileName": "recording.webm",
+        "transcribedText": "לגבי כל שעני לא יודעתי שם משהו גנבי"
+      },
+      "metadata": {
+        "fileName": "recording.webm",
+        "latencyMs": 1812
+      }
+    },
+    {
+      "traceId": "trace_1766392070083_dmffoz5",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:27:50.083Z",
+      "type": "user_message",
+      "data": {
+        "message": "1. שלוף מהטאבו. 2. מלבנית. טופו- מישורית.  לגבי כל השאר אני לא יודע, תרשום משהו גנרי",
+        "attachments": []
+      }
+    },
+    {
+      "traceId": "trace_1766392076129_qwi0fx1",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:27:56.129Z",
+      "type": "tool_call",
+      "data": {
+        "toolName": "get_extracted_data",
+        "input": {
+          "document_type": "tabu",
+          "field_ids": [
+            "TA13",
+            "TA14",
+            "TA15"
+          ]
+        }
+      },
+      "metadata": {
+        "toolName": "get_extracted_data"
+      }
+    },
+    {
+      "traceId": "trace_1766392076137_105q98k",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:27:56.137Z",
+      "type": "tool_result",
+      "data": {
+        "toolName": "get_extracted_data",
+        "result": "{\"success\":true,\"documentType\":\"tabu\",\"data\":{\"TA24\":{\"name\":\"גוש\",\"value\":\"9905\",\"source\":\"session\"},\"TA25\":{\"name\":\"חלקה\",\"value\":\"88\",\"source\":\"session\"}},\"extractionCount\":0}"
+      },
+      "metadata": {
+        "toolName": "get_extracted_data",
+        "latencyMs": 8
+      }
+    },
+    {
+      "traceId": "trace_1766392080454_6xco0d2",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:28:00.454Z",
+      "type": "tool_call",
+      "data": {
+        "toolName": "search_documents",
+        "input": {
+          "query": "שטח חלקה מ\"ר",
+          "document_type": "tabu"
+        }
+      },
+      "metadata": {
+        "toolName": "search_documents"
+      }
+    },
+    {
+      "traceId": "trace_1766392080460_pupsshl",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:28:00.460Z",
+      "type": "tool_result",
+      "data": {
+        "toolName": "search_documents",
+        "result": "{\"success\":true,\"query\":\"שטח חלקה מ\\\"ר\",\"resultsCount\":0,\"results\":[]}"
+      },
+      "metadata": {
+        "toolName": "search_documents",
+        "latencyMs": 6
+      }
+    },
+    {
+      "traceId": "trace_1766392083747_ktvadka",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:28:03.747Z",
+      "type": "tool_call",
+      "data": {
+        "toolName": "get_document_content",
+        "input": {
+          "document_type": "tabu"
+        }
+      },
+      "metadata": {
+        "toolName": "get_document_content"
+      }
+    },
+    {
+      "traceId": "trace_1766392083753_zpxr7y4",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:28:03.753Z",
+      "type": "tool_result",
+      "data": {
+        "toolName": "get_document_content",
+        "result": "{\"success\":false,\"error\":\"לא נמצא מסמך מסוג tabu\"}"
+      },
+      "metadata": {
+        "toolName": "get_document_content",
+        "latencyMs": 6
+      }
+    },
+    {
+      "traceId": "trace_1766392087183_2d04blj",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:28:07.183Z",
+      "type": "tool_call",
+      "data": {
+        "toolName": "search_documents",
+        "input": {
+          "query": "שטח",
+          "document_type": "tabu"
+        }
+      },
+      "metadata": {
+        "toolName": "search_documents"
+      }
+    },
+    {
+      "traceId": "trace_1766392087190_hqf7r0f",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:28:07.190Z",
+      "type": "tool_result",
+      "data": {
+        "toolName": "search_documents",
+        "result": "{\"success\":true,\"query\":\"שטח\",\"resultsCount\":0,\"results\":[]}"
+      },
+      "metadata": {
+        "toolName": "search_documents",
+        "latencyMs": 7
+      }
+    },
+    {
+      "traceId": "trace_1766392096263_p3gd4z0",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:28:16.263Z",
+      "type": "assistant_response",
+      "data": {
+        "response": "\n[מבצע: שליפת נתונים...]\n\n[מבצע: חיפוש במסמכים...]\n\n[מבצע: קריאת מסמך...]\n\n[מבצע: חיפוש במסמכים...]\nבסדר, לא מצאתי את שטח החלקה בנסח הטאבו הקיים. \n\nבלי שטח מדויק של החלקה, אני לא יכול לכתוב את הסעיף בצורה מקצועית - זה נתון בסיסי וחובה בשומה.\n\nיש לך אחת משתי אפשרויות:\n\n1. לבדוק את שטח החלקה - המידע צריך להופיע בנסח הטאבו, בדף הראשון בדרך כלל ליד פרטי הגוש והחלקה, או בטבלת הזכויות.\n\n2. להעלות את נסח הטאבו המלא למערכת כדי שאוכל לשלוף את השטח ממנו.\n\nמה אתה מעדיף?"
+      },
+      "metadata": {
+        "model": "claude-sonnet-4-5-20250929",
+        "inputTokens": 53019,
+        "outputTokens": 570,
+        "latencyMs": 26197
+      }
+    },
+    {
+      "traceId": "trace_1766392178291_widez8k",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:29:38.291Z",
+      "type": "file_upload",
+      "data": {
+        "fileName": "Haaer_Netanya_Building_Permit_001.pdf",
+        "fileType": "application/pdf",
+        "fileSize": 180641
+      },
+      "metadata": {
+        "fileName": "Haaer_Netanya_Building_Permit_001.pdf",
+        "fileType": "application/pdf",
+        "fileSize": 180641
+      }
+    },
+    {
+      "traceId": "trace_1766392178308_bdg8qk2",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:29:38.308Z",
+      "type": "user_message",
+      "data": {
+        "message": "תבדוק כאן",
+        "attachments": [
+          {
+            "name": "Haaer_Netanya_Building_Permit_001.pdf",
+            "type": "application/pdf",
+            "size": 180641
+          }
+        ]
+      }
+    },
+    {
+      "traceId": "trace_1766392187454_lcwc3ux",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:29:47.454Z",
+      "type": "tool_call",
+      "data": {
+        "toolName": "get_extracted_data",
+        "input": {
+          "document_type": "tabu",
+          "field_ids": [
+            "TA7"
+          ]
+        }
+      },
+      "metadata": {
+        "toolName": "get_extracted_data"
+      }
+    },
+    {
+      "traceId": "trace_1766392187463_x20zpz4",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:29:47.463Z",
+      "type": "tool_result",
+      "data": {
+        "toolName": "get_extracted_data",
+        "result": "{\"success\":true,\"documentType\":\"tabu\",\"data\":{\"TA24\":{\"name\":\"גוש\",\"value\":\"9905\",\"source\":\"session\"},\"TA25\":{\"name\":\"חלקה\",\"value\":\"88\",\"source\":\"session\"}},\"extractionCount\":0}"
+      },
+      "metadata": {
+        "toolName": "get_extracted_data",
+        "latencyMs": 9
+      }
+    },
+    {
+      "traceId": "trace_1766392187478_f6bpipt",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:29:47.478Z",
+      "type": "tool_call",
+      "data": {
+        "toolName": "search_documents",
+        "input": {
+          "query": "שטח החלקה מ\"ר",
+          "document_type": "tabu"
+        }
+      },
+      "metadata": {
+        "toolName": "search_documents"
+      }
+    },
+    {
+      "traceId": "trace_1766392187491_3eb5dzy",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:29:47.491Z",
+      "type": "tool_result",
+      "data": {
+        "toolName": "search_documents",
+        "result": "{\"success\":true,\"query\":\"שטח החלקה מ\\\"ר\",\"resultsCount\":0,\"results\":[]}"
+      },
+      "metadata": {
+        "toolName": "search_documents",
+        "latencyMs": 13
+      }
+    },
+    {
+      "traceId": "trace_1766392191469_qgptrxa",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:29:51.469Z",
+      "type": "tool_call",
+      "data": {
+        "toolName": "get_document_content",
+        "input": {
+          "document_type": "tabu"
+        }
+      },
+      "metadata": {
+        "toolName": "get_document_content"
+      }
+    },
+    {
+      "traceId": "trace_1766392191476_v53w97d",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:29:51.476Z",
+      "type": "tool_result",
+      "data": {
+        "toolName": "get_document_content",
+        "result": "{\"success\":false,\"error\":\"לא נמצא מסמך מסוג tabu\"}"
+      },
+      "metadata": {
+        "toolName": "get_document_content",
+        "latencyMs": 7
+      }
+    },
+    {
+      "traceId": "trace_1766392195718_6hybsv7",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:29:55.719Z",
+      "type": "tool_call",
+      "data": {
+        "toolName": "search_documents",
+        "input": {
+          "query": "4368.20",
+          "document_type": "all"
+        }
+      },
+      "metadata": {
+        "toolName": "search_documents"
+      }
+    },
+    {
+      "traceId": "trace_1766392195724_9pgi8ag",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:29:55.724Z",
+      "type": "tool_result",
+      "data": {
+        "toolName": "search_documents",
+        "result": "{\"success\":true,\"query\":\"4368.20\",\"resultsCount\":0,\"results\":[]}"
+      },
+      "metadata": {
+        "toolName": "search_documents",
+        "latencyMs": 6
+      }
+    },
+    {
+      "traceId": "trace_1766392208607_01xl395",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:30:08.607Z",
+      "type": "assistant_response",
+      "data": {
+        "response": "\n[מבצע: שליפת נתונים...]\n\n[מבצע: חיפוש במסמכים...]\n\n[מבצע: קריאת מסמך...]\n\n[מבצע: חיפוש במסמכים...]\nמצוין! מצאתי בהיתר הבנייה שהעלית.\n\nלפי המסמך, שטח החלקה הוא 4,368.20 מ\"ר (רואים זאת בטבלה בעמוד 2: \"כמות: 4,368.20, יחידה: מ\"ר\").\n\nעכשיו אני יכול לכתוב את הסעיף. רק תזכיר לי:\n- לגבי הבנייה על החלקה - אתה אמרת שאתה לא יודע. האם אתה רוצה שאכתוב משהו גנרי כמו \"על החלקה בנוי בניין מגורים רב-קומתי\"?\n- לגבי חזיתות - גם לא יודע, נכון? אז אני אשמיט את זה.\n- מאפיינים נוספים - גם אין מידע ספציפי.\n\nאשתמש במידע הזה ואכתוב סעיף קצר ותמציתי כמו שביקשת. מאשר?"
+      },
+      "metadata": {
+        "model": "claude-sonnet-4-5-20250929",
+        "inputTokens": 75639,
+        "outputTokens": 611,
+        "latencyMs": 30333
+      }
+    },
+    {
+      "traceId": "trace_1766392223919_t7iugfw",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:30:23.919Z",
+      "type": "user_message",
+      "data": {
+        "message": "כן. סומך עלייך",
+        "attachments": []
+      }
+    },
+    {
+      "traceId": "trace_1766392233255_ufluinx",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:30:33.255Z",
+      "type": "assistant_response",
+      "data": {
+        "response": "מעולה! הנה סעיף 1.2 - תיאור החלקה מוכן להעתקה:\n\nנשוא השומה ממוקם בחלקה 88 בגוש 9905. שטח החלקה הוא 4,368.20 מ\"ר. החלקה בעלת צורה מלבנית ומצויה על קרקע מישורית.\n\nעל החלקה בנוי בניין מגורים רב-קומתי. החלקה מהווה חלק מרקמה העירוני הבנוי של השכונה.\n\nהאם הסעיף מתאים? אם כן, נעבור לסעיף 1.3 - תיאור נשוא השומה."
+      },
+      "metadata": {
+        "model": "claude-sonnet-4-5-20250929",
+        "inputTokens": 11100,
+        "outputTokens": 227,
+        "latencyMs": 9344
+      }
+    },
+    {
+      "traceId": "trace_1766392240982_1xvm2cj",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:30:40.982Z",
+      "type": "user_message",
+      "data": {
+        "message": "טיל. נעבור הלאה",
+        "attachments": []
+      }
+    },
+    {
+      "traceId": "trace_1766392257607_gg13pm9",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:30:57.607Z",
+      "type": "assistant_response",
+      "data": {
+        "response": "מעולה!\n\nעוברים לסעיף 1.3 - תיאור נשוא השומה.\n\nזה הסעיף החשוב ביותר - תיאור היחידה עצמה. אני צריך פרטים מדויקים:\n\nשאלות תכיילות לסעיף 1.3:\n\n1. סוג הנכס: מה בדיוק נשוא השומה? (דירת מגורים, דירת גן, פנטהאוז, משרד, חנות?)\n\n2. מיקום ביחידה: באיזו קומה? (קומת קרקע, קומה X, קומה אחרונה?)\n\n3. שטחים: \n   - שטח עיקרי (נטו) של הדירה?\n   - שטח מרפסות (אם יש)?\n   - שטחי שירות/מחסן (אם יש)?\n\n4. חלוקה פנימית: כמה חדרים? איך הדירה מחולקת? (למשל: 4 חדרים, סלון, מטבח, 2 חדרי שינה, חדר רחצה)\n\n5. חזיתות וכיוון: לאיזה כיוון פונה הדירה? (צפון/דרום/מזרח/מערב, נוף לים/עיר/פנימי)\n\n6. מצב הנכס: מה מצב הדירה? (משופצת, מקורית, דורשת שיפוץ, חדשה)\n\n7. נלוות: מה כלול? (מחסן, חניה, מעלית בבניין?)\n\nתן לי את כל הפרטים שיש ברשותך, ואם משהו לא ידוע - תגיד לי ואני אשמיט."
+      },
+      "metadata": {
+        "model": "claude-sonnet-4-5-20250929",
+        "inputTokens": 11338,
+        "outputTokens": 547,
+        "latencyMs": 16633
+      }
+    },
+    {
+      "traceId": "trace_1766392290733_thku779",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:31:30.733Z",
+      "type": "file_upload",
+      "data": {
+        "fileName": "Haaer_Netanya_Building_Permit_001.pdf",
+        "fileType": "application/pdf",
+        "fileSize": 180641
+      },
+      "metadata": {
+        "fileName": "Haaer_Netanya_Building_Permit_001.pdf",
+        "fileType": "application/pdf",
+        "fileSize": 180641
+      }
+    },
+    {
+      "traceId": "trace_1766392290741_lqr793y",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:31:30.741Z",
+      "type": "file_upload",
+      "data": {
+        "fileName": "Haaer_Netanya_Building_Permit_002.pdf",
+        "fileType": "application/pdf",
+        "fileSize": 166952
+      },
+      "metadata": {
+        "fileName": "Haaer_Netanya_Building_Permit_002.pdf",
+        "fileType": "application/pdf",
+        "fileSize": 166952
+      }
+    },
+    {
+      "traceId": "trace_1766392290752_j32qvmv",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:31:30.752Z",
+      "type": "file_upload",
+      "data": {
+        "fileName": "Haaer_Netanya_External_Image_001.jpg",
+        "fileType": "image/jpeg",
+        "fileSize": 272118
+      },
+      "metadata": {
+        "fileName": "Haaer_Netanya_External_Image_001.jpg",
+        "fileType": "image/jpeg",
+        "fileSize": 272118
+      }
+    },
+    {
+      "traceId": "trace_1766392290766_ya2huzm",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:31:30.766Z",
+      "type": "file_upload",
+      "data": {
+        "fileName": "Haaer_Netanya_Internal_Image_001.jpg",
+        "fileType": "image/jpeg",
+        "fileSize": 140616
+      },
+      "metadata": {
+        "fileName": "Haaer_Netanya_Internal_Image_001.jpg",
+        "fileType": "image/jpeg",
+        "fileSize": 140616
+      }
+    },
+    {
+      "traceId": "trace_1766392290779_1uj4jmx",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:31:30.779Z",
+      "type": "file_upload",
+      "data": {
+        "fileName": "Haaer_Netanya_Internal_Image_002.jpg",
+        "fileType": "image/jpeg",
+        "fileSize": 135634
+      },
+      "metadata": {
+        "fileName": "Haaer_Netanya_Internal_Image_002.jpg",
+        "fileType": "image/jpeg",
+        "fileSize": 135634
+      }
+    },
+    {
+      "traceId": "trace_1766392290788_m57fz6y",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:31:30.788Z",
+      "type": "file_upload",
+      "data": {
+        "fileName": "Haaer_Netanya_Internal_Image_003.jpg",
+        "fileType": "image/jpeg",
+        "fileSize": 135226
+      },
+      "metadata": {
+        "fileName": "Haaer_Netanya_Internal_Image_003.jpg",
+        "fileType": "image/jpeg",
+        "fileSize": 135226
+      }
+    },
+    {
+      "traceId": "trace_1766392290801_8s0d99d",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:31:30.801Z",
+      "type": "file_upload",
+      "data": {
+        "fileName": "Haaer_Netanya_Internal_Image_004.jpg",
+        "fileType": "image/jpeg",
+        "fileSize": 160066
+      },
+      "metadata": {
+        "fileName": "Haaer_Netanya_Internal_Image_004.jpg",
+        "fileType": "image/jpeg",
+        "fileSize": 160066
+      }
+    },
+    {
+      "traceId": "trace_1766392290814_gnz4yvo",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:31:30.814Z",
+      "type": "file_upload",
+      "data": {
+        "fileName": "Haaer_Netanya_Internal_Image_005.jpg",
+        "fileType": "image/jpeg",
+        "fileSize": 112070
+      },
+      "metadata": {
+        "fileName": "Haaer_Netanya_Internal_Image_005.jpg",
+        "fileType": "image/jpeg",
+        "fileSize": 112070
+      }
+    },
+    {
+      "traceId": "trace_1766392290827_t00zzni",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:31:30.827Z",
+      "type": "file_upload",
+      "data": {
+        "fileName": "Haaer_Netanya_Internal_Image_006.jpg",
+        "fileType": "image/jpeg",
+        "fileSize": 163081
+      },
+      "metadata": {
+        "fileName": "Haaer_Netanya_Internal_Image_006.jpg",
+        "fileType": "image/jpeg",
+        "fileSize": 163081
+      }
+    },
+    {
+      "traceId": "trace_1766392290841_9wqy9o7",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:31:30.841Z",
+      "type": "file_upload",
+      "data": {
+        "fileName": "Haaer_Netanya_Internal_Image_007.jpg",
+        "fileType": "image/jpeg",
+        "fileSize": 174210
+      },
+      "metadata": {
+        "fileName": "Haaer_Netanya_Internal_Image_007.jpg",
+        "fileType": "image/jpeg",
+        "fileSize": 174210
+      }
+    },
+    {
+      "traceId": "trace_1766392290855_tt65ct8",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:31:30.855Z",
+      "type": "file_upload",
+      "data": {
+        "fileName": "Haaer_Netanya_Shared_Building_Order_001.pdf",
+        "fileType": "application/pdf",
+        "fileSize": 755585
+      },
+      "metadata": {
+        "fileName": "Haaer_Netanya_Shared_Building_Order_001.pdf",
+        "fileType": "application/pdf",
+        "fileSize": 755585
+      }
+    },
+    {
+      "traceId": "trace_1766392290865_z6d7ddi",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:31:30.865Z",
+      "type": "user_message",
+      "data": {
+        "message": "הנה כל הפרטים שיש לי. תבנה מזה משהו",
+        "attachments": [
+          {
+            "name": "Haaer_Netanya_Building_Permit_001.pdf",
+            "type": "application/pdf",
+            "size": 180641
+          },
+          {
+            "name": "Haaer_Netanya_Building_Permit_002.pdf",
+            "type": "application/pdf",
+            "size": 166952
+          },
+          {
+            "name": "Haaer_Netanya_External_Image_001.jpg",
+            "type": "image/jpeg",
+            "size": 272118
+          },
+          {
+            "name": "Haaer_Netanya_Internal_Image_001.jpg",
+            "type": "image/jpeg",
+            "size": 140616
+          },
+          {
+            "name": "Haaer_Netanya_Internal_Image_002.jpg",
+            "type": "image/jpeg",
+            "size": 135634
+          },
+          {
+            "name": "Haaer_Netanya_Internal_Image_003.jpg",
+            "type": "image/jpeg",
+            "size": 135226
+          },
+          {
+            "name": "Haaer_Netanya_Internal_Image_004.jpg",
+            "type": "image/jpeg",
+            "size": 160066
+          },
+          {
+            "name": "Haaer_Netanya_Internal_Image_005.jpg",
+            "type": "image/jpeg",
+            "size": 112070
+          },
+          {
+            "name": "Haaer_Netanya_Internal_Image_006.jpg",
+            "type": "image/jpeg",
+            "size": 163081
+          },
+          {
+            "name": "Haaer_Netanya_Internal_Image_007.jpg",
+            "type": "image/jpeg",
+            "size": 174210
+          },
+          {
+            "name": "Haaer_Netanya_Shared_Building_Order_001.pdf",
+            "type": "application/pdf",
+            "size": 755585
+          }
+        ]
+      }
+    },
+    {
+      "traceId": "trace_1766392303567_c0ro421",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:31:43.567Z",
+      "type": "tool_call",
+      "data": {
+        "toolName": "get_extracted_data",
+        "input": {
+          "document_type": "all"
+        }
+      },
+      "metadata": {
+        "toolName": "get_extracted_data"
+      }
+    },
+    {
+      "traceId": "trace_1766392303574_q2c0znb",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:31:43.574Z",
+      "type": "tool_result",
+      "data": {
+        "toolName": "get_extracted_data",
+        "result": "{\"success\":true,\"documentType\":\"all\",\"data\":{\"gush\":9905,\"parcel\":88,\"builtArea\":\"לא נמצא\",\"attachments\":\"חניה\",\"balconyArea\":0,\"finishLevel\":\"לא נמצא\",\"sharedAreas\":\"לא נמצא\",\"buildingType\":\"בניין מגורים\",\"buildingYear\":\"לא נמצא\",\"permittedUse\":\"הקמת בית מגורים משותף (בניין מס' 11) בן 7 ק.+ ק.ק. +ח.טכני על הגג סה\\\"כ 26 יח\\\"ד המכיל : שטחי עזר (ח. אשפה ,גז ,מחסנים) 183.46 מ\\\"ר ; מעליות וצנרת 12.79 מ\\\"ר ; ממ\\\"דים 312.0 מ\\\"ר ; מגורים בשטח 2735.33 מ\\\"ר ; מרפסות פתוחות 486.02 מ\\\"ר ;הול כניסה וח.מדרגות 596.67 מ\\\"ר ; ח. מכונות על הגג בשטח 18.44 מ\\\"ר ;בריכת מים ; ק.ע. מפולשת 30.27 מ\\\"ר ; אנטנה ,מערכת סולרית ,גדרות ופתוח ;הכל בהתאם לתכנית.\",\"buildingUnits\":55,\"land_registry\":{\"gush\":9905,\"floor\":\"שניה\",\"chelka\":88,\"owners\":[{\"name\":\"רגב אלמוג\",\"id_number\":\"025281759\",\"ownership_share\":\"1/2\"},{\"name\":\"רגב אירית\",\"id_number\":\"037819331\",\"ownership_share\":\"1/2\"}],\"rights\":null,\"mortgages\":[],\"confidence\":98,\"issue_date\":null,\"plot_notes\":null,\"sub_chelka\":8,\"attachments\":[{\"area\":10.3,\"type\":\"חניה\",\"color\":\"חום\",\"symbol\":\"טו\",\"description\":\"חניה\"}],\"balcony_area\":null,\"owners_count\":null,\"document_type\":null,\"mortgage_rank\":null,\"ownership_type\":\"בעלות\",\"building_number\":\"I\",\"buildings_count\":null,\"mortgage_amount\":null,\"registered_area\":104.3,\"shared_property\":null,\"sub_plots_count\":null,\"additional_areas\":[],\"attachments_area\":null,\"mortgage_essence\":null,\"mortgage_lenders\":null,\"unit_description\":null,\"address_from_tabu\":\"אייר 11, נתניה\",\"easements_essence\":null,\"notes_action_type\":null,\"notes_beneficiary\":null,\"tabu_extract_date\":null,\"mortgage_borrowers\":null,\"registration_office\":\"נתניה\",\"easements_description\":null,\"attachments_description\":null,\"mortgage_property_share\":null,\"apartment_registered_area\":104.3},\"ownershipType\":\"בעלות\",\"buildingFloors\":\"לא נמצא\",\"buildingNumber\":\"I\",\"buildingRights\":\"הקמת בית מגורים משותף (בניין מס' 11) בן 7 ק.+ ק.ק. +ח.טכני על הגג סה\\\"כ 26 יח\\\"ד המכיל : שטחי עזר (ח. אשפה ,גז ,מחסנים) 183.46 מ\\\"ר ; מעליות וצנרת 12.79 מ\\\"ר ; ממ\\\"דים 312.0 מ\\\"ר ; מגורים בשטח 2735.33 מ\\\"ר ; מרפסות פתוחות 486.02 מ\\\"ר ;הול כניסה וח.מדרגות 596.67 מ\\\"ר ; ח. מכונות על הגג בשטח 18.44 מ\\\"ר ;בריכת מים ; ק.ע. מפולשת 30.27 מ\\\"ר ; אנטנה ,מערכת סולרית ,גדרות ופתוח ;הכל בהתאם לתכנית.\",\"registeredArea\":104.3,\"building_permit\":{\"gush\":9905,\"chelka\":30,\"confidence\":90,\"sub_chelka\":null,\"permit_date\":null,\"permit_number\":\"140008\",\"permitted_usage\":\"הקמת בית מגורים משותף (בניין מס' 11) בן 7 ק.+ ק.ק. +ח.טכני על הגג סה\\\"כ 26 יח\\\"ד המכיל : שטחי עזר (ח. אשפה ,גז ,מחסנים) 183.46 מ\\\"ר ; מעליות וצנרת 12.79 מ\\\"ר ; ממ\\\"דים 312.0 מ\\\"ר ; מגורים בשטח 2735.33 מ\\\"ר ; מרפסות פתוחות 486.02 מ\\\"ר ;הול כניסה וח.מדרגות 596.67 מ\\\"ר ; ח. מכונות על הגג בשטח 18.44 מ\\\"ר ;בריכת מים ; ק.ע. מפולשת 30.27 מ\\\"ר ; אנטנה ,מערכת סולרית ,גדרות ופתוח ;הכל בהתאם לתכנית.\",\"property_address\":\"דרך הפארק\",\"permit_issue_date\":\"08/01/2009\",\"building_description\":\"הקמת בית מגורים משותף (בניין מס' 11) בן 7 ק.+ ק.ק. +ח.טכני על הגג סה\\\"כ 26 יח\\\"ד\",\"local_committee_name\":\"הועדה המקומית לתכנון ובניה נתניה\"},\"shared_building\":{\"rawData\":{\"model\":\"gemini-3-pro-preview\",\"method\":\"gemini_3_pro_preview\",\"sub_plots\":{\"count\":55,\"value\":[{\"area\":114.7,\"floor\":\"קרקע\",\"attachments\":[{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"כתום\",\"diagram_symbol\":\"א\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"כתום\",\"diagram_symbol\":\"ב\"},{\"area\":3.8,\"description\":\"מחסן\",\"diagram_color\":\"כתום\",\"diagram_symbol\":\"ג\"},{\"area\":132.7,\"description\":\"קרקע\",\"diagram_color\":\"כתום\",\"diagram_symbol\":\"ד\"}],\"description\":\"דירה\",\"building_number\":\"I\",\"sub_plot_number\":1,\"non_attachment_areas\":[],\"shared_property_parts\":\"115/5975\"},{\"area\":103.6,\"floor\":\"קרקע\",\"attachments\":[{\"area\":11.2,\"description\":\"חניה\",\"diagram_color\":\"צהוב\",\"diagram_symbol\":\"ה\"},{\"area\":2.5,\"description\":\"מחסן\",\"diagram_color\":\"צהוב\",\"diagram_symbol\":\"ו\"},{\"area\":150,\"description\":\"קרקע\",\"diagram_color\":\"צהוב\",\"diagram_symbol\":\"ז\"}],\"description\":\"דירה\",\"building_number\":\"I\",\"sub_plot_number\":2,\"non_attachment_areas\":[],\"shared_property_parts\":\"104/5975\"},{\"area\":116.2,\"floor\":\"ראשונה\",\"attachments\":[{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"ירוק\",\"diagram_symbol\":\"ח\"}],\"description\":\"דירה\",\"building_number\":\"I\",\"sub_plot_number\":3,\"non_attachment_areas\":[{\"area\":8.5,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"116/5975\"},{\"area\":105.1,\"floor\":\"ראשונה\",\"attachments\":[{\"area\":12.5,\"description\":\"חניה\",\"diagram_color\":\"תכלת\",\"diagram_symbol\":\"ט\"},{\"area\":3.2,\"description\":\"מחסן\",\"diagram_color\":\"תכלת\",\"diagram_symbol\":\"י\"}],\"description\":\"דירה\",\"building_number\":\"I\",\"sub_plot_number\":4,\"non_attachment_areas\":[{\"area\":8.5,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"105/5975\"},{\"area\":104.4,\"floor\":\"שניה\",\"attachments\":[{\"area\":10.7,\"description\":\"חניה\",\"diagram_color\":\"סגול\",\"diagram_symbol\":\"יא\"}],\"description\":\"דירה\",\"building_number\":\"I\",\"sub_plot_number\":5,\"non_attachment_areas\":[{\"area\":9.8,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"104/5975\"},{\"area\":104.4,\"floor\":\"שניה\",\"attachments\":[{\"area\":23.3,\"description\":\"חניה\",\"diagram_color\":\"כחול\",\"diagram_symbol\":\"יב\"}],\"description\":\"דירה\",\"building_number\":\"I\",\"sub_plot_number\":6,\"non_attachment_areas\":[{\"area\":9.8,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"104/5975\"},{\"area\":115.9,\"floor\":\"שניה\",\"attachments\":[{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"אדום\",\"diagram_symbol\":\"יג\"},{\"area\":3.9,\"description\":\"מחסן\",\"diagram_color\":\"אדום\",\"diagram_symbol\":\"יד\"}],\"description\":\"דירה\",\"building_number\":\"I\",\"sub_plot_number\":7,\"non_attachment_areas\":[{\"area\":10.1,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"116/5975\"},{\"area\":104.3,\"floor\":\"שניה\",\"attachments\":[{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"חום\",\"diagram_symbol\":\"טו\"}],\"description\":\"דירה\",\"building_number\":\"I\",\"sub_plot_number\":8,\"non_attachment_areas\":[{\"area\":10.3,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"104/5975\"},{\"area\":103.7,\"floor\":\"שלישית\",\"attachments\":[{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"כתום\",\"diagram_symbol\":\"טז\"},{\"area\":7.2,\"description\":\"מחסן\",\"diagram_color\":\"כתום\",\"diagram_symbol\":\"יז\"}],\"description\":\"דירה\",\"building_number\":\"I\",\"sub_plot_number\":9,\"non_attachment_areas\":[{\"area\":9.5,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"104/5975\"},{\"area\":103.7,\"floor\":\"שלישית\",\"attachments\":[{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"צהוב\",\"diagram_symbol\":\"יח\"},{\"area\":7.2,\"description\":\"מחסן\",\"diagram_color\":\"צהוב\",\"diagram_symbol\":\"יט\"}],\"description\":\"דירה\",\"building_number\":\"I\",\"sub_plot_number\":10,\"non_attachment_areas\":[{\"area\":9.5,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"104/5975\"},{\"area\":116.2,\"floor\":\"שלישית\",\"attachments\":[{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"ירוק\",\"diagram_symbol\":\"כ\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"ירוק\",\"diagram_symbol\":\"כא\"},{\"area\":4.7,\"description\":\"מחסן\",\"diagram_color\":\"ירוק\",\"diagram_symbol\":\"כב\"}],\"description\":\"דירה\",\"building_number\":\"I\",\"sub_plot_number\":11,\"non_attachment_areas\":[{\"area\":8.5,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"116/5975\"},{\"area\":105.1,\"floor\":\"שלישית\",\"attachments\":[{\"area\":11.2,\"description\":\"חניה\",\"diagram_color\":\"תכלת\",\"diagram_symbol\":\"כג\"},{\"area\":5,\"description\":\"מחסן\",\"diagram_color\":\"תכלת\",\"diagram_symbol\":\"כד\"}],\"description\":\"דירה\",\"building_number\":\"I\",\"sub_plot_number\":12,\"non_attachment_areas\":[{\"area\":8.5,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"105/5975\"},{\"area\":104.4,\"floor\":\"רביעית\",\"attachments\":[{\"area\":10.7,\"description\":\"חניה\",\"diagram_color\":\"סגול\",\"diagram_symbol\":\"כה\"},{\"area\":5,\"description\":\"מחסן\",\"diagram_color\":\"סגול\",\"diagram_symbol\":\"כו\"}],\"description\":\"דירה\",\"building_number\":\"I\",\"sub_plot_number\":13,\"non_attachment_areas\":[{\"area\":9.8,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"104/5975\"},{\"area\":104.4,\"floor\":\"רביעית\",\"attachments\":[{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"כחול\",\"diagram_symbol\":\"כז\"},{\"area\":3.2,\"description\":\"מחסן\",\"diagram_color\":\"כחול\",\"diagram_symbol\":\"כח\"}],\"description\":\"דירה\",\"building_number\":\"I\",\"sub_plot_number\":14,\"non_attachment_areas\":[{\"area\":9.8,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"104/5975\"},{\"area\":115.9,\"floor\":\"רביעית\",\"attachments\":[{\"area\":12.5,\"description\":\"חניה\",\"diagram_color\":\"אדום\",\"diagram_symbol\":\"כט\"},{\"area\":12.5,\"description\":\"חניה\",\"diagram_color\":\"אדום\",\"diagram_symbol\":\"ל\"},{\"area\":6.5,\"description\":\"מחסן\",\"diagram_color\":\"אדום\",\"diagram_symbol\":\"לא\"}],\"description\":\"דירה\",\"building_number\":\"I\",\"sub_plot_number\":15,\"non_attachment_areas\":[{\"area\":10.1,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"116/5975\"},{\"area\":104.3,\"floor\":\"רביעית\",\"attachments\":[{\"area\":5.9,\"description\":\"מחסן\",\"diagram_color\":\"חום\",\"diagram_symbol\":\"לב\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"חום\",\"diagram_symbol\":\"לג\"},{\"area\":10.8,\"description\":\"חניה\",\"diagram_color\":\"חום\",\"diagram_symbol\":\"לה\"}],\"description\":\"דירה\",\"building_number\":\"I\",\"sub_plot_number\":16,\"non_attachment_areas\":[{\"area\":10.3,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"104/5975\"},{\"area\":103.7,\"floor\":\"חמישית\",\"attachments\":[{\"area\":11.2,\"description\":\"חניה\",\"diagram_color\":\"כתום\",\"diagram_symbol\":\"לו\"}],\"description\":\"דירה\",\"building_number\":\"I\",\"sub_plot_number\":17,\"non_attachment_areas\":[{\"area\":9.5,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"104/5975\"},{\"area\":103.7,\"floor\":\"חמישית\",\"attachments\":[{\"area\":10.8,\"description\":\"חניה\",\"diagram_color\":\"צהוב\",\"diagram_symbol\":\"לז\"},{\"area\":4.7,\"description\":\"מחסן\",\"diagram_color\":\"צהוב\",\"diagram_symbol\":\"לח\"}],\"description\":\"דירה\",\"building_number\":\"I\",\"sub_plot_number\":18,\"non_attachment_areas\":[{\"area\":9.5,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"104/5975\"},{\"area\":116.2,\"floor\":\"חמישית\",\"attachments\":[{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"ירוק\",\"diagram_symbol\":\"לט\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"ירוק\",\"diagram_symbol\":\"מ\"},{\"area\":4.7,\"description\":\"מחסן\",\"diagram_color\":\"ירוק\",\"diagram_symbol\":\"מא\"}],\"description\":\"דירה\",\"building_number\":\"I\",\"sub_plot_number\":19,\"non_attachment_areas\":[{\"area\":8.5,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"116/5975\"},{\"area\":105.1,\"floor\":\"חמישית\",\"attachments\":[{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"תכלת\",\"diagram_symbol\":\"מב\"},{\"area\":6.6,\"description\":\"מחסן\",\"diagram_color\":\"תכלת\",\"diagram_symbol\":\"מג\"}],\"description\":\"דירה\",\"building_number\":\"I\",\"sub_plot_number\":20,\"non_attachment_areas\":[{\"area\":8.5,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"105/5975\"},{\"area\":104.4,\"floor\":\"שישית\",\"attachments\":[{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"סגול\",\"diagram_symbol\":\"מד\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"סגול\",\"diagram_symbol\":\"מה\"},{\"area\":6.6,\"description\":\"מחסן\",\"diagram_color\":\"סגול\",\"diagram_symbol\":\"מו\"}],\"description\":\"דירה\",\"building_number\":\"I\",\"sub_plot_number\":21,\"non_attachment_areas\":[{\"area\":9.8,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"104/5975\"},{\"area\":104.4,\"floor\":\"שישית\",\"attachments\":[{\"area\":11.2,\"description\":\"חניה\",\"diagram_color\":\"כחול\",\"diagram_symbol\":\"מז\"},{\"area\":12.5,\"description\":\"חניה\",\"diagram_color\":\"כחול\",\"diagram_symbol\":\"מח\"},{\"area\":6.5,\"description\":\"מחסן\",\"diagram_color\":\"כחול\",\"diagram_symbol\":\"מט\"}],\"description\":\"דירה\",\"building_number\":\"I\",\"sub_plot_number\":22,\"non_attachment_areas\":[{\"area\":9.8,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"104/5975\"},{\"area\":115.9,\"floor\":\"שישית\",\"attachments\":[{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"אדום\",\"diagram_symbol\":\"נ\"},{\"area\":4.7,\"description\":\"מחסן\",\"diagram_color\":\"אדום\",\"diagram_symbol\":\"נא\"}],\"description\":\"דירה\",\"building_number\":\"I\",\"sub_plot_number\":23,\"non_attachment_areas\":[{\"area\":10.1,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"116/5975\"},{\"area\":104.3,\"floor\":\"שישית\",\"attachments\":[{\"area\":12.5,\"description\":\"חניה\",\"diagram_color\":\"חום\",\"diagram_symbol\":\"נב\"},{\"area\":10.7,\"description\":\"חניה\",\"diagram_color\":\"חום\",\"diagram_symbol\":\"נג\"},{\"area\":3.9,\"description\":\"מחסן\",\"diagram_color\":\"חום\",\"diagram_symbol\":\"נד\"}],\"description\":\"דירה\",\"building_number\":\"I\",\"sub_plot_number\":24,\"non_attachment_areas\":[{\"area\":10.3,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"104/5975\"},{\"area\":122.5,\"floor\":\"שביעית\",\"attachments\":[{\"area\":22.3,\"description\":\"חניה\",\"diagram_color\":\"כתום\",\"diagram_symbol\":\"נה\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"כתום\",\"diagram_symbol\":\"נו\"},{\"area\":6.9,\"description\":\"מחסן\",\"diagram_color\":\"כתום\",\"diagram_symbol\":\"נז\"},{\"area\":86,\"description\":\"מרפסת גג\",\"diagram_color\":\"כתום\",\"diagram_symbol\":\"נח\"}],\"description\":\"דירה\",\"building_number\":\"I\",\"sub_plot_number\":25,\"non_attachment_areas\":[],\"shared_property_parts\":\"123/5975\"},{\"area\":122.7,\"floor\":\"שביעית\",\"attachments\":[{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"צהוב\",\"diagram_symbol\":\"נט\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"צהוב\",\"diagram_symbol\":\"ס\"},{\"area\":6.9,\"description\":\"מחסן\",\"diagram_color\":\"צהוב\",\"diagram_symbol\":\"סא\"},{\"area\":90.2,\"description\":\"מרפסת גג\",\"diagram_color\":\"צהוב\",\"diagram_symbol\":\"סב\"}],\"description\":\"דירה\",\"building_number\":\"I\",\"sub_plot_number\":26,\"non_attachment_areas\":[],\"shared_property_parts\":\"123/5975\"},{\"area\":114.7,\"floor\":\"קרקע\",\"attachments\":[{\"area\":4.7,\"description\":\"מחסן\",\"diagram_color\":\"ירוק\",\"diagram_symbol\":\"סג\"},{\"area\":10.7,\"description\":\"חניה\",\"diagram_color\":\"ירוק\",\"diagram_symbol\":\"סד\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"ירוק\",\"diagram_symbol\":\"סה\"},{\"area\":73.1,\"description\":\"קרקע\",\"diagram_color\":\"ירוק\",\"diagram_symbol\":\"סו\"}],\"description\":\"דירה\",\"building_number\":\"II\",\"sub_plot_number\":27,\"non_attachment_areas\":[],\"shared_property_parts\":\"115/5975\"},{\"area\":103.6,\"floor\":\"קרקע\",\"attachments\":[{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"תכלת\",\"diagram_symbol\":\"סז\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"תכלת\",\"diagram_symbol\":\"סח\"},{\"area\":3.8,\"description\":\"מחסן\",\"diagram_color\":\"תכלת\",\"diagram_symbol\":\"סט\"},{\"area\":152.8,\"description\":\"קרקע\",\"diagram_color\":\"תכלת\",\"diagram_symbol\":\"ע\"}],\"description\":\"דירה\",\"building_number\":\"II\",\"sub_plot_number\":28,\"non_attachment_areas\":[],\"shared_property_parts\":\"104/5975\"},{\"area\":116.2,\"floor\":\"ראשונה\",\"attachments\":[{\"area\":3.9,\"description\":\"מחסן\",\"diagram_color\":\"סגול\",\"diagram_symbol\":\"עא\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"סגול\",\"diagram_symbol\":\"עב\"}],\"description\":\"דירה\",\"building_number\":\"II\",\"sub_plot_number\":29,\"non_attachment_areas\":[{\"area\":8.5,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"116/5975\"},{\"area\":105.1,\"floor\":\"ראשונה\",\"attachments\":[{\"area\":10.8,\"description\":\"חניה\",\"diagram_color\":\"כחול\",\"diagram_symbol\":\"עג\"}],\"description\":\"דירה\",\"building_number\":\"II\",\"sub_plot_number\":30,\"non_attachment_areas\":[{\"area\":8.5,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"105/5975\"},{\"area\":104.4,\"floor\":\"שניה\",\"attachments\":[{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"אדום\",\"diagram_symbol\":\"עד\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"אדום\",\"diagram_symbol\":\"עה\"}],\"description\":\"דירה\",\"building_number\":\"II\",\"sub_plot_number\":31,\"non_attachment_areas\":[{\"area\":9.8,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"104/5975\"},{\"area\":104.4,\"floor\":\"שניה\",\"attachments\":[{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"חום\",\"diagram_symbol\":\"עו\"}],\"description\":\"דירה\",\"building_number\":\"II\",\"sub_plot_number\":32,\"non_attachment_areas\":[{\"area\":9.8,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"104/5975\"},{\"area\":115.9,\"floor\":\"שניה\",\"attachments\":[{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"כתום\",\"diagram_symbol\":\"עח\"},{\"area\":4.7,\"description\":\"מחסן\",\"diagram_color\":\"כתום\",\"diagram_symbol\":\"עז\"}],\"description\":\"דירה\",\"building_number\":\"II\",\"sub_plot_number\":33,\"non_attachment_areas\":[{\"area\":10.1,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"116/5975\"},{\"area\":104.3,\"floor\":\"שניה\",\"attachments\":[{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"צהוב\",\"diagram_symbol\":\"עט\"}],\"description\":\"דירה\",\"building_number\":\"II\",\"sub_plot_number\":34,\"non_attachment_areas\":[{\"area\":10.3,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"104/5975\"},{\"area\":103.7,\"floor\":\"שלישית\",\"attachments\":[{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"ירוק\",\"diagram_symbol\":\"פ\"}],\"description\":\"דירה\",\"building_number\":\"II\",\"sub_plot_number\":35,\"non_attachment_areas\":[{\"area\":9.5,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"104/5975\"},{\"area\":103.7,\"floor\":\"שלישית\",\"attachments\":[{\"area\":11.2,\"description\":\"חניה\",\"diagram_color\":\"תכלת\",\"diagram_symbol\":\"פא\"}],\"description\":\"דירה\",\"building_number\":\"II\",\"sub_plot_number\":36,\"non_attachment_areas\":[{\"area\":9.5,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"104/5975\"},{\"area\":116.2,\"floor\":\"שלישית\",\"attachments\":[{\"area\":3.9,\"description\":\"מחסן\",\"diagram_color\":\"סגול\",\"diagram_symbol\":\"פב\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"סגול\",\"diagram_symbol\":\"פג\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"סגול\",\"diagram_symbol\":\"פד\"}],\"description\":\"דירה\",\"building_number\":\"II\",\"sub_plot_number\":37,\"non_attachment_areas\":[{\"area\":8.5,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"116/5975\"},{\"area\":105.1,\"floor\":\"שלישית\",\"attachments\":[{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"כחול\",\"diagram_symbol\":\"פה\"}],\"description\":\"דירה\",\"building_number\":\"II\",\"sub_plot_number\":38,\"non_attachment_areas\":[{\"area\":8.5,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"105/5975\"},{\"area\":104.4,\"floor\":\"רביעית\",\"attachments\":[{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"אדום\",\"diagram_symbol\":\"פו\"}],\"description\":\"דירה\",\"building_number\":\"II\",\"sub_plot_number\":39,\"non_attachment_areas\":[{\"area\":9.8,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"104/5975\"},{\"area\":104.4,\"floor\":\"רביעית\",\"attachments\":[{\"area\":11.6,\"description\":\"חניה\",\"diagram_color\":\"חום\",\"diagram_symbol\":\"פז\"}],\"description\":\"דירה\",\"building_number\":\"II\",\"sub_plot_number\":40,\"non_attachment_areas\":[{\"area\":9.8,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"104/5975\"},{\"area\":115.9,\"floor\":\"רביעית\",\"attachments\":[{\"area\":4.7,\"description\":\"מחסן\",\"diagram_color\":\"כתום\",\"diagram_symbol\":\"פח\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"כתום\",\"diagram_symbol\":\"פט\"}],\"description\":\"דירה\",\"building_number\":\"II\",\"sub_plot_number\":41,\"non_attachment_areas\":[{\"area\":10.1,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"116/5975\"},{\"area\":104.3,\"floor\":\"רביעית\",\"attachments\":[{\"area\":3.2,\"description\":\"מחסן\",\"diagram_color\":\"צהוב\",\"diagram_symbol\":\"צ\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"צהוב\",\"diagram_symbol\":\"צא\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"צהוב\",\"diagram_symbol\":\"צב\"}],\"description\":\"דירה\",\"building_number\":\"II\",\"sub_plot_number\":42,\"non_attachment_areas\":[{\"area\":10.3,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"104/5975\"},{\"area\":103.7,\"floor\":\"חמישית\",\"attachments\":[{\"area\":3.2,\"description\":\"מחסן\",\"diagram_color\":\"ירוק\",\"diagram_symbol\":\"צג\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"ירוק\",\"diagram_symbol\":\"צד\"}],\"description\":\"דירה\",\"building_number\":\"II\",\"sub_plot_number\":43,\"non_attachment_areas\":[{\"area\":9.5,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"104/5975\"},{\"area\":103.7,\"floor\":\"חמישית\",\"attachments\":[{\"area\":5,\"description\":\"מחסן\",\"diagram_color\":\"תכלת\",\"diagram_symbol\":\"צה\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"תכלת\",\"diagram_symbol\":\"צו\"},{\"area\":10.7,\"description\":\"חניה\",\"diagram_color\":\"תכלת\",\"diagram_symbol\":\"צז\"}],\"description\":\"דירה\",\"building_number\":\"II\",\"sub_plot_number\":44,\"non_attachment_areas\":[{\"area\":9.5,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"104/5975\"},{\"area\":116.2,\"floor\":\"חמישית\",\"attachments\":[{\"area\":6.5,\"description\":\"מחסן\",\"diagram_color\":\"סגול\",\"diagram_symbol\":\"צח\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"סגול\",\"diagram_symbol\":\"צט\"}],\"description\":\"דירה\",\"building_number\":\"II\",\"sub_plot_number\":45,\"non_attachment_areas\":[{\"area\":8.5,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"116/5975\"},{\"area\":105.1,\"floor\":\"חמישית\",\"attachments\":[{\"area\":5,\"description\":\"מחסן\",\"diagram_color\":\"כחול\",\"diagram_symbol\":\"ק\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"כחול\",\"diagram_symbol\":\"קא\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"כחול\",\"diagram_symbol\":\"קב\"}],\"description\":\"דירה\",\"building_number\":\"II\",\"sub_plot_number\":46,\"non_attachment_areas\":[{\"area\":8.5,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"105/5975\"},{\"area\":104.4,\"floor\":\"שישית\",\"attachments\":[{\"area\":6.6,\"description\":\"מחסן\",\"diagram_color\":\"אדום\",\"diagram_symbol\":\"קג\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"אדום\",\"diagram_symbol\":\"קד\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"אדום\",\"diagram_symbol\":\"קה\"}],\"description\":\"דירה\",\"building_number\":\"II\",\"sub_plot_number\":47,\"non_attachment_areas\":[{\"area\":9.8,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"104/5975\"},{\"area\":104.4,\"floor\":\"שישית\",\"attachments\":[{\"area\":4.7,\"description\":\"מחסן\",\"diagram_color\":\"חום\",\"diagram_symbol\":\"קו\"},{\"area\":10.7,\"description\":\"חניה\",\"diagram_color\":\"חום\",\"diagram_symbol\":\"קז\"}],\"description\":\"דירה\",\"building_number\":\"II\",\"sub_plot_number\":48,\"non_attachment_areas\":[{\"area\":9.8,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"104/5975\"},{\"area\":115.9,\"floor\":\"שישית\",\"attachments\":[{\"area\":6.5,\"description\":\"מחסן\",\"diagram_color\":\"כתום\",\"diagram_symbol\":\"קח\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"כתום\",\"diagram_symbol\":\"קט\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"כתום\",\"diagram_symbol\":\"קי\"}],\"description\":\"דירה\",\"building_number\":\"II\",\"sub_plot_number\":49,\"non_attachment_areas\":[{\"area\":10.1,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"116/5975\"},{\"area\":104.3,\"floor\":\"שישית\",\"attachments\":[{\"area\":6.6,\"description\":\"מחסן\",\"diagram_color\":\"צהוב\",\"diagram_symbol\":\"קיא\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"צהוב\",\"diagram_symbol\":\"קיב\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"צהוב\",\"diagram_symbol\":\"קיג\"}],\"description\":\"דירה\",\"building_number\":\"II\",\"sub_plot_number\":50,\"non_attachment_areas\":[{\"area\":10.3,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"104/5975\"},{\"area\":133.2,\"floor\":\"שביעית, שמינית\",\"attachments\":[{\"area\":7.2,\"description\":\"מחסן\",\"diagram_color\":\"ירוק\",\"diagram_symbol\":\"קיד\"},{\"area\":10.8,\"description\":\"חניה\",\"diagram_color\":\"ירוק\",\"diagram_symbol\":\"קטו\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"ירוק\",\"diagram_symbol\":\"קטז\"},{\"area\":76.2,\"description\":\"מרפסת גג\",\"diagram_color\":\"ירוק\",\"diagram_symbol\":\"קיז\"}],\"description\":\"דירת קוטג'\",\"building_number\":\"II\",\"sub_plot_number\":51,\"non_attachment_areas\":[{\"area\":9.5,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"133/5975\"},{\"area\":133.2,\"floor\":\"שביעית, שמינית\",\"attachments\":[{\"area\":7.2,\"description\":\"מחסן\",\"diagram_color\":\"תכלת\",\"diagram_symbol\":\"קיח\"},{\"area\":10.8,\"description\":\"חניה\",\"diagram_color\":\"תכלת\",\"diagram_symbol\":\"קיט\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"תכלת\",\"diagram_symbol\":\"קכ\"},{\"area\":75.8,\"description\":\"מרפסת גג\",\"diagram_color\":\"תכלת\",\"diagram_symbol\":\"קכא\"}],\"description\":\"דירת קוטג'\",\"building_number\":\"II\",\"sub_plot_number\":52,\"non_attachment_areas\":[{\"area\":9.5,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"133/5975\"},{\"area\":139.9,\"floor\":\"שביעית, שמינית\",\"attachments\":[{\"area\":6.9,\"description\":\"מחסן\",\"diagram_color\":\"סגול\",\"diagram_symbol\":\"קכב\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"סגול\",\"diagram_symbol\":\"קכג\"},{\"area\":10.7,\"description\":\"חניה\",\"diagram_color\":\"סגול\",\"diagram_symbol\":\"קכד\"},{\"area\":75.5,\"description\":\"מרפסת גג\",\"diagram_color\":\"סגול\",\"diagram_symbol\":\"קכה\"}],\"description\":\"דירת קוטג'\",\"building_number\":\"II\",\"sub_plot_number\":53,\"non_attachment_areas\":[{\"area\":8.5,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"140/5975\"},{\"area\":139.9,\"floor\":\"שביעית, שמינית\",\"attachments\":[{\"area\":6.9,\"description\":\"מחסן\",\"diagram_color\":\"כחול\",\"diagram_symbol\":\"קכו\"},{\"area\":10.3,\"description\":\"חניה\",\"diagram_color\":\"כחול\",\"diagram_symbol\":\"קכז\"},{\"area\":10.7,\"description\":\"חניה\",\"diagram_color\":\"כחול\",\"diagram_symbol\":\"קכח\"},{\"area\":75.5,\"description\":\"מרפסת גג\",\"diagram_color\":\"כחול\",\"diagram_symbol\":\"קכט\"}],\"description\":\"דירת קוטג'\",\"building_number\":\"II\",\"sub_plot_number\":54,\"non_attachment_areas\":[{\"area\":8.5,\"description\":\"מרפסת פתוחה\"}],\"shared_property_parts\":\"140/5975\"},{\"area\":18.6,\"floor\":\"קרקע\",\"attachments\":[],\"description\":\"חדר טרנספורמציה\",\"building_number\":\"II\",\"sub_plot_number\":55,\"non_attachment_areas\":[],\"shared_property_parts\":\"19/5975\"}],\"context\":\"Extracted from the detailed tables spanning pages 1-7. Includes unit number, area, floor, shared parts, attachments (parking, storage, etc.), and non-attached areas (balconies).\",\"pattern\":\"ai_extraction\",\"confidence\":98},\"rawResponse\":\"```json\\n{\\n  \\\"data\\\": {\\n    \\\"order_issue_date\\\": \\\"29 מרץ 2018\\\",\\n    \\\"building_description\\\": null,\\n    \\\"building_floors\\\": null,\\n    \\\"building_sub_plots_count\\\": 55,\\n    \\\"building_address\\\": \\\"אייר 11, נתניה; רייך בני 21, נתניה\\\",\\n    \\\"total_sub_plots\\\": 55,\\n    \\\"buildings_info\\\": [\\n      {\\n        \\\"building_number\\\": \\\"I\\\",\\n        \\\"address\\\": \\\"אייר 11, נתניה\\\",\\n        \\\"floors\\\": 8,\\n        \\\"sub_plots_count\\\": 26\\n      },\\n      {\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"address\\\": \\\"רייך בני 21, נתניה\\\",\\n        \\\"floors\\\": 9,\\n        \\\"sub_plots_count\\\": 29\\n      }\\n    ],\\n    \\\"sub_plots\\\": [\\n      {\\n        \\\"sub_plot_number\\\": 1,\\n        \\\"building_number\\\": \\\"I\\\",\\n        \\\"area\\\": 114.70,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"קרקע\\\",\\n        \\\"shared_property_parts\\\": \\\"115/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"א\\\", \\\"diagram_color\\\": \\\"כתום\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"ב\\\", \\\"diagram_color\\\": \\\"כתום\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"ג\\\", \\\"diagram_color\\\": \\\"כתום\\\", \\\"area\\\": 3.80},\\n          {\\\"description\\\": \\\"קרקע\\\", \\\"diagram_symbol\\\": \\\"ד\\\", \\\"diagram_color\\\": \\\"כתום\\\", \\\"area\\\": 132.70}\\n        ],\\n        \\\"non_attachment_areas\\\": []\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 2,\\n        \\\"building_number\\\": \\\"I\\\",\\n        \\\"area\\\": 103.60,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"קרקע\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"ה\\\", \\\"diagram_color\\\": \\\"צהוב\\\", \\\"area\\\": 11.20},\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"ו\\\", \\\"diagram_color\\\": \\\"צהוב\\\", \\\"area\\\": 2.50},\\n          {\\\"description\\\": \\\"קרקע\\\", \\\"diagram_symbol\\\": \\\"ז\\\", \\\"diagram_color\\\": \\\"צהוב\\\", \\\"area\\\": 150.00}\\n        ],\\n        \\\"non_attachment_areas\\\": []\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 3,\\n        \\\"building_number\\\": \\\"I\\\",\\n        \\\"area\\\": 116.20,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"ראשונה\\\",\\n        \\\"shared_property_parts\\\": \\\"116/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"ח\\\", \\\"diagram_color\\\": \\\"ירוק\\\", \\\"area\\\": 10.30}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 8.50}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 4,\\n        \\\"building_number\\\": \\\"I\\\",\\n        \\\"area\\\": 105.10,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"ראשונה\\\",\\n        \\\"shared_property_parts\\\": \\\"105/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"ט\\\", \\\"diagram_color\\\": \\\"תכלת\\\", \\\"area\\\": 12.50},\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"י\\\", \\\"diagram_color\\\": \\\"תכלת\\\", \\\"area\\\": 3.20}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 8.50}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 5,\\n        \\\"building_number\\\": \\\"I\\\",\\n        \\\"area\\\": 104.40,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"שניה\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"יא\\\", \\\"diagram_color\\\": \\\"סגול\\\", \\\"area\\\": 10.70}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 9.80}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 6,\\n        \\\"building_number\\\": \\\"I\\\",\\n        \\\"area\\\": 104.40,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"שניה\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"יב\\\", \\\"diagram_color\\\": \\\"כחול\\\", \\\"area\\\": 23.30}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 9.80}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 7,\\n        \\\"building_number\\\": \\\"I\\\",\\n        \\\"area\\\": 115.90,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"שניה\\\",\\n        \\\"shared_property_parts\\\": \\\"116/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"יג\\\", \\\"diagram_color\\\": \\\"אדום\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"יד\\\", \\\"diagram_color\\\": \\\"אדום\\\", \\\"area\\\": 3.90}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 10.10}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 8,\\n        \\\"building_number\\\": \\\"I\\\",\\n        \\\"area\\\": 104.30,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"שניה\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"טו\\\", \\\"diagram_color\\\": \\\"חום\\\", \\\"area\\\": 10.30}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 10.30}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 9,\\n        \\\"building_number\\\": \\\"I\\\",\\n        \\\"area\\\": 103.70,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"שלישית\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"טז\\\", \\\"diagram_color\\\": \\\"כתום\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"יז\\\", \\\"diagram_color\\\": \\\"כתום\\\", \\\"area\\\": 7.20}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 9.50}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 10,\\n        \\\"building_number\\\": \\\"I\\\",\\n        \\\"area\\\": 103.70,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"שלישית\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"יח\\\", \\\"diagram_color\\\": \\\"צהוב\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"יט\\\", \\\"diagram_color\\\": \\\"צהוב\\\", \\\"area\\\": 7.20}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 9.50}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 11,\\n        \\\"building_number\\\": \\\"I\\\",\\n        \\\"area\\\": 116.20,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"שלישית\\\",\\n        \\\"shared_property_parts\\\": \\\"116/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"כ\\\", \\\"diagram_color\\\": \\\"ירוק\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"כא\\\", \\\"diagram_color\\\": \\\"ירוק\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"כב\\\", \\\"diagram_color\\\": \\\"ירוק\\\", \\\"area\\\": 4.70}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 8.50}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 12,\\n        \\\"building_number\\\": \\\"I\\\",\\n        \\\"area\\\": 105.10,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"שלישית\\\",\\n        \\\"shared_property_parts\\\": \\\"105/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"כג\\\", \\\"diagram_color\\\": \\\"תכלת\\\", \\\"area\\\": 11.20},\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"כד\\\", \\\"diagram_color\\\": \\\"תכלת\\\", \\\"area\\\": 5.00}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 8.50}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 13,\\n        \\\"building_number\\\": \\\"I\\\",\\n        \\\"area\\\": 104.40,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"רביעית\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"כה\\\", \\\"diagram_color\\\": \\\"סגול\\\", \\\"area\\\": 10.70},\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"כו\\\", \\\"diagram_color\\\": \\\"סגול\\\", \\\"area\\\": 5.00}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 9.80}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 14,\\n        \\\"building_number\\\": \\\"I\\\",\\n        \\\"area\\\": 104.40,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"רביעית\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"כז\\\", \\\"diagram_color\\\": \\\"כחול\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"כח\\\", \\\"diagram_color\\\": \\\"כחול\\\", \\\"area\\\": 3.20}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 9.80}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 15,\\n        \\\"building_number\\\": \\\"I\\\",\\n        \\\"area\\\": 115.90,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"רביעית\\\",\\n        \\\"shared_property_parts\\\": \\\"116/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"כט\\\", \\\"diagram_color\\\": \\\"אדום\\\", \\\"area\\\": 12.50},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"ל\\\", \\\"diagram_color\\\": \\\"אדום\\\", \\\"area\\\": 12.50},\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"לא\\\", \\\"diagram_color\\\": \\\"אדום\\\", \\\"area\\\": 6.50}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 10.10}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 16,\\n        \\\"building_number\\\": \\\"I\\\",\\n        \\\"area\\\": 104.30,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"רביעית\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"לב\\\", \\\"diagram_color\\\": \\\"חום\\\", \\\"area\\\": 5.90},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"לג\\\", \\\"diagram_color\\\": \\\"חום\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"לה\\\", \\\"diagram_color\\\": \\\"חום\\\", \\\"area\\\": 10.80}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 10.30}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 17,\\n        \\\"building_number\\\": \\\"I\\\",\\n        \\\"area\\\": 103.70,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"חמישית\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"לו\\\", \\\"diagram_color\\\": \\\"כתום\\\", \\\"area\\\": 11.20}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 9.50}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 18,\\n        \\\"building_number\\\": \\\"I\\\",\\n        \\\"area\\\": 103.70,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"חמישית\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"לז\\\", \\\"diagram_color\\\": \\\"צהוב\\\", \\\"area\\\": 10.80},\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"לח\\\", \\\"diagram_color\\\": \\\"צהוב\\\", \\\"area\\\": 4.70}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 9.50}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 19,\\n        \\\"building_number\\\": \\\"I\\\",\\n        \\\"area\\\": 116.20,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"חמישית\\\",\\n        \\\"shared_property_parts\\\": \\\"116/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"לט\\\", \\\"diagram_color\\\": \\\"ירוק\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"מ\\\", \\\"diagram_color\\\": \\\"ירוק\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"מא\\\", \\\"diagram_color\\\": \\\"ירוק\\\", \\\"area\\\": 4.70}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 8.50}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 20,\\n        \\\"building_number\\\": \\\"I\\\",\\n        \\\"area\\\": 105.10,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"חמישית\\\",\\n        \\\"shared_property_parts\\\": \\\"105/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"מב\\\", \\\"diagram_color\\\": \\\"תכלת\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"מג\\\", \\\"diagram_color\\\": \\\"תכלת\\\", \\\"area\\\": 6.60}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 8.50}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 21,\\n        \\\"building_number\\\": \\\"I\\\",\\n        \\\"area\\\": 104.40,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"שישית\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"מד\\\", \\\"diagram_color\\\": \\\"סגול\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"מה\\\", \\\"diagram_color\\\": \\\"סגול\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"מו\\\", \\\"diagram_color\\\": \\\"סגול\\\", \\\"area\\\": 6.60}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 9.80}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 22,\\n        \\\"building_number\\\": \\\"I\\\",\\n        \\\"area\\\": 104.40,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"שישית\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"מז\\\", \\\"diagram_color\\\": \\\"כחול\\\", \\\"area\\\": 11.20},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"מח\\\", \\\"diagram_color\\\": \\\"כחול\\\", \\\"area\\\": 12.50},\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"מט\\\", \\\"diagram_color\\\": \\\"כחול\\\", \\\"area\\\": 6.50}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 9.80}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 23,\\n        \\\"building_number\\\": \\\"I\\\",\\n        \\\"area\\\": 115.90,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"שישית\\\",\\n        \\\"shared_property_parts\\\": \\\"116/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"נ\\\", \\\"diagram_color\\\": \\\"אדום\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"נא\\\", \\\"diagram_color\\\": \\\"אדום\\\", \\\"area\\\": 4.70}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 10.10}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 24,\\n        \\\"building_number\\\": \\\"I\\\",\\n        \\\"area\\\": 104.30,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"שישית\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"נב\\\", \\\"diagram_color\\\": \\\"חום\\\", \\\"area\\\": 12.50},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"נג\\\", \\\"diagram_color\\\": \\\"חום\\\", \\\"area\\\": 10.70},\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"נד\\\", \\\"diagram_color\\\": \\\"חום\\\", \\\"area\\\": 3.90}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 10.30}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 25,\\n        \\\"building_number\\\": \\\"I\\\",\\n        \\\"area\\\": 122.50,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"שביעית\\\",\\n        \\\"shared_property_parts\\\": \\\"123/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"נה\\\", \\\"diagram_color\\\": \\\"כתום\\\", \\\"area\\\": 22.30},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"נו\\\", \\\"diagram_color\\\": \\\"כתום\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"נז\\\", \\\"diagram_color\\\": \\\"כתום\\\", \\\"area\\\": 6.90},\\n          {\\\"description\\\": \\\"מרפסת גג\\\", \\\"diagram_symbol\\\": \\\"נח\\\", \\\"diagram_color\\\": \\\"כתום\\\", \\\"area\\\": 86.00}\\n        ],\\n        \\\"non_attachment_areas\\\": []\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 26,\\n        \\\"building_number\\\": \\\"I\\\",\\n        \\\"area\\\": 122.70,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"שביעית\\\",\\n        \\\"shared_property_parts\\\": \\\"123/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"נט\\\", \\\"diagram_color\\\": \\\"צהוב\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"ס\\\", \\\"diagram_color\\\": \\\"צהוב\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"סא\\\", \\\"diagram_color\\\": \\\"צהוב\\\", \\\"area\\\": 6.90},\\n          {\\\"description\\\": \\\"מרפסת גג\\\", \\\"diagram_symbol\\\": \\\"סב\\\", \\\"diagram_color\\\": \\\"צהוב\\\", \\\"area\\\": 90.20}\\n        ],\\n        \\\"non_attachment_areas\\\": []\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 27,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 114.70,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"קרקע\\\",\\n        \\\"shared_property_parts\\\": \\\"115/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"סג\\\", \\\"diagram_color\\\": \\\"ירוק\\\", \\\"area\\\": 4.70},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"סד\\\", \\\"diagram_color\\\": \\\"ירוק\\\", \\\"area\\\": 10.70},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"סה\\\", \\\"diagram_color\\\": \\\"ירוק\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"קרקע\\\", \\\"diagram_symbol\\\": \\\"סו\\\", \\\"diagram_color\\\": \\\"ירוק\\\", \\\"area\\\": 73.10}\\n        ],\\n        \\\"non_attachment_areas\\\": []\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 28,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 103.60,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"קרקע\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"סז\\\", \\\"diagram_color\\\": \\\"תכלת\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"סח\\\", \\\"diagram_color\\\": \\\"תכלת\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"סט\\\", \\\"diagram_color\\\": \\\"תכלת\\\", \\\"area\\\": 3.80},\\n          {\\\"description\\\": \\\"קרקע\\\", \\\"diagram_symbol\\\": \\\"ע\\\", \\\"diagram_color\\\": \\\"תכלת\\\", \\\"area\\\": 152.80}\\n        ],\\n        \\\"non_attachment_areas\\\": []\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 29,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 116.20,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"ראשונה\\\",\\n        \\\"shared_property_parts\\\": \\\"116/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"עא\\\", \\\"diagram_color\\\": \\\"סגול\\\", \\\"area\\\": 3.90},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"עב\\\", \\\"diagram_color\\\": \\\"סגול\\\", \\\"area\\\": 10.30}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 8.50}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 30,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 105.10,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"ראשונה\\\",\\n        \\\"shared_property_parts\\\": \\\"105/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"עג\\\", \\\"diagram_color\\\": \\\"כחול\\\", \\\"area\\\": 10.80}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 8.50}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 31,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 104.40,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"שניה\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"עד\\\", \\\"diagram_color\\\": \\\"אדום\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"עה\\\", \\\"diagram_color\\\": \\\"אדום\\\", \\\"area\\\": 10.30}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 9.80}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 32,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 104.40,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"שניה\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"עו\\\", \\\"diagram_color\\\": \\\"חום\\\", \\\"area\\\": 10.30}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 9.80}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 33,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 115.90,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"שניה\\\",\\n        \\\"shared_property_parts\\\": \\\"116/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"עח\\\", \\\"diagram_color\\\": \\\"כתום\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"עז\\\", \\\"diagram_color\\\": \\\"כתום\\\", \\\"area\\\": 4.70}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 10.10}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 34,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 104.30,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"שניה\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"עט\\\", \\\"diagram_color\\\": \\\"צהוב\\\", \\\"area\\\": 10.30}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 10.30}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 35,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 103.70,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"שלישית\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"פ\\\", \\\"diagram_color\\\": \\\"ירוק\\\", \\\"area\\\": 10.30}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 9.50}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 36,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 103.70,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"שלישית\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"פא\\\", \\\"diagram_color\\\": \\\"תכלת\\\", \\\"area\\\": 11.20}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 9.50}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 37,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 116.20,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"שלישית\\\",\\n        \\\"shared_property_parts\\\": \\\"116/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"פב\\\", \\\"diagram_color\\\": \\\"סגול\\\", \\\"area\\\": 3.90},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"פג\\\", \\\"diagram_color\\\": \\\"סגול\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"פד\\\", \\\"diagram_color\\\": \\\"סגול\\\", \\\"area\\\": 10.30}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 8.50}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 38,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 105.10,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"שלישית\\\",\\n        \\\"shared_property_parts\\\": \\\"105/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"פה\\\", \\\"diagram_color\\\": \\\"כחול\\\", \\\"area\\\": 10.30}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 8.50}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 39,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 104.40,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"רביעית\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"פו\\\", \\\"diagram_color\\\": \\\"אדום\\\", \\\"area\\\": 10.30}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 9.80}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 40,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 104.40,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"רביעית\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"פז\\\", \\\"diagram_color\\\": \\\"חום\\\", \\\"area\\\": 11.60}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 9.80}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 41,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 115.90,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"רביעית\\\",\\n        \\\"shared_property_parts\\\": \\\"116/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"פח\\\", \\\"diagram_color\\\": \\\"כתום\\\", \\\"area\\\": 4.70},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"פט\\\", \\\"diagram_color\\\": \\\"כתום\\\", \\\"area\\\": 10.30}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 10.10}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 42,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 104.30,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"רביעית\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"צ\\\", \\\"diagram_color\\\": \\\"צהוב\\\", \\\"area\\\": 3.20},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"צא\\\", \\\"diagram_color\\\": \\\"צהוב\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"צב\\\", \\\"diagram_color\\\": \\\"צהוב\\\", \\\"area\\\": 10.30}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 10.30}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 43,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 103.70,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"חמישית\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"צג\\\", \\\"diagram_color\\\": \\\"ירוק\\\", \\\"area\\\": 3.20},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"צד\\\", \\\"diagram_color\\\": \\\"ירוק\\\", \\\"area\\\": 10.30}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 9.50}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 44,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 103.70,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"חמישית\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"צה\\\", \\\"diagram_color\\\": \\\"תכלת\\\", \\\"area\\\": 5.00},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"צו\\\", \\\"diagram_color\\\": \\\"תכלת\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"צז\\\", \\\"diagram_color\\\": \\\"תכלת\\\", \\\"area\\\": 10.70}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 9.50}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 45,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 116.20,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"חמישית\\\",\\n        \\\"shared_property_parts\\\": \\\"116/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"צח\\\", \\\"diagram_color\\\": \\\"סגול\\\", \\\"area\\\": 6.50},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"צט\\\", \\\"diagram_color\\\": \\\"סגול\\\", \\\"area\\\": 10.30}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 8.50}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 46,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 105.10,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"חמישית\\\",\\n        \\\"shared_property_parts\\\": \\\"105/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"ק\\\", \\\"diagram_color\\\": \\\"כחול\\\", \\\"area\\\": 5.00},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"קא\\\", \\\"diagram_color\\\": \\\"כחול\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"קב\\\", \\\"diagram_color\\\": \\\"כחול\\\", \\\"area\\\": 10.30}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 8.50}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 47,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 104.40,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"שישית\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"קג\\\", \\\"diagram_color\\\": \\\"אדום\\\", \\\"area\\\": 6.60},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"קד\\\", \\\"diagram_color\\\": \\\"אדום\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"קה\\\", \\\"diagram_color\\\": \\\"אדום\\\", \\\"area\\\": 10.30}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 9.80}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 48,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 104.40,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"שישית\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"קו\\\", \\\"diagram_color\\\": \\\"חום\\\", \\\"area\\\": 4.70},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"קז\\\", \\\"diagram_color\\\": \\\"חום\\\", \\\"area\\\": 10.70}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 9.80}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 49,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 115.90,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"שישית\\\",\\n        \\\"shared_property_parts\\\": \\\"116/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"קח\\\", \\\"diagram_color\\\": \\\"כתום\\\", \\\"area\\\": 6.50},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"קט\\\", \\\"diagram_color\\\": \\\"כתום\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"קי\\\", \\\"diagram_color\\\": \\\"כתום\\\", \\\"area\\\": 10.30}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 10.10}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 50,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 104.30,\\n        \\\"description\\\": \\\"דירה\\\",\\n        \\\"floor\\\": \\\"שישית\\\",\\n        \\\"shared_property_parts\\\": \\\"104/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"קיא\\\", \\\"diagram_color\\\": \\\"צהוב\\\", \\\"area\\\": 6.60},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"קיב\\\", \\\"diagram_color\\\": \\\"צהוב\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"קיג\\\", \\\"diagram_color\\\": \\\"צהוב\\\", \\\"area\\\": 10.30}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 10.30}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 51,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 133.20,\\n        \\\"description\\\": \\\"דירת קוטג'\\\",\\n        \\\"floor\\\": \\\"שביעית, שמינית\\\",\\n        \\\"shared_property_parts\\\": \\\"133/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"קיד\\\", \\\"diagram_color\\\": \\\"ירוק\\\", \\\"area\\\": 7.20},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"קטו\\\", \\\"diagram_color\\\": \\\"ירוק\\\", \\\"area\\\": 10.80},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"קטז\\\", \\\"diagram_color\\\": \\\"ירוק\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"מרפסת גג\\\", \\\"diagram_symbol\\\": \\\"קיז\\\", \\\"diagram_color\\\": \\\"ירוק\\\", \\\"area\\\": 76.20}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 9.50}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 52,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 133.20,\\n        \\\"description\\\": \\\"דירת קוטג'\\\",\\n        \\\"floor\\\": \\\"שביעית, שמינית\\\",\\n        \\\"shared_property_parts\\\": \\\"133/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"קיח\\\", \\\"diagram_color\\\": \\\"תכלת\\\", \\\"area\\\": 7.20},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"קיט\\\", \\\"diagram_color\\\": \\\"תכלת\\\", \\\"area\\\": 10.80},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"קכ\\\", \\\"diagram_color\\\": \\\"תכלת\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"מרפסת גג\\\", \\\"diagram_symbol\\\": \\\"קכא\\\", \\\"diagram_color\\\": \\\"תכלת\\\", \\\"area\\\": 75.80}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 9.50}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 53,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 139.90,\\n        \\\"description\\\": \\\"דירת קוטג'\\\",\\n        \\\"floor\\\": \\\"שביעית, שמינית\\\",\\n        \\\"shared_property_parts\\\": \\\"140/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"קכב\\\", \\\"diagram_color\\\": \\\"סגול\\\", \\\"area\\\": 6.90},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"קכג\\\", \\\"diagram_color\\\": \\\"סגול\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"קכד\\\", \\\"diagram_color\\\": \\\"סגול\\\", \\\"area\\\": 10.70},\\n          {\\\"description\\\": \\\"מרפסת גג\\\", \\\"diagram_symbol\\\": \\\"קכה\\\", \\\"diagram_color\\\": \\\"סגול\\\", \\\"area\\\": 75.50}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 8.50}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 54,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 139.90,\\n        \\\"description\\\": \\\"דירת קוטג'\\\",\\n        \\\"floor\\\": \\\"שביעית, שמינית\\\",\\n        \\\"shared_property_parts\\\": \\\"140/5975\\\",\\n        \\\"attachments\\\": [\\n          {\\\"description\\\": \\\"מחסן\\\", \\\"diagram_symbol\\\": \\\"קכו\\\", \\\"diagram_color\\\": \\\"כחול\\\", \\\"area\\\": 6.90},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"קכז\\\", \\\"diagram_color\\\": \\\"כחול\\\", \\\"area\\\": 10.30},\\n          {\\\"description\\\": \\\"חניה\\\", \\\"diagram_symbol\\\": \\\"קכח\\\", \\\"diagram_color\\\": \\\"כחול\\\", \\\"area\\\": 10.70},\\n          {\\\"description\\\": \\\"מרפסת גג\\\", \\\"diagram_symbol\\\": \\\"קכט\\\", \\\"diagram_color\\\": \\\"כחול\\\", \\\"area\\\": 75.50}\\n        ],\\n        \\\"non_attachment_areas\\\": [\\n          {\\\"description\\\": \\\"מרפסת פתוחה\\\", \\\"area\\\": 8.50}\\n        ]\\n      },\\n      {\\n        \\\"sub_plot_number\\\": 55,\\n        \\\"building_number\\\": \\\"II\\\",\\n        \\\"area\\\": 18.60,\\n        \\\"description\\\": \\\"חדר טרנספורמציה\\\",\\n        \\\"floor\\\": \\\"קרקע\\\",\\n        \\\"shared_property_parts\\\": \\\"19/5975\\\",\\n        \\\"attachments\\\": [],\\n        \\\"non_attachment_areas\\\": []\\n      }\\n    ]\\n  },\\n  \\\"locations\\\": {\\n    \\\"order_issue_date\\\": {\\\"page\\\": 8, \\\"y_percent\\\": 65},\\n    \\\"building_description\\\": {\\\"page\\\": 1, \\\"y_percent\\\": 45},\\n    \\\"building_floors\\\": {\\\"page\\\": 1, \\\"y_percent\\\": 47},\\n    \\\"building_sub_plots_count\\\": {\\\"page\\\": 1, \\\"y_percent\\\": 47},\\n    \\\"building_address\\\": {\\\"page\\\": 1, \\\"y_percent\\\": 47},\\n    \\\"total_sub_plots\\\": {\\\"page\\\": 1, \\\"y_percent\\\": 55},\\n    \\\"buildings_info\\\": {\\\"page\\\": 1, \\\"y_percent\\\": 45},\\n    \\\"sub_plots\\\": {\\\"page\\\": 1, \\\"y_percent\\\": 60}\\n  },\\n  \\\"confidence_scores\\\": {\\n    \\\"order_issue_date\\\": 0.95,\\n    \\\"building_description\\\": 0.0,\\n    \\\"building_floors\\\": 0.0,\\n    \\\"building_sub_plots_count\\\": 0.95,\\n    \\\"building_address\\\": 0.95,\\n    \\\"total_sub_plots\\\": 0.95,\\n    \\\"buildings_info\\\": 0.95,\\n    \\\"sub_plots\\\": 0.98,\\n    \\\"overall\\\": 0.95\\n  },\\n  \\\"extraction_contexts\\\": {\\n    \\\"order_issue_date\\\": \\\"Found in the signature block on page 8: 'צו רישום זה ניתן בי\\\\\\\"ג ניסן תשע\\\\\\\"ח, 29 מרץ 2018'\\\",\\n    \\\"building_description\\\": \\\"No general narrative description found. Building details extracted from table headers.\\\",\\n    \\\"building_floors\\\": \\\"Multiple buildings with different floor counts (8 and 9). Returned null for scalar field, details in buildings_info.\\\",\\n    \\\"building_sub_plots_count\\\": \\\"Sum of all units found in the summary table on page 1.\\\",\\n    \\\"building_address\\\": \\\"Combined addresses from the building summary table on page 1.\\\",\\n    \\\"total_sub_plots\\\": \\\"Explicitly stated in the table on page 1: 'סה\\\\\\\"כ תתי חלקות: 55'.\\\",\\n    \\\"buildings_info\\\": \\\"Extracted from 'תיאור הבית' table on page 1 listing Building I and II with their respective addresses and unit counts.\\\",\\n    \\\"sub_plots\\\": \\\"Extracted from the detailed tables spanning pages 1-7. Includes unit number, area, floor, shared parts, attachments (parking, storage, etc.), and non-attached areas (balconies).\\\"\\n  }\\n}\\n```\",\"buildings_info\":{\"count\":2,\"value\":[{\"floors\":8,\"address\":\"אייר 11, נתניה\",\"building_number\":\"I\",\"sub_plots_count\":26},{\"floors\":9,\"address\":\"רייך בני 21, נתניה\",\"building_number\":\"II\",\"sub_plots_count\":29}],\"context\":\"Extracted from 'תיאור הבית' table on page 1 listing Building I and II with their respective addresses and unit counts.\",\"pattern\":\"ai_extraction\",\"confidence\":95},\"fieldLocations\":{\"sub_plots\":{\"page\":1,\"y_percent\":60},\"buildings_info\":{\"page\":1,\"y_percent\":45},\"building_floors\":{\"page\":1,\"y_percent\":47},\"total_sub_plots\":{\"page\":1,\"y_percent\":55},\"building_address\":{\"page\":1,\"y_percent\":47},\"order_issue_date\":{\"page\":8,\"y_percent\":65},\"building_description\":{\"page\":1,\"y_percent\":45},\"building_sub_plots_count\":{\"page\":1,\"y_percent\":47}},\"processingTime\":203837,\"building_floors\":{\"value\":null,\"context\":\"Multiple buildings with different floor counts (8 and 9). Returned null for scalar field, details in buildings_info.\",\"pattern\":\"ai_extraction\",\"confidence\":0},\"total_sub_plots\":{\"value\":55,\"context\":\"Explicitly stated in the table on page 1: 'סה\\\"כ תתי חלקות: 55'.\",\"pattern\":\"ai_extraction\",\"confidence\":95},\"building_address\":{\"value\":\"אייר 11, נתניה; רייך בני 21, נתניה\",\"context\":\"Combined addresses from the building summary table on page 1.\",\"pattern\":\"ai_extraction\",\"confidence\":95},\"order_issue_date\":{\"value\":\"29 מרץ 2018\",\"context\":\"Found in the signature block on page 8: 'צו רישום זה ניתן בי\\\"ג ניסן תשע\\\"ח, 29 מרץ 2018'\",\"pattern\":\"ai_extraction\",\"confidence\":95},\"overallConfidence\":95,\"building_description\":{\"value\":null,\"context\":\"No general narrative description found. Building details extracted from table headers.\",\"pattern\":\"ai_extraction\",\"confidence\":0},\"building_sub_plots_count\":{\"value\":55,\"context\":\"Sum of all units found in the summary table on page 1.\",\"pattern\":\"ai_extraction\",\"confidence\":95}},\"success\":true,\"confidence\":95,\"extracted_at\":\"2025-12-10T13:32:28.815Z\",\"fieldLocations\":{\"sub_plots\":{\"page\":1,\"y_percent\":60},\"buildings_info\":{\"page\":1,\"y_percent\":45},\"building_floors\":{\"page\":1,\"y_percent\":47},\"total_sub_plots\":{\"page\":1,\"y_percent\":55},\"building_address\":{\"page\":1,\"y_percent\":47},\"order_issue_date\":{\"page\":8,\"y_percent\":65},\"building_description\":{\"page\":1,\"y_percent\":45},\"building_sub_plots_count\":{\"page\":1,\"y_percent\":47}},\"building_floors\":null,\"total_sub_plots\":55,\"building_address\":\"אייר 11, נתניה; רייך בני 21, נתניה\",\"order_issue_date\":\"29 מרץ 2018\",\"building_description\":null,\"building_sub_plots_count\":55},\"buildingFeatures\":\"לא זוהו\",\"buildingCondition\":\"לא ידוע\",\"overallAssessment\":\"להלן תיאור מקצועי של חזית המבנה, מנוסח כחלק מדוח שומה:\\n\\nהמבנה הנישום הינו בניין מגורים משותף בבנייה רוויה, המתנשא לגובה של כ-8 קומות מעל קומת כניסה (קומת קרקע) וקומת עמודים מפולשת בחלקה. המבנה תוכנן בקווים אדריכליים מודרניים וישרי-זווית, האופייניים לבנייה הישראלית החדשה (הערכה לשנות ה-2000 ואילך), וכולל להערכה כ-20 עד 24 יחידות דיור בטיפוסים שונים. מעטפת המבנה מחופה בחיפוי קשיח של אבן נסורה בגוון בהיר (בז'/קרם), ביישום אחיד המקנה למבנה חזות יוקרתית ועמידות לאורך זמן. ניכרת הקפדה על חלוקת מאסות מאוזנת בחזית, המשלבת גריעה ונסיגה של מרפסות ליצירת עומק ועניין חזותי. מצב התחזוקה הפיזי של המעטפת החיצונית נחזה כתקין ושמור היטב, ללא סדקים קונסטרוקטיביים נראים לעין או סימני בלאי חריגים בחיפוי האבן.\\n\\nחזית המבנה מתאפיינת בריבוי מרפסות שמש (Open Balconies) הבולטות מקו הבניין ופונות לחזית הרחוב. המרפסות תחומות במעקות זכוכית בשילוב פרופילי אלומיניום ומאחזי יד, פרט גמר מודרני המאפשר שקיפות ומקסום כניסת אור טבעי לדירות. הפתחים בחזית כוללים ויטרינות יציאה רחבות למרפסות וחלונות הכוללים תריסי גלילה (ככל הנראה חשמליים) בגוון אפור/כסוף. ניתן להבחין בדירוג בקומות העליונות המעיד על קיומן של דירות פנטהאוז או דירות גג עם מרפסות מוגדלות. לא נראים מנועי מזגנים או צנרת גלויה על גבי החזית הראשית, מה שמעיד על תכנון מוקפד הכולל מסתורי כביסה ומיזוג ייעודיים (ככל הנראה בחזיתות הצדדיות או האחוריות), דבר התורם לחזות נקייה ואסתטית של הנכס.\\n\\nמפלס הכניסה למבנה כולל לובי ראשי עם חזית זכוכית (קיר מסך) ודלת כניסה כפולה, הממוקמים לאחר רחבת כניסה מרוצפת. הגישה למבנה הינה מוסדרת וכוללת מהלך מדרגות רחב ולצדו רמפת נגישות תקנית עם מאחז יד, המעידה על הנגשת המבנה לבעלי מוגבלויות על פי התקן. סביב המבנה קיים פיתוח סביבתי מלא הכולל גדר אבן נמוכה, צמחייה בוגרת (כולל עץ דקל דומיננטי בחזית) וגינון מטופח. פתרונות החניה כוללים ככל הנראה חניה תת-קרקעית או חניה מקורה בקומת העמודים (ניכרת גישה לכלי רכב), לצד חניות אורחים במפלס הרחוב בחזית המבנה. מערכת אינטרקום ובקרת כניסה נראית בכניסה הראשית, המעידה על סטנדרט אבטחה ופרטיות סביר.\\n\\nהמבנה ממוקם בסביבת מגורים אורבנית מפותחת, המאופיינת בבנייני מגורים רבי-קומות בסטנדרט דומה (כפי שניתן להסיק מהמבנה הסמוך הנראה ברקע מימין). האזור נהנה מתשתיות גמורות של מדרכות וכבישים. על פי ההצללה והתאורה בתמונה, נראה כי החזית המצולמת נהנית מחשיפה טובה לשמש, המבטיחה דירות מוארות ומאווררות. המרווחים בין הבניין למבנים הסמוכים נראים סבירים, המאפשרים שמירה על פרטיות הדיירים. שילוב הגורמים של גיל המבנה, איכות הגימור (חיפוי אבן, מעקות זכוכית), פתרונות הנגישות ורמת התחזוקה הגבוהה, מהווים אינדיקטורים חיוביים התורמים לערך השוק של הדירות בבניין ולסחירותן.\",\"buildingPermitDate\":\"לא נמצא\",\"registrationOffice\":\"נתניה\",\"buildingDescription\":\"לא נמצא\",\"buildingPermitNumber\":\"140008\",\"TA24\":{\"name\":\"גוש\",\"value\":\"9905\",\"source\":\"session\"},\"TA25\":{\"name\":\"חלקה\",\"value\":\"88\",\"source\":\"session\"}},\"extractionCount\":1}"
+      },
+      "metadata": {
+        "toolName": "get_extracted_data",
+        "latencyMs": 7
+      }
+    },
+    {
+      "traceId": "trace_1766392331980_t8r05a8",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:32:11.980Z",
+      "type": "assistant_response",
+      "data": {
+        "response": "\n[מבצע: שליפת נתונים...]\nמעולה! יש לי כאן נתונים מאוד עשירים. בוא אסכם את מה שמצאתי:\n\nמנתוני הטאבו והצו המשותף:\n- תת חלקה 8 בבניין I, קומה שניה\n- שטח עיקרי: 104.3 מ\"ר\n- מרפסת פתוחה: 10.3 מ\"ר \n- חניה 1: 10.3 מ\"ר (סימן \"טו\")\n- בעלות: רגב אלמוג ורגב אירית (50%-50%)\n\nמהתמונות שצירפת:\n- דירה מרווחת ומשופצת\n- סלון מרכזי עם מטבח אמריקאי מודרני\n- לפחות 2-3 חדרי שינה\n- חדר שירות/כביסה נפרד\n- חדר רחצה משופץ\n- גימורים ברמה טובה\n\nעכשיו אני יכול לכתוב את סעיף 1.3 - תיאור נשוא השומה:\n\nנשוא השומה הוא דירת מגורים המסומנת כתת-חלקה 8 בבניין I, הממוקמת בקומה שניה. שטח הדירה הרשום הוא 104.3 מ\"ר, והיא כוללת מרפסת פתוחה בשטח של 10.3 מ\"ר.\n\nהדירה מחולקת לשטח מגורים מרכזי הכולל סלון, מטבח פתוח, חדרי שינה וחדר רחצה. בנוסף, הדירה כוללת חדר שירות ייעודי. מצב הדירה הוא משופץ, עם גימורים מודרניים וריצוף אחיד.\n\nלדירה צמודים מחסן וחניה אחת בשטח 10.3 מ\"ר, המסומנים בצו הבית המשותף. הגישה לדירה מתאפשרת באמצעות מעלית, והבניין כולל מערכות תשתית משותפות.\n\nסיימנו את כל 3 תתי הסעיפים!\n\nסיכום:\n✅ סעיף 1.1 - תיאור הסביבה - הושלם  \n✅ סעיף 1.2 - תיאור החלקה - הושלם  \n✅ סעיף 1.3 - תיאור נשוא השומה - הושלם\n\nהאם הסעיפים מתאימים לך, או שתרצה שינויים?"
+      },
+      "metadata": {
+        "model": "claude-sonnet-4-5-20250929",
+        "inputTokens": 135848,
+        "outputTokens": 891,
+        "latencyMs": 41273
+      }
+    },
+    {
+      "traceId": "trace_1766392379679_m6cyar1",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:32:59.679Z",
+      "type": "user_message",
+      "data": {
+        "message": "מעולה לי. יש לי כמה שאלות. מה הזכויות על הנכס?",
+        "attachments": []
+      }
+    },
+    {
+      "traceId": "trace_1766392388764_gx4lzqp",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:33:08.764Z",
+      "type": "tool_call",
+      "data": {
+        "toolName": "get_extracted_data",
+        "input": {
+          "document_type": "tabu",
+          "field_ids": [
+            "TA15",
+            "TA16",
+            "TA17",
+            "TA18",
+            "TA19",
+            "TA20"
+          ]
+        }
+      },
+      "metadata": {
+        "toolName": "get_extracted_data"
+      }
+    },
+    {
+      "traceId": "trace_1766392388774_h3e91yd",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:33:08.774Z",
+      "type": "tool_result",
+      "data": {
+        "toolName": "get_extracted_data",
+        "result": "{\"success\":true,\"documentType\":\"tabu\",\"data\":{\"TA24\":{\"name\":\"גוש\",\"value\":\"9905\",\"source\":\"session\"},\"TA25\":{\"name\":\"חלקה\",\"value\":\"88\",\"source\":\"session\"}},\"extractionCount\":0}"
+      },
+      "metadata": {
+        "toolName": "get_extracted_data",
+        "latencyMs": 10
+      }
+    },
+    {
+      "traceId": "trace_1766392388789_yrdzrv6",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:33:08.789Z",
+      "type": "tool_call",
+      "data": {
+        "toolName": "search_documents",
+        "input": {
+          "query": "זכויות בעלות משכנתא עיקול שעבוד הערה",
+          "document_type": "tabu"
+        }
+      },
+      "metadata": {
+        "toolName": "search_documents"
+      }
+    },
+    {
+      "traceId": "trace_1766392388805_khtx7t5",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:33:08.805Z",
+      "type": "tool_result",
+      "data": {
+        "toolName": "search_documents",
+        "result": "{\"success\":true,\"query\":\"זכויות בעלות משכנתא עיקול שעבוד הערה\",\"resultsCount\":0,\"results\":[]}"
+      },
+      "metadata": {
+        "toolName": "search_documents",
+        "latencyMs": 16
+      }
+    },
+    {
+      "traceId": "trace_1766392391957_iua1d0f",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:33:11.957Z",
+      "type": "tool_call",
+      "data": {
+        "toolName": "get_document_content",
+        "input": {
+          "document_type": "tabu"
+        }
+      },
+      "metadata": {
+        "toolName": "get_document_content"
+      }
+    },
+    {
+      "traceId": "trace_1766392391967_m0k4qfz",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:33:11.967Z",
+      "type": "tool_result",
+      "data": {
+        "toolName": "get_document_content",
+        "result": "{\"success\":false,\"error\":\"לא נמצא מסמך מסוג tabu\"}"
+      },
+      "metadata": {
+        "toolName": "get_document_content",
+        "latencyMs": 10
+      }
+    },
+    {
+      "traceId": "trace_1766392395388_or8w16v",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:33:15.388Z",
+      "type": "tool_call",
+      "data": {
+        "toolName": "search_documents",
+        "input": {
+          "query": "רגב אלמוג אירית בעלים",
+          "document_type": "all"
+        }
+      },
+      "metadata": {
+        "toolName": "search_documents"
+      }
+    },
+    {
+      "traceId": "trace_1766392395395_pwa97z8",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:33:15.395Z",
+      "type": "tool_result",
+      "data": {
+        "toolName": "search_documents",
+        "result": "{\"success\":true,\"query\":\"רגב אלמוג אירית בעלים\",\"resultsCount\":0,\"results\":[]}"
+      },
+      "metadata": {
+        "toolName": "search_documents",
+        "latencyMs": 7
+      }
+    },
+    {
+      "traceId": "trace_1766392408395_vp5vsgc",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:33:28.395Z",
+      "type": "assistant_response",
+      "data": {
+        "response": "\n[מבצע: שליפת נתונים...]\n\n[מבצע: חיפוש במסמכים...]\n\n[מבצע: קריאת מסמך...]\n\n[מבצע: חיפוש במסמכים...]\nלפי הנתונים שיש לי ממה שחילצתי מהמסמכים שהעלית:\n\nזכויות הבעלות על הנכס:\n\n- בעלים: רגב אלמוג ורגב אירית\n- חלוקת הבעלות: 50% לכל אחד (בעלות משותפת שווה)\n- מס רכוש: תת-חלקה 8, בניין I\n\nלצערי, אין לי גישה לנסח הטאבו המלא שממנו אוכל לראות:\n- האם רשומים שעבודים (משכנתאות)\n- האם יש הערות אזהרה\n- האם יש עיקולים\n- זכויות מיוחדות או הגבלות\n\nאם אתה צריך את המידע המלא על הזכויות והשעבודים, תצטרך:\n1. להעלות את נסח הטאבו המלא (לא רק פרטי הזיהוי)\n2. או לספר לי מה כתוב בחלק \"זכויות\" ו\"הערות/שעבודים\" בנסח\n\nהאם יש לך את נסח הטאבו המלא?"
+      },
+      "metadata": {
+        "model": "claude-sonnet-4-5-20250929",
+        "inputTokens": 52625,
+        "outputTokens": 740,
+        "latencyMs": 28732
+      }
+    },
+    {
+      "traceId": "trace_1766392441281_auymawz",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:34:01.281Z",
+      "type": "file_upload",
+      "data": {
+        "fileName": "Efrayim_14_Ashkelon_Land_Registry_001.pdf",
+        "fileType": "application/pdf",
+        "fileSize": 298440
+      },
+      "metadata": {
+        "fileName": "Efrayim_14_Ashkelon_Land_Registry_001.pdf",
+        "fileType": "application/pdf",
+        "fileSize": 298440
+      }
+    },
+    {
+      "traceId": "trace_1766392441289_80iogeo",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:34:01.289Z",
+      "type": "user_message",
+      "data": {
+        "message": "תסתכל כאן, למרות שזה נכס אחר. מה הזכויות?",
+        "attachments": [
+          {
+            "name": "Efrayim_14_Ashkelon_Land_Registry_001.pdf",
+            "type": "application/pdf",
+            "size": 298440
+          }
+        ]
+      }
+    },
+    {
+      "traceId": "trace_1766392467427_yr6306j",
+      "sessionId": "1765372941999",
+      "timestamp": "2025-12-22T08:34:27.427Z",
+      "type": "assistant_response",
+      "data": {
+        "response": "אני רואה שהעלית נסח טאבו של נכס אחר (לא הנכס שאנחנו עובדים עליו).\n\nזה נסח של:\n- מיקום: אשקלון (לא נתניה)\n- זיהוי: גוש 1965, חלקה 178 (לא גוש 9905 חלקה 88 שלנו)\n- כתובת: לא צוין ברור, אבל זה פרויקט בניה חדש\n\nהזכויות על נכס זה (גוש 1965, חלקה 178 באשקלון):\n\nבעלות:\n- בעל הקרקע: רשות הפיתוח (בעלות בשלמות)\n- סוג זכות: חכירה ראשית\n\nחכירות:\n- חוכר ראשי: ליאם נחמיאס חברה לבניין בע\"מ (חברה מס' 51*****19)\n- תקופת חכירה: 98 שנים (עד 22/05/2114)\n- סוג חכירה: חכירה מהוונת\n- הגבלות: קיימת הגבלה בהעברה, אין הגבלה בירושה\n\nמשכנתאות:\n- משכנתה ראשונה: לטובת הראל חברה לביטוח בע\"מ\n- דרגה: ראשונה\n- סכום: ללא הגבלת סכום\n- על: החוכר (ליאם נחמיאס חברה לבניין)\n- הערה: המשכנתה כוללת גם חלקות נוספות בגושים שונים\n\nהערות אזהרה:\nיש המון הערות אזהרה (סעיף 126) - כל אחת מייצגת עסקת מכירה של דירה ספציפית בפרויקט עם משכנתה נלווית. למעלה מ-15 עסקאות שונות עם בנקים שונים (מזרחי טפחות, לאומי, דיסקונט, הפועלים).\n\nהאם רצית לראות את הזכויות על הנכס שלנו בנתניה (גוש 9905, חלקה 88)? אם כן, אצטרך את נסח הטאבו המלא של הנכס הזה."
+      },
+      "metadata": {
+        "model": "claude-sonnet-4-5-20250929",
+        "inputTokens": 32830,
+        "outputTokens": 735,
+        "latencyMs": 26166
+      }
+    }
+  ],
+  "summary": {
+    "totalMessages": 20,
+    "totalToolCalls": 16,
+    "totalTokens": 427186,
+    "totalLatencyMs": 239888,
+    "errors": 0
+  }
+}
