@@ -297,7 +297,7 @@ export function convertValuationDataToReportData(
     section1: {
       environmentDescription,
       environmentMap: (valuationData.gisScreenshots?.wideArea || valuationData.gisScreenshots?.cropMode0) ? {
-        src: valuationData.gisScreenshots.wideArea || valuationData.gisScreenshots.cropMode0,
+        src: (valuationData.gisScreenshots.wideArea || valuationData.gisScreenshots.cropMode0) as string,
         caption: 'מפת סביבה - GOVMAP'
       } : undefined,
       parcel: {
@@ -312,7 +312,7 @@ export function convertValuationDataToReportData(
         parcelShape: valuationData.parcelShape || extracted.parcel_shape,
         parcelSurface: valuationData.parcelSurface || extracted.parcel_surface,
         parcelSketch: (valuationData.gisScreenshots?.zoomedWithTazea || valuationData.gisScreenshots?.cropMode1) ? {
-          src: valuationData.gisScreenshots.zoomedWithTazea || valuationData.gisScreenshots.cropMode1,
+          src: (valuationData.gisScreenshots.zoomedWithTazea || valuationData.gisScreenshots.cropMode1) as string,
           caption: 'תשריט חלקה / תצלום תצ"א'
         } : undefined,
         parcelSketchNoTazea: valuationData.gisScreenshots?.zoomedNoTazea ? {

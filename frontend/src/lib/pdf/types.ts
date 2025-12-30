@@ -60,6 +60,7 @@ export type ReportData = {
       buildingUnits?: number;
       numberOfBuildings?: number;          // מספר בניינים
       parcelSketch?: { src: string; caption: string };  // תצ"א/תשריט
+      parcelSketchNoTazea?: { src: string; caption: string };  // תשריט ללא תצ״א
       boundaries?: { west?: string; east?: string; north?: string; south?: string };
       parcelShape?: string;                // צורת החלקה
       parcelSurface?: string;              // פני הקרקע
