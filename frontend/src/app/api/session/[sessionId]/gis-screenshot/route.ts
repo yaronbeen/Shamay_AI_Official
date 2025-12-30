@@ -12,10 +12,17 @@ export async function POST(
     // Handle JSON request (for server screenshot)
     if (contentType?.includes('application/json')) {
       const body = await request.json()
-      const { cropMode, govmapUrl, coordinates, annotations } = body
+      const { cropMode, screenshotType, govmapUrl, coordinates, annotations } = body
+
+      // Support both screenshotType (new) and cropMode (legacy)
+      const mode = screenshotType || cropMode
 
       if (!govmapUrl) {
         return NextResponse.json({ error: 'GovMap URL is required' }, { status: 400 })
+      }
+
+      if (!mode) {
+        return NextResponse.json({ error: 'Screenshot type is required' }, { status: 400 })
       }
 
       // Call backend service to capture screenshot
@@ -24,9 +31,11 @@ export async function POST(
         const screenshotResponse = await fetch(`${backendUrl}/api/gis-screenshot`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             govmapUrl,
-            cropMode,
+            screenshotType: mode,
+            cropMode: mode, // Legacy support
+            sessionId: params.sessionId,
             viewport: { width: 1200, height: 800 }
           })
         })
