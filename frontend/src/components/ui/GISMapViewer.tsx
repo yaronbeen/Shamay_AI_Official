@@ -1896,4 +1896,4 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
   )
 }
 // Trigger Vercel rebuild - 1767115101
-// Force rebuild 1767117415
+
