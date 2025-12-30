@@ -1200,11 +1200,17 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
           govmapUrl: urlToCapture,
           screenshotType, // New field for screenshot type
           sessionId: mapSessionId,
-          // Send ITM coordinates for WMS-based capture
-          coordinates: coords.itm ? {
-            easting: coords.itm.easting,
-            northing: coords.itm.northing
-          } : undefined
+          // Send coordinates for WMS-based capture
+          coordinates: {
+            itm: coords.itm ? {
+              easting: coords.itm.easting,
+              northing: coords.itm.northing
+            } : undefined,
+            wgs84: coords.wgs84 ? {
+              lat: coords.wgs84.lat,
+              lon: coords.wgs84.lon
+            } : undefined
+          }
         })
       })
 

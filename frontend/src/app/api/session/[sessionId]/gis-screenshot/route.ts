@@ -3,15 +3,97 @@ import { ShumaDB } from '../../../../../lib/shumadb'
 import { FileStorageService } from '../../../../../lib/file-storage'
 
 /**
- * Fetch static map image from GovMap WMS service
+ * Fetch static map image from GovMap WMS (parcels) or ESRI (aerial)
  * Works on Vercel serverless - no Puppeteer needed!
  */
-async function fetchWMSMapImage(
-  easting: number,
-  northing: number,
+async function fetchMapImage(
+  coordinates: { itm?: { easting: number; northing: number }; wgs84?: { lat: number; lon: number } },
   screenshotType: string
 ): Promise<{ success: boolean; imageBase64?: string; error?: string }> {
   try {
+    // For zoomedWithTazea, use ESRI World Imagery (aerial/satellite)
+    if (screenshotType === 'zoomedWithTazea') {
+      return await fetchESRIAerialImage(coordinates, screenshotType)
+    }
+
+    // For other types, use GovMap WMS (parcels layer)
+    return await fetchGovMapWMSImage(coordinates, screenshotType)
+  } catch (error) {
+    console.error('❌ Map fetch error:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  }
+}
+
+/**
+ * Fetch aerial/satellite imagery from ESRI World Imagery
+ */
+async function fetchESRIAerialImage(
+  coordinates: { itm?: { easting: number; northing: number }; wgs84?: { lat: number; lon: number } },
+  screenshotType: string
+): Promise<{ success: boolean; imageBase64?: string; error?: string }> {
+  try {
+    // Need WGS84 coordinates for ESRI
+    if (!coordinates.wgs84?.lat || !coordinates.wgs84?.lon) {
+      return { success: false, error: 'WGS84 coordinates required for aerial imagery' }
+    }
+
+    const { lat, lon } = coordinates.wgs84
+
+    // Calculate bounding box (in degrees, ~300m area)
+    const delta = 0.002 // ~200m in each direction
+    const bbox = `${lon - delta},${lat - delta},${lon + delta},${lat + delta}`
+
+    console.log(`🛰️ ESRI Aerial Request: center=(${lat}, ${lon}), bbox=${bbox}`)
+
+    // ESRI World Imagery export endpoint
+    const esriUrl = new URL('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export')
+    esriUrl.searchParams.set('bbox', bbox)
+    esriUrl.searchParams.set('bboxSR', '4326')
+    esriUrl.searchParams.set('imageSR', '4326')
+    esriUrl.searchParams.set('size', '800,800')
+    esriUrl.searchParams.set('format', 'png')
+    esriUrl.searchParams.set('f', 'image')
+
+    console.log(`🌐 Fetching ESRI: ${esriUrl.toString()}`)
+
+    const response = await fetch(esriUrl.toString())
+
+    if (!response.ok) {
+      return { success: false, error: `ESRI request failed: ${response.status}` }
+    }
+
+    const contentType = response.headers.get('content-type')
+    if (!contentType?.includes('image')) {
+      return { success: false, error: 'ESRI returned non-image response' }
+    }
+
+    const arrayBuffer = await response.arrayBuffer()
+    const base64 = Buffer.from(arrayBuffer).toString('base64')
+
+    console.log(`✅ ESRI Aerial Success: ${arrayBuffer.byteLength} bytes`)
+
+    return { success: true, imageBase64: base64 }
+  } catch (error) {
+    console.error('❌ ESRI fetch error:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  }
+}
+
+/**
+ * Fetch parcel map from GovMap WMS
+ */
+async function fetchGovMapWMSImage(
+  coordinates: { itm?: { easting: number; northing: number }; wgs84?: { lat: number; lon: number } },
+  screenshotType: string
+): Promise<{ success: boolean; imageBase64?: string; error?: string }> {
+  try {
+    // Need ITM coordinates for GovMap WMS
+    if (!coordinates.itm?.easting || !coordinates.itm?.northing) {
+      return { success: false, error: 'ITM coordinates required for GovMap WMS' }
+    }
+
+    const { easting, northing } = coordinates.itm
+
     // Determine size based on screenshot type
     // wideArea = larger area (1000m), zoomed = smaller area (300m)
     const size = screenshotType === 'wideArea' ? 1000 : 300
@@ -25,26 +107,21 @@ async function fetchWMSMapImage(
       northing + halfSize
     ].join(',')
 
-    // Determine layers - with or without aerial imagery (תצ״א)
-    // PARCEL_ALL = parcels layer
-    // For zoomedWithTazea we'd need the aerial layer too
-    const layers = 'PARCEL_ALL'
-
-    console.log(`📍 WMS Request: type=${screenshotType}, center=(${easting}, ${northing}), size=${size}m`)
+    console.log(`📍 GovMap WMS Request: type=${screenshotType}, center=(${easting}, ${northing}), size=${size}m`)
 
     // Construct WMS GetMap URL
     const wmsUrl = new URL('https://open.govmap.gov.il/geoserver/opendata/wms')
     wmsUrl.searchParams.set('SERVICE', 'WMS')
     wmsUrl.searchParams.set('VERSION', '1.1.1')
     wmsUrl.searchParams.set('REQUEST', 'GetMap')
-    wmsUrl.searchParams.set('LAYERS', layers)
+    wmsUrl.searchParams.set('LAYERS', 'PARCEL_ALL')
     wmsUrl.searchParams.set('BBOX', bbox)
     wmsUrl.searchParams.set('WIDTH', '800')
     wmsUrl.searchParams.set('HEIGHT', '800')
-    wmsUrl.searchParams.set('SRS', 'EPSG:2039')  // ITM projection
+    wmsUrl.searchParams.set('SRS', 'EPSG:2039')
     wmsUrl.searchParams.set('FORMAT', 'image/png')
 
-    console.log(`🌐 Fetching WMS: ${wmsUrl.toString()}`)
+    console.log(`🌐 Fetching GovMap WMS: ${wmsUrl.toString()}`)
 
     const response = await fetch(wmsUrl.toString())
 
@@ -60,11 +137,10 @@ async function fetchWMSMapImage(
       return { success: false, error: `WMS returned non-image: ${errorText.substring(0, 200)}` }
     }
 
-    // Convert to base64
     const arrayBuffer = await response.arrayBuffer()
     const base64 = Buffer.from(arrayBuffer).toString('base64')
 
-    console.log(`✅ WMS Success: ${arrayBuffer.byteLength} bytes`)
+    console.log(`✅ GovMap WMS Success: ${arrayBuffer.byteLength} bytes`)
 
     return { success: true, imageBase64: base64 }
   } catch (error) {
@@ -92,19 +168,16 @@ export async function POST(
         return NextResponse.json({ error: 'Screenshot type is required' }, { status: 400 })
       }
 
-      // Use WMS if we have coordinates
-      if (coordinates?.easting && coordinates?.northing) {
-        console.log(`📸 Using WMS for screenshot: ${mode}`)
+      // Use WMS/ESRI if we have coordinates (ITM or WGS84)
+      if (coordinates?.itm || coordinates?.wgs84) {
+        const source = mode === 'zoomedWithTazea' ? 'ESRI Aerial' : 'GovMap WMS'
+        console.log(`📸 Using ${source} for screenshot: ${mode}`)
 
-        const wmsResult = await fetchWMSMapImage(
-          coordinates.easting,
-          coordinates.northing,
-          mode
-        )
+        const mapResult = await fetchMapImage(coordinates, mode)
 
-        if (wmsResult.success && wmsResult.imageBase64) {
+        if (mapResult.success && mapResult.imageBase64) {
           // Save image to storage and get URL
-          const buffer = Buffer.from(wmsResult.imageBase64, 'base64')
+          const buffer = Buffer.from(mapResult.imageBase64, 'base64')
           const filename = `gis-${mode}-${Date.now()}.png`
 
           try {
@@ -143,25 +216,25 @@ export async function POST(
 
             return NextResponse.json({
               success: true,
-              screenshot: wmsResult.imageBase64,
+              screenshot: mapResult.imageBase64,
               screenshotUrl: uploadResult.url,
-              message: 'WMS screenshot captured and saved successfully'
+              message: `${source} screenshot captured and saved successfully`
             })
           } catch (uploadError) {
             console.error('❌ Failed to save screenshot:', uploadError)
             // Still return the image even if save failed
             return NextResponse.json({
               success: true,
-              screenshot: wmsResult.imageBase64,
-              message: 'WMS screenshot captured (save failed)'
+              screenshot: mapResult.imageBase64,
+              message: `${source} screenshot captured (save failed)`
             })
           }
         } else {
-          console.warn('⚠️ WMS failed, coordinates were:', coordinates)
+          console.warn('⚠️ Map capture failed, coordinates were:', coordinates)
           return NextResponse.json({
             success: false,
-            error: wmsResult.error || 'WMS capture failed',
-            message: 'צילום WMS נכשל. נסה להעלות צילום מסך ידנית.'
+            error: mapResult.error || 'Map capture failed',
+            message: 'צילום מפה נכשל. נסה להעלות צילום מסך ידנית.'
           }, { status: 500 })
         }
       }
