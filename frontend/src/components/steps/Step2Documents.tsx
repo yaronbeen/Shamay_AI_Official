@@ -485,7 +485,7 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
         const fileUrl = upload.url
         console.log(`📄 Extracting from tabu file: ${fileUrl}`)
 
-        const response = await fetch(`/api/ai/land-registry`, {
+        const response = await fetch(`/api/session/${sessionId}/land-registry-analysis`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ fileUrl, sessionId })
@@ -591,7 +591,7 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
         const fileUrl = upload.url
         console.log(`📄 Extracting from building permit file: ${fileUrl}`)
 
-        const response = await fetch(`/api/ai/building-permit`, {
+        const response = await fetch(`/api/session/${sessionId}/building-permit-analysis`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ fileUrl, sessionId })
@@ -691,7 +691,7 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
         const fileUrl = upload.url
         console.log(`📄 Extracting from condo file: ${fileUrl}`)
 
-        const response = await fetch(`/api/ai/shared-building`, {
+        const response = await fetch(`/api/session/${sessionId}/shared-building-analysis`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ fileUrl, sessionId })
@@ -765,12 +765,12 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
 
       // Call both interior and exterior analysis APIs
       const [interiorResponse, exteriorResponse] = await Promise.allSettled([
-        fetch(`/api/ai/interior-analysis`, {
+        fetch(`/api/session/${sessionId}/interior-analysis`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ images: interiorImages, sessionId })
         }),
-        fetch(`/api/ai/exterior-analysis`, {
+        fetch(`/api/session/${sessionId}/exterior-analysis`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ images: exteriorImages, sessionId })

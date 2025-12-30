@@ -766,11 +766,11 @@ export default function WizardPage() {
 
       
       <div className="w-full px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
-          {/* Main Content - Takes 7/12 of the width (58%) */}
-          <div className="xl:col-span-7">
+        <div className={`grid grid-cols-1 ${currentStep === 3 ? '' : 'xl:grid-cols-12'} gap-8`}>
+          {/* Main Content - Full width on Step 3, 7/12 otherwise */}
+          <div className={currentStep === 3 ? '' : 'xl:col-span-7'}>
             <StepIndicator currentStep={currentStep} onStepClick={handleStepClick} />
-            <div className="bg-white rounded-lg shadow-md p-6 mt-6 transition-wrapper">
+            <div className={`bg-white rounded-lg shadow-md mt-6 transition-wrapper ${currentStep === 3 ? 'p-0' : 'p-6'}`}>
               {isTransitioning ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -791,10 +791,12 @@ export default function WizardPage() {
             </div>
           </div>
 
-          {/* Document Preview - Takes 5/12 of the width (42%) */}
-          <div className="xl:col-span-5">
-            <DocumentPreview data={data} onDataChange={updateData} />
-          </div>
+          {/* Document Preview - Takes 5/12 of the width (42%) - Hidden on Step 3 which has its own layout */}
+          {currentStep !== 3 && (
+            <div className="xl:col-span-5">
+              <DocumentPreview data={data} onDataChange={updateData} />
+            </div>
+          )}
         </div>
       </div>
 
