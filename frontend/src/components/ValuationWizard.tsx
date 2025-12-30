@@ -52,6 +52,7 @@ export interface ValuationData {
   registeredArea?: number
   builtArea?: number
   balconyArea?: number
+  apartmentSqm?: number // Measured apartment area from Garmushka
   buildingPermitNumber?: string
   buildingPermitDate?: string
   buildingDescription?: string
@@ -370,10 +371,15 @@ export interface ValuationData {
     address?: string
   }
   
-  // GIS Screenshots (base64 data)
+  // GIS Screenshots (URLs or base64 data)
   gisScreenshots?: {
-    cropMode0?: string // base64 data
-    cropMode1?: string // base64 data
+    // New 3-screenshot format
+    wideArea?: string       // Large environment map for Section 1.1
+    zoomedNoTazea?: string  // Close-up without תצ"א for Section 1.2 (left)
+    zoomedWithTazea?: string // Close-up with תצ"א for Section 1.2 (right)
+    // Legacy fields for backward compatibility
+    cropMode0?: string
+    cropMode1?: string
   }
   
   // Garmushka Measurements

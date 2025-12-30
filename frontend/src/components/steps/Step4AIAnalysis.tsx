@@ -42,7 +42,7 @@ interface AIAnalysisSection {
 }
 
 export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionId }: Step4AIAnalysisProps) {
-  const [activeSection, setActiveSection] = useState<string>('market_analysis')
+  const [activeSection, setActiveSection] = useState<string>('garmushka_measurements')
   const [isProcessing, setIsProcessing] = useState(false)
   const [analysisResults, setAnalysisResults] = useState<any>({})
   const [gisMapFile, setGisMapFile] = useState<File | null>(null)
@@ -90,24 +90,24 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
 
   const sections: AIAnalysisSection[] = [
     {
-      id: 'market_analysis',
-      title: 'ניתוח נתוני שוק',
-      description: 'העלה נתוני מכירות להשוואה וניתוח שוק מבוסס AI',
-      icon: BarChart3,
+      id: 'garmushka_measurements',
+      title: 'מדידות גרמושקה',
+      description: 'העלה תכנית קומה לביצוע מדידות מרחק ושטח אינטראקטיביות',
+      icon: Flag,
       active: true
     },
     {
       id: 'gis_mapping',
       title: 'מפת GOVMAP',
-      description: 'העלה מפה או הורד מפה ממשרד הממשלה לשרטוט על הנכס',
+      description: 'צילום מפות לשילוב במסמך הסופי',
       icon: Map,
       active: true
     },
     {
-      id: 'garmushka_measurements',
-      title: 'מדידות גרמושקה',
-      description: 'העלה תכנית קומה לביצוע מדידות מרחק ושטח אינטראקטיביות',
-      icon: Flag,
+      id: 'market_analysis',
+      title: 'ניתוח נתוני שוק',
+      description: 'העלה נתוני מכירות להשוואה וניתוח שוק מבוסס AI',
+      icon: BarChart3,
       active: true
     }
   ]
@@ -330,18 +330,38 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
           onMeasurementComplete={(measurements) => {
             if (measurements) {
               console.log('📐 Step4AIAnalysis: Garmushka measurements completed', measurements)
-              
+
+              // Extract total measured area from polygon measurements
+              const measurementTable = measurements.measurementTable || []
+              const totalPolygonArea = measurementTable
+                .filter((m: any) => m && m.type === 'polygon' && m.measurement)
+                .reduce((sum: number, m: any) => {
+                  // Parse measurement string like "123.45 m²" or "123,45 m2"
+                  const match = m.measurement.match(/([\d.,]+)\s*m[²2]?/i)
+                  if (match) {
+                    const numStr = match[1].replace(',', '.')
+                    const parsed = parseFloat(numStr)
+                    return sum + (isFinite(parsed) ? parsed : 0)
+                  }
+                  return sum
+                }, 0)
+
               // Update local state
               setAnalysisResults((prev: any) => ({
                 ...prev,
                 garmushkaMeasurements: measurements
               }))
-              
+
+              // Build update object - always include measurements, optionally update apartmentSqm
+              const updateObj: Partial<typeof data> = { garmushkaMeasurements: measurements }
+              if (totalPolygonArea > 0) {
+                updateObj.apartmentSqm = Math.round(totalPolygonArea * 100) / 100
+                console.log(`📐 Auto-updating apartmentSqm to ${updateObj.apartmentSqm} m²`)
+              }
+
               // Save to session via updateData
-              updateData({
-                garmushkaMeasurements: measurements
-              })
-              
+              updateData(updateObj)
+
               console.log('✅ Step4AIAnalysis: Garmushka measurements updated in session')
             } else {
               console.log('📐 Step4AIAnalysis: Garmushka measurements returned null')
