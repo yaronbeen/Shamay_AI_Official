@@ -1,5 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Force unique build ID on every deployment to ensure cache invalidation
+  generateBuildId: async () => {
+    // Use timestamp + random string to guarantee unique build
+    return `build-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
+  },
   async rewrites() {
     // Use environment variable for backend URL, fallback to localhost for dev
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
