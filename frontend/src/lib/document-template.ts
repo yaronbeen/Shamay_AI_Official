@@ -2089,41 +2089,51 @@ export function generateDocumentHTML(
           <p>${environmentParagraph}</p>
               </div>
         
-        <!-- Environment Map -->
-        ${(data.gisScreenshots?.cropMode0 || data.gisScreenshots?.cropMode1) ? `
+        <!-- Environment Map - Large map for Section 1.1 -->
+        ${(() => {
+          // Use new wideArea field, fallback to legacy cropMode0
+          const wideAreaMap = data.gisScreenshots?.wideArea || data.gisScreenshots?.cropMode0
+          return wideAreaMap ? `
           <div class="section-block">
             <p>מפת הסביבה (מיקום נשוא חוות הדעת מסומן, להמחשה בלבד):</p>
-            ${data.gisScreenshots?.cropMode0 ? `
-              <figure style="margin-top: 10px;">
-                <img src="${data.gisScreenshots.cropMode0}" alt="מפת הסביבה" style="max-width: 100%; border: 1px solid #cccccc;" />
-              </figure>
-            ` : ''}
-                </div>
-              ` : ''}
+            <figure style="margin-top: 10px;">
+              <img src="${wideAreaMap}" alt="מפת הסביבה" style="max-width: 100%; border: 1px solid #cccccc;" />
+            </figure>
+          </div>
+          ` : ''
+        })()}
         <!-- Section 1.2 - Plot Description -->
         <div class="section-block">
           <div class="section-title">1.2&emsp;תיאור החלקה</div>
           <p>${plotParagraph}</p>
                 </div>
         
-        <!-- Plot Images (Side by Side) -->
-        ${(data.gisScreenshots?.cropMode1 || data.gisScreenshots?.cropMode0) ? `
+        <!-- Plot Images (Side by Side) - Zoomed maps for Section 1.2 -->
+        ${(() => {
+          // Use new zoomedNoTazea and zoomedWithTazea fields, fallback to legacy cropMode0/cropMode1
+          const zoomedNoTazeaMap = data.gisScreenshots?.zoomedNoTazea || data.gisScreenshots?.cropMode0
+          const zoomedWithTazeaMap = data.gisScreenshots?.zoomedWithTazea || data.gisScreenshots?.cropMode1
+
+          return (zoomedNoTazeaMap || zoomedWithTazeaMap) ? `
           <div class="section-block">
             <p>תשריט החלקה ותצ"א, מתוך האתר ההנדסי של העירייה (להמחשה בלבד):</p>
             <div class="side-by-side-images">
-              ${data.gisScreenshots?.cropMode1 ? `
+              ${zoomedWithTazeaMap ? `
                 <figure>
-                  <img src="${data.gisScreenshots.cropMode1}" alt="תצ״א" />
+                  <img src="${zoomedWithTazeaMap}" alt="תצ״א" />
+                  <figcaption style="text-align: center; font-size: 11px; color: #666; margin-top: 4px;">עם תצ״א</figcaption>
                 </figure>
               ` : ''}
-              ${data.gisScreenshots?.cropMode0 ? `
+              ${zoomedNoTazeaMap ? `
                 <figure>
-                  <img src="${data.gisScreenshots.cropMode0}" alt="תשריט חלקה" />
+                  <img src="${zoomedNoTazeaMap}" alt="תשריט חלקה" />
+                  <figcaption style="text-align: center; font-size: 11px; color: #666; margin-top: 4px;">ללא תצ״א</figcaption>
                 </figure>
               ` : ''}
             </div>
           </div>
-        ` : ''}
+          ` : ''
+        })()}
         
         <!-- Boundaries -->
         ${(() => {
@@ -2732,9 +2742,20 @@ export function generateDocumentHTML(
           <ul class="bullet-list">
             <li>מיקום הנכס ב${address}.</li>
             <li>נשוא חוות הדעת: ${data.propertyEssence || 'דירת מגורים'} ${formatFloor(data.floor)}.</li>
-            <li>שטח הדירה, החלוקה הפונקציונאלית ורמת הגמר (הכל כמפורט לעיל).</li>
+            ${(() => {
+              // Include measured area from Garmushka if available
+              const measuredArea = (data as any).apartmentSqm || (data as any).garmushkaMeasurements?.totalArea
+              const registeredArea = getValueFromPaths(data, ['extractedData.registeredArea', 'extractedData.registered_area', 'extractedData.apartment_registered_area', 'registeredArea'])
+
+              if (measuredArea && measuredArea > 0) {
+                const areaText = `שטח הדירה לפי מדידה: ${formatNumber(measuredArea)} מ"ר`
+                const regAreaText = registeredArea ? ` (שטח רשום: ${formatNumber(registeredArea)} מ"ר)` : ''
+                return `<li>${areaText}${regAreaText}, החלוקה הפונקציונאלית ורמת הגמר (הכל כמפורט לעיל).</li>`
+              }
+              return `<li>שטח הדירה, החלוקה הפונקציונאלית ורמת הגמר (הכל כמפורט לעיל).</li>`
+            })()}
           </ul>
-                  </div>
+        </div>
         
         <!-- Rights Status -->
         <div class="section-block">

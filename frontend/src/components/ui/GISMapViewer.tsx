@@ -2,11 +2,26 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 
+// Screenshot types for document injection:
+// - wideArea: Large environment map for Section 1.1
+// - zoomedNoTazea: Close-up without תצ"א for Section 1.2 (left)
+// - zoomedWithTazea: Close-up with תצ"א for Section 1.2 (right)
+export type ScreenshotType = 'wideArea' | 'zoomedNoTazea' | 'zoomedWithTazea'
+
+export interface GISScreenshots {
+  wideArea?: string
+  zoomedNoTazea?: string
+  zoomedWithTazea?: string
+  // Legacy fields for backward compatibility
+  cropMode0?: string
+  cropMode1?: string
+}
+
 interface GISMapViewerProps {
   sessionId?: string
   data?: any
-  initialScreenshots?: { cropMode0?: string, cropMode1?: string }
-  onScreenshotsUpdated?: (screenshots: { cropMode0?: string, cropMode1?: string }) => void
+  initialScreenshots?: GISScreenshots
+  onScreenshotsUpdated?: (screenshots: GISScreenshots) => void
 }
 
 const MIN_LEFT_WIDTH = 260
@@ -37,8 +52,9 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const startXYRef = useRef<{ x: number, y: number } | null>(null)
-  const fileInputRef0 = useRef<HTMLInputElement>(null)
-  const fileInputRef1 = useRef<HTMLInputElement>(null)
+  const fileInputRefWideArea = useRef<HTMLInputElement>(null)
+  const fileInputRefZoomedNoTazea = useRef<HTMLInputElement>(null)
+  const fileInputRefZoomedWithTazea = useRef<HTMLInputElement>(null)
   const layoutRef = useRef<HTMLDivElement>(null)
 
   // Message helper
@@ -994,21 +1010,22 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
     })
   }
 
-  // Screenshot capture functions
+  // Screenshot capture functions - 3 types: wideArea, zoomedNoTazea, zoomedWithTazea
   const [isCapturing, setIsCapturing] = useState(false)
-  const [screenshots, setScreenshots] = useState<{ cropMode0?: string, cropMode1?: string }>({}) // Base64 for display
-  const [screenshotUrls, setScreenshotUrls] = useState<{ cropMode0?: string, cropMode1?: string }>({}) // URLs for saving
+  const [capturingType, setCapturingType] = useState<ScreenshotType | null>(null)
+  const [screenshots, setScreenshots] = useState<GISScreenshots>({}) // Base64 for display
+  const [screenshotUrls, setScreenshotUrls] = useState<GISScreenshots>({}) // URLs for saving
 
   // Save screenshot to shuma table under gisScreenshots
-  const saveScreenshotToDB = async (screenshotUrl: string, cropMode: '0' | '1', mapId: string) => {
+  const saveScreenshotToDB = async (screenshotUrl: string, screenshotType: ScreenshotType, mapId: string) => {
     if (!govmapData) {
       console.warn('No govmapData available, cannot save to DB')
-        return
-      }
-      
+      return
+    }
+
     // Use sessionId from props if available, otherwise use mapId
     const actualSessionId = sessionId || mapId
-    
+
     if (!actualSessionId) {
       console.error('No sessionId available, cannot save to DB')
       return
@@ -1016,16 +1033,16 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
 
     try {
       // Build current gisScreenshots object - merge with existing screenshots
-      const currentScreenshots = { ...screenshotUrls }
-      currentScreenshots[`cropMode${cropMode}`] = screenshotUrl
-      
-      console.log(`💾 Saving screenshot to shuma table for session: ${actualSessionId}`)
+      const currentScreenshots: GISScreenshots = { ...screenshotUrls }
+      currentScreenshots[screenshotType] = screenshotUrl
+
+      console.log(`💾 Saving screenshot (${screenshotType}) to shuma table for session: ${actualSessionId}`)
       console.log(`💾 Screenshots:`, currentScreenshots)
-      
+
       // Use save_gis_data action which only updates gisScreenshots field
       // First check if shuma exists, if not create it
       const checkResponse = await fetch('/api/sessions', {
-          method: 'POST',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'load_from_db',
@@ -1034,7 +1051,7 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
       })
 
       const checkResult = await checkResponse.json()
-      
+
       // If shuma doesn't exist, create it first
       if (!checkResult.success || !checkResult.valuationData) {
         console.log(`📝 Creating new shuma record for session: ${actualSessionId}`)
@@ -1051,19 +1068,16 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
               street: addressStreet,
               building_number: addressNumber,
               city: addressCity,
-              gisScreenshots: {
-                cropMode0: currentScreenshots.cropMode0,
-                cropMode1: currentScreenshots.cropMode1
-              }
+              gisScreenshots: currentScreenshots
             }
           })
         })
         const createResult = await createResponse.json()
         if (!createResult.success) {
           console.error('Error creating shuma record:', createResult.error)
-        return
+          return
         }
-            } else {
+      } else {
         // Shuma exists, update only gisScreenshots
         console.log(`📝 Updating gisScreenshots for existing session: ${actualSessionId}`)
         const updateResponse = await fetch('/api/sessions', {
@@ -1072,16 +1086,13 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
           body: JSON.stringify({
             action: 'save_gis_data',
             sessionId: actualSessionId,
-            gisData: {
-              cropMode0: currentScreenshots.cropMode0,
-              cropMode1: currentScreenshots.cropMode1
-            }
+            gisData: currentScreenshots
           })
         })
         const updateResult = await updateResponse.json()
         if (!updateResult.success) {
           console.error('Error updating gisScreenshots:', updateResult.error)
-        return
+          return
         }
       }
 
@@ -1089,29 +1100,35 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
       if (!currentMapId && actualSessionId) {
         setCurrentMapId(actualSessionId)
       }
-      console.log(`✅ Screenshot ${cropMode === '0' ? 'cropMode0' : 'cropMode1'} saved to shuma table for session ${actualSessionId}`)
+      console.log(`✅ Screenshot ${screenshotType} saved to shuma table for session ${actualSessionId}`)
     } catch (error: any) {
       console.error('Error saving screenshot to shuma table:', error)
     }
   }
 
   // Delete GIS screenshot from DB and storage
-  const handleDeleteScreenshot = async (cropMode: '0' | '1') => {
-    if (!confirm(`האם אתה בטוח שברצונך למחוק את התמונה ${cropMode === '0' ? 'ללא תצ״א' : 'עם תצ״א'}?`)) {
+  const handleDeleteScreenshot = async (screenshotType: ScreenshotType) => {
+    const typeLabels: Record<ScreenshotType, string> = {
+      wideArea: 'מפה רחבה',
+      zoomedNoTazea: 'תקריב ללא תצ״א',
+      zoomedWithTazea: 'תקריב עם תצ״א'
+    }
+
+    if (!confirm(`האם אתה בטוח שברצונך למחוק את התמונה "${typeLabels[screenshotType]}"?`)) {
       return
     }
 
     try {
       showMessage('מוחק תמונה...', 'info')
-      
+
       const actualSessionId = sessionId || currentMapId
       if (!actualSessionId) {
         showMessage('שגיאה: לא נמצא session ID', 'error')
         return
       }
 
-      // Call delete API
-      const response = await fetch(`/api/session/${actualSessionId}/gis-screenshot/delete?cropMode=${cropMode}`, {
+      // Call delete API with new screenshot type
+      const response = await fetch(`/api/session/${actualSessionId}/gis-screenshot/delete?screenshotType=${screenshotType}`, {
         method: 'DELETE'
       })
 
@@ -1121,24 +1138,24 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
         // Remove from local state
         setScreenshots(prev => {
           const updated = { ...prev }
-          delete updated[`cropMode${cropMode}`]
+          delete updated[screenshotType]
           return updated
         })
-        
+
         setScreenshotUrls(prev => {
           const updated = { ...prev }
-          delete updated[`cropMode${cropMode}`]
+          delete updated[screenshotType]
           return updated
         })
 
         // Notify parent component
         if (onScreenshotsUpdated) {
           const updatedScreenshots = { ...screenshots }
-          delete updatedScreenshots[`cropMode${cropMode}`]
+          delete updatedScreenshots[screenshotType]
           onScreenshotsUpdated(updatedScreenshots)
         }
 
-        showMessage(`תמונה ${cropMode === '0' ? 'ללא תצ״א' : 'עם תצ״א'} נמחקה בהצלחה!`, 'success')
+        showMessage(`תמונה "${typeLabels[screenshotType]}" נמחקה בהצלחה!`, 'success')
       } else {
         showMessage(`שגיאה במחיקת התמונה: ${result.error}`, 'error')
       }
@@ -1148,35 +1165,41 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
     }
   }
 
-  const captureScreenshot = async (cropMode: '0' | '1') => {
+  // Screenshot type labels for UI display
+  const screenshotTypeLabels: Record<ScreenshotType, string> = {
+    wideArea: 'מפה רחבה (סביבה)',
+    zoomedNoTazea: 'תקריב ללא תצ״א',
+    zoomedWithTazea: 'תקריב עם תצ״א'
+  }
+
+  const captureScreenshot = async (screenshotType: ScreenshotType) => {
     if (!govmapData || !govmapUrl) {
       showMessage('נא לחפש כתובת תחילה', 'error')
       return
     }
 
     setIsCapturing(true)
-    showMessage('מצלם מפה...', 'info')
+    setCapturingType(screenshotType)
+    showMessage(`מצלם ${screenshotTypeLabels[screenshotType]}...`, 'info')
 
     try {
-      // Use the govmap URL with or without תצ״א based on cropMode
-      // FIXED: The mapping was reversed - swapped the URLs
-      // cropMode '0' = ללא תצ״א (without tazea) = urlWithoutTazea
-      // cropMode '1' = עם תצ״א (with tazea) = urlWithTazea
-      const urlToCapture = cropMode === '0' 
-        ? (govmapData.govmap?.urlWithTazea || govmapUrl)  // FIXED: swapped
-        : (govmapData.govmap?.urlWithoutTazea || govmapUrl)  // FIXED: swapped
+      // Determine which URL to capture based on screenshot type
+      // wideArea and zoomedNoTazea use urlWithoutTazea
+      // zoomedWithTazea uses urlWithTazea
+      const urlToCapture = screenshotType === 'zoomedWithTazea'
+        ? (govmapData.govmap?.urlWithTazea || govmapUrl)
+        : (govmapData.govmap?.urlWithoutTazea || govmapUrl)
 
       // Use sessionId from props first, then currentMapId, otherwise generate new one
-      // This ensures screenshots are saved to the correct session in the database
       const mapSessionId = sessionId || currentMapId || `map-${Date.now()}`
 
       const response = await fetch('/api/gis-screenshot', {
-          method: 'POST',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           govmapUrl: urlToCapture,
-          cropMode,
-          sessionId: mapSessionId // Use consistent sessionId for file saving
+          screenshotType, // New field for screenshot type
+          sessionId: mapSessionId
         })
       })
 
@@ -1187,30 +1210,30 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
         const screenshotData = `data:image/png;base64,${result.screenshot}`
         setScreenshots(prev => ({
           ...prev,
-          [`cropMode${cropMode}`]: screenshotData
+          [screenshotType]: screenshotData
         }))
-        
+
         // Store screenshot URL for saving (if available)
         if (result.screenshotUrl) {
           setScreenshotUrls(prev => ({
             ...prev,
-            [`cropMode${cropMode}`]: result.screenshotUrl
+            [screenshotType]: result.screenshotUrl
           }))
 
           // Save screenshot path to database immediately
-          await saveScreenshotToDB(result.screenshotUrl, cropMode, mapSessionId)
-          
+          await saveScreenshotToDB(result.screenshotUrl, screenshotType, mapSessionId)
+
           // Notify parent component that screenshots were updated
           if (onScreenshotsUpdated) {
             const updatedScreenshots = {
               ...screenshots,
-              [`cropMode${cropMode}`]: result.screenshotUrl
+              [screenshotType]: result.screenshotUrl
             }
             onScreenshotsUpdated(updatedScreenshots)
           }
         }
-        
-        showMessage(`צילום מפה ${cropMode === '0' ? 'ללא תצ״א' : 'עם תצ״א'} נשמר בהצלחה!`, 'success')
+
+        showMessage(`צילום "${screenshotTypeLabels[screenshotType]}" נשמר בהצלחה!`, 'success')
         console.log('Screenshot saved:', result.screenshotUrl || result.filename)
       } else {
         showMessage(`שגיאה בצילום: ${result.error}`, 'error')
@@ -1220,11 +1243,12 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
       showMessage(`שגיאה בצילום: ${error.message}`, 'error')
     } finally {
       setIsCapturing(false)
+      setCapturingType(null)
     }
   }
 
   // Manual screenshot upload handler
-  const handleManualScreenshotUpload = async (event: React.ChangeEvent<HTMLInputElement>, cropMode: '0' | '1') => {
+  const handleManualScreenshotUpload = async (event: React.ChangeEvent<HTMLInputElement>, screenshotType: ScreenshotType) => {
     const file = event.target.files?.[0]
     if (!file) return
 
@@ -1233,14 +1257,14 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
       showMessage('נא להעלות קובץ תמונה בלבד', 'error')
       return
     }
-    
+
     try {
-      showMessage('מעלה תמונה...', 'info')
+      showMessage(`מעלה תמונת "${screenshotTypeLabels[screenshotType]}"...`, 'info')
 
       // Create FormData for file upload
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('type', `gis-screenshot-mode${cropMode}`)
+      formData.append('type', `gis-screenshot-${screenshotType}`)
 
       // Use sessionId from props first, then currentMapId, otherwise generate new one
       const mapSessionId = sessionId || currentMapId || `map-${Date.now()}`
@@ -1260,7 +1284,7 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
           const base64Data = e.target?.result as string
           setScreenshots(prev => ({
             ...prev,
-            [`cropMode${cropMode}`]: base64Data
+            [screenshotType]: base64Data
           }))
         }
         reader.readAsDataURL(file)
@@ -1268,23 +1292,23 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
         // Store screenshot URL for saving
         setScreenshotUrls(prev => ({
           ...prev,
-          [`cropMode${cropMode}`]: uploadResult.uploadEntry.url
+          [screenshotType]: uploadResult.uploadEntry.url
         }))
 
         // Save screenshot path to database immediately
-        await saveScreenshotToDB(uploadResult.uploadEntry.url, cropMode, mapSessionId)
+        await saveScreenshotToDB(uploadResult.uploadEntry.url, screenshotType, mapSessionId)
 
         // Notify parent component that screenshots were updated
         if (onScreenshotsUpdated) {
           const updatedScreenshots = {
             ...screenshots,
-            [`cropMode${cropMode}`]: uploadResult.uploadEntry.url
+            [screenshotType]: uploadResult.uploadEntry.url
           }
           onScreenshotsUpdated(updatedScreenshots)
         }
 
-        showMessage(`תמונה ${cropMode === '0' ? 'ללא תצ״א' : 'עם תצ״א'} הועלתה ונשמרה בהצלחה!`, 'success')
-        } else {
+        showMessage(`תמונת "${screenshotTypeLabels[screenshotType]}" הועלתה ונשמרה בהצלחה!`, 'success')
+      } else {
         showMessage(`שגיאה בהעלאת התמונה: ${uploadResult.error}`, 'error')
       }
     } catch (error: any) {
@@ -1543,11 +1567,11 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
                   <h4 className={`font-semibold text-sm ${
                     activeTab === 'upload' ? 'text-blue-600' : 'text-gray-700'
                   }`}>
-                    העלאת תמונות
+                    צילום מפות
                   </h4>
-                  {(screenshots.cropMode0 || screenshots.cropMode1) && (
+                  {(screenshots.wideArea || screenshots.zoomedNoTazea || screenshots.zoomedWithTazea) && (
                     <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
-                      {[screenshots.cropMode0, screenshots.cropMode1].filter(Boolean).length}
+                      {[screenshots.wideArea, screenshots.zoomedNoTazea, screenshots.zoomedWithTazea].filter(Boolean).length}/3
                     </span>
                   )}
                 </div>
@@ -1654,61 +1678,167 @@ export default function GISMapViewer({ sessionId, data, initialScreenshots, onSc
 
               {activeTab === 'upload' && (
                 <div className="space-y-4">
-                  {/* CropMode0 (without תצ״א) */}
-                  <label className="block w-full bg-blue-500 text-white p-3 rounded-lg font-medium hover:bg-blue-600 transition-colors cursor-pointer text-center">
-                    📤 העלה תמונה ללא תצ״א
-                    <input
-                      ref={fileInputRef0}
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => handleManualScreenshotUpload(e, '0')}
-                    />
-                  </label>
-                  
-                  {/* CropMode1 (with תצ״א) */}
-                  <label className="block w-full bg-purple-500 text-white p-3 rounded-lg font-medium hover:bg-purple-600 transition-colors cursor-pointer text-center">
-                    📤 העלה תמונה עם תצ״א
-                    <input
-                      ref={fileInputRef1}
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => handleManualScreenshotUpload(e, '1')}
-                    />
-                  </label>
+                  {/* Instructions */}
+                  <div className="bg-blue-50 p-3 rounded-lg border border-blue-200 text-sm text-blue-800">
+                    <p className="font-medium mb-1">הוראות צילום מפות:</p>
+                    <ol className="list-decimal list-inside space-y-1 text-xs">
+                      <li>נווטו במפה לזום הרצוי</li>
+                      <li>לחצו על הכפתור המתאים לצילום</li>
+                      <li>הצילומים ישולבו במסמך הסופי</li>
+                    </ol>
+                  </div>
 
-                  {/* Display uploaded screenshots */}
-                  {(screenshots.cropMode0 || screenshots.cropMode1) && (
-                    <div className="mt-3 space-y-2">
-                      {screenshots.cropMode0 && (
-                        <div className="bg-gray-50 p-2 rounded border border-gray-300 relative group">
-                          <div className="text-xs font-medium text-gray-700 mb-1">מפה ללא תצ״א:</div>
-                          <img src={screenshots.cropMode0} alt="Screenshot without תצ״א" className="w-full rounded border border-gray-300 max-h-32 object-contain" />
-                          <button
-                            onClick={() => handleDeleteScreenshot('0')}
-                            className="absolute top-1 left-1 bg-red-500 text-white p-1 rounded hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity text-xs"
-                            title="מחק תמונה"
-                          >
-                            🗑️
-                          </button>
+                  {/* 3 Screenshot Capture Buttons */}
+                  <div className="space-y-3">
+                    {/* Wide Area Screenshot - for Section 1.1 */}
+                    <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <h4 className="font-medium text-gray-900">1. מפה רחבה (סביבה)</h4>
+                          <p className="text-xs text-gray-500">תוצג בסעיף 1.1 - גודל מלא</p>
                         </div>
-                      )}
-                      {screenshots.cropMode1 && (
-                        <div className="bg-gray-50 p-2 rounded border border-gray-300 relative group">
-                          <div className="text-xs font-medium text-gray-700 mb-1">מפה עם תצ״א:</div>
-                          <img src={screenshots.cropMode1} alt="Screenshot with תצ״א" className="w-full rounded border border-gray-300 max-h-32 object-contain" />
+                        {screenshots.wideArea && (
+                          <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded">נשמר</span>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => captureScreenshot('wideArea')}
+                          disabled={isCapturing || !govmapData}
+                          className={`flex-1 p-2 rounded-lg font-medium transition-colors ${
+                            isCapturing && capturingType === 'wideArea'
+                              ? 'bg-blue-400 text-white cursor-wait'
+                              : 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed'
+                          }`}
+                        >
+                          {isCapturing && capturingType === 'wideArea' ? '⏳ מצלם...' : '📸 צלם מפה רחבה'}
+                        </button>
+                        <label className="p-2 bg-gray-200 text-gray-700 rounded-lg cursor-pointer hover:bg-gray-300 transition-colors">
+                          📤
+                          <input
+                            ref={fileInputRefWideArea}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => handleManualScreenshotUpload(e, 'wideArea')}
+                          />
+                        </label>
+                      </div>
+                      {screenshots.wideArea && (
+                        <div className="mt-2 relative group">
+                          <img src={screenshots.wideArea} alt="Wide area map" className="w-full rounded border border-gray-300 max-h-24 object-contain" />
                           <button
-                            onClick={() => handleDeleteScreenshot('1')}
+                            onClick={() => handleDeleteScreenshot('wideArea')}
                             className="absolute top-1 left-1 bg-red-500 text-white p-1 rounded hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity text-xs"
-                            title="מחק תמונה"
+                            title="מחק"
                           >
                             🗑️
                           </button>
                         </div>
                       )}
                     </div>
-                  )}
+
+                    {/* Zoomed No Tazea Screenshot - for Section 1.2 left */}
+                    <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <h4 className="font-medium text-gray-900">2. תקריב ללא תצ״א</h4>
+                          <p className="text-xs text-gray-500">תוצג בסעיף 1.2 - זוג מפות (שמאל)</p>
+                        </div>
+                        {screenshots.zoomedNoTazea && (
+                          <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded">נשמר</span>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => captureScreenshot('zoomedNoTazea')}
+                          disabled={isCapturing || !govmapData}
+                          className={`flex-1 p-2 rounded-lg font-medium transition-colors ${
+                            isCapturing && capturingType === 'zoomedNoTazea'
+                              ? 'bg-indigo-400 text-white cursor-wait'
+                              : 'bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed'
+                          }`}
+                        >
+                          {isCapturing && capturingType === 'zoomedNoTazea' ? '⏳ מצלם...' : '📸 צלם תקריב ללא תצ״א'}
+                        </button>
+                        <label className="p-2 bg-gray-200 text-gray-700 rounded-lg cursor-pointer hover:bg-gray-300 transition-colors">
+                          📤
+                          <input
+                            ref={fileInputRefZoomedNoTazea}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => handleManualScreenshotUpload(e, 'zoomedNoTazea')}
+                          />
+                        </label>
+                      </div>
+                      {screenshots.zoomedNoTazea && (
+                        <div className="mt-2 relative group">
+                          <img src={screenshots.zoomedNoTazea} alt="Zoomed without Tazea" className="w-full rounded border border-gray-300 max-h-24 object-contain" />
+                          <button
+                            onClick={() => handleDeleteScreenshot('zoomedNoTazea')}
+                            className="absolute top-1 left-1 bg-red-500 text-white p-1 rounded hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity text-xs"
+                            title="מחק"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Zoomed With Tazea Screenshot - for Section 1.2 right */}
+                    <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <h4 className="font-medium text-gray-900">3. תקריב עם תצ״א</h4>
+                          <p className="text-xs text-gray-500">תוצג בסעיף 1.2 - זוג מפות (ימין)</p>
+                        </div>
+                        {screenshots.zoomedWithTazea && (
+                          <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded">נשמר</span>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => captureScreenshot('zoomedWithTazea')}
+                          disabled={isCapturing || !govmapData}
+                          className={`flex-1 p-2 rounded-lg font-medium transition-colors ${
+                            isCapturing && capturingType === 'zoomedWithTazea'
+                              ? 'bg-purple-400 text-white cursor-wait'
+                              : 'bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed'
+                          }`}
+                        >
+                          {isCapturing && capturingType === 'zoomedWithTazea' ? '⏳ מצלם...' : '📸 צלם תקריב עם תצ״א'}
+                        </button>
+                        <label className="p-2 bg-gray-200 text-gray-700 rounded-lg cursor-pointer hover:bg-gray-300 transition-colors">
+                          📤
+                          <input
+                            ref={fileInputRefZoomedWithTazea}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => handleManualScreenshotUpload(e, 'zoomedWithTazea')}
+                          />
+                        </label>
+                      </div>
+                      {screenshots.zoomedWithTazea && (
+                        <div className="mt-2 relative group">
+                          <img src={screenshots.zoomedWithTazea} alt="Zoomed with Tazea" className="w-full rounded border border-gray-300 max-h-24 object-contain" />
+                          <button
+                            onClick={() => handleDeleteScreenshot('zoomedWithTazea')}
+                            className="absolute top-1 left-1 bg-red-500 text-white p-1 rounded hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity text-xs"
+                            title="מחק"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Screenshot count indicator */}
+                  <div className="text-center text-sm text-gray-600">
+                    {[screenshots.wideArea, screenshots.zoomedNoTazea, screenshots.zoomedWithTazea].filter(Boolean).length}/3 תמונות נשמרו
+                  </div>
 
                   {/* Clear All Button */}
                   <button
