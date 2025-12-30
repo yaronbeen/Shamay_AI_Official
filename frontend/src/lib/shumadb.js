@@ -749,21 +749,51 @@ class ShumaDBEnhanced {
    * Save GIS screenshots to images table + shuma
    */
   static async _saveGISScreenshots(client, shumaId, sessionId, gisScreenshots) {
-    if (!gisScreenshots.cropMode0 && !gisScreenshots.cropMode1) {
+    // Check for both new and legacy fields
+    const hasScreenshots = gisScreenshots.wideArea || gisScreenshots.zoomedNoTazea ||
+                          gisScreenshots.zoomedWithTazea || gisScreenshots.cropMode0 ||
+                          gisScreenshots.cropMode1
+    if (!hasScreenshots) {
       return
     }
 
     const imagesToSave = []
-    
-    if (gisScreenshots.cropMode0) {
+
+    // New screenshot types
+    if (gisScreenshots.wideArea) {
+      imagesToSave.push({
+        type: 'מפה רחבה (סביבה)',
+        filename: `gis-screenshot-wideArea-${sessionId}.png`,
+        data: gisScreenshots.wideArea
+      })
+    }
+
+    if (gisScreenshots.zoomedNoTazea) {
+      imagesToSave.push({
+        type: 'תקריב ללא תצ״א',
+        filename: `gis-screenshot-zoomedNoTazea-${sessionId}.png`,
+        data: gisScreenshots.zoomedNoTazea
+      })
+    }
+
+    if (gisScreenshots.zoomedWithTazea) {
+      imagesToSave.push({
+        type: 'תקריב עם תצ״א',
+        filename: `gis-screenshot-zoomedWithTazea-${sessionId}.png`,
+        data: gisScreenshots.zoomedWithTazea
+      })
+    }
+
+    // Legacy fields (for backward compatibility)
+    if (gisScreenshots.cropMode0 && !gisScreenshots.wideArea) {
       imagesToSave.push({
         type: 'סקרין שוט GOVMAP',
         filename: `gis-screenshot-clean-${sessionId}.png`,
         data: gisScreenshots.cropMode0
       })
     }
-    
-    if (gisScreenshots.cropMode1) {
+
+    if (gisScreenshots.cropMode1 && !gisScreenshots.zoomedWithTazea) {
       imagesToSave.push({
         type: 'סקרין שוט תצ״א',
         filename: `gis-screenshot-taba-${sessionId}.png`,

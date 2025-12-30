@@ -296,8 +296,8 @@ export function convertValuationDataToReportData(
     },
     section1: {
       environmentDescription,
-      environmentMap: valuationData.gisScreenshots?.cropMode0 ? {
-        src: valuationData.gisScreenshots.cropMode0,
+      environmentMap: (valuationData.gisScreenshots?.wideArea || valuationData.gisScreenshots?.cropMode0) ? {
+        src: valuationData.gisScreenshots.wideArea || valuationData.gisScreenshots.cropMode0,
         caption: 'מפת סביבה - GOVMAP'
       } : undefined,
       parcel: {
@@ -311,9 +311,13 @@ export function convertValuationDataToReportData(
         numberOfBuildings: extracted.number_of_buildings,
         parcelShape: valuationData.parcelShape || extracted.parcel_shape,
         parcelSurface: valuationData.parcelSurface || extracted.parcel_surface,
-        parcelSketch: valuationData.gisScreenshots?.cropMode1 ? {
-          src: valuationData.gisScreenshots.cropMode1,
+        parcelSketch: (valuationData.gisScreenshots?.zoomedWithTazea || valuationData.gisScreenshots?.cropMode1) ? {
+          src: valuationData.gisScreenshots.zoomedWithTazea || valuationData.gisScreenshots.cropMode1,
           caption: 'תשריט חלקה / תצלום תצ"א'
+        } : undefined,
+        parcelSketchNoTazea: valuationData.gisScreenshots?.zoomedNoTazea ? {
+          src: valuationData.gisScreenshots.zoomedNoTazea,
+          caption: 'תשריט חלקה ללא תצ״א'
         } : undefined,
         boundaries: Object.values(boundaries).some(v => v) ? boundaries : undefined
       },
