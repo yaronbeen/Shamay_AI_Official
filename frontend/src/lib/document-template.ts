@@ -15,6 +15,25 @@ export interface CompanySettings {
   associationMembership?: string
   services?: string[]
   signature?: string
+  // Font settings
+  fontFamily?: 'david' | 'noto-sans-hebrew' | 'rubik'
+  fontSize?: number // default 12
+}
+
+// Available font configurations
+const FONT_FAMILIES = {
+  'david': '"David Libre", David, serif',
+  'noto-sans-hebrew': '"Noto Sans Hebrew", "Rubik", "Arial Hebrew", Arial, sans-serif',
+  'rubik': 'Rubik, "Noto Sans Hebrew", Arial, sans-serif',
+} as const
+
+const getFontFamily = (settings?: CompanySettings): string => {
+  const fontKey = settings?.fontFamily || 'david'
+  return FONT_FAMILIES[fontKey] || FONT_FAMILIES['david']
+}
+
+const getFontSize = (settings?: CompanySettings): number => {
+  return settings?.fontSize || 12
 }
 
 const PAGE_MIN_HEIGHT_MM = 297
@@ -734,8 +753,20 @@ const dedupeByKey = <T>(items: T[], getKey: (item: T) => string): T[] => {
   })
 }
 
-const buildBaseCss = () => `
+const buildBaseCss = (settings?: CompanySettings) => `
   /* ===== MMBL Professional Report Styles ===== */
+  @font-face {
+    font-family: 'David Libre';
+    font-style: normal;
+    font-weight: 400;
+    src: url('/fonts/DavidLibre-Regular.ttf') format('truetype');
+  }
+  @font-face {
+    font-family: 'David Libre';
+    font-style: normal;
+    font-weight: 700;
+    src: url('/fonts/DavidLibre-Bold.ttf') format('truetype');
+  }
   @font-face {
     font-family: 'Noto Sans Hebrew';
     font-style: normal;
@@ -750,8 +781,8 @@ const buildBaseCss = () => `
     box-sizing: border-box;
         }
         body {
-    font-family: ${DEFAULT_FONT_FAMILY};
-    font-size: 10.5pt;
+    font-family: ${getFontFamily(settings)};
+    font-size: ${getFontSize(settings)}pt;
     line-height: 1.7;
     margin: 0;
     padding: 0;
@@ -960,6 +991,16 @@ const buildBaseCss = () => `
     text-align: right;
     text-decoration: underline;
     text-underline-offset: 4px;
+    /* Page break control - avoid orphaned chapter headers */
+    break-after: avoid;
+    break-inside: avoid;
+    page-break-after: avoid;
+    page-break-inside: avoid;
+  }
+  /* Wrapper for chapter header + first content to keep together */
+  .chapter-header-group {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
   .section-title {
     font-size: 12pt;
@@ -1081,6 +1122,32 @@ const buildBaseCss = () => `
     font-weight: 400;
   }
   
+  /* ===== FOOTNOTES ===== */
+  .page-footnotes {
+    position: absolute;
+    bottom: 60px;
+    right: 18mm;
+    left: 18mm;
+    font-size: 9pt;
+    line-height: 1.4;
+    border-top: 1px solid #000000;
+    padding-top: 8px;
+  }
+  .page-footnotes p {
+    margin: 2px 0;
+    text-align: right;
+  }
+  .footnote-ref {
+    font-size: 8pt;
+    vertical-align: super;
+    color: #1e3a8a;
+    cursor: pointer;
+  }
+  .footnote-number {
+    font-weight: 700;
+    margin-left: 4px;
+  }
+
   /* ===== LISTS ===== */
   ul {
     margin: 8px 0;
@@ -1463,6 +1530,45 @@ const autoPaginateScript = `
 
       const mmToPx = (mm) => (mm * 96) / 25.4
       const MAX_CONTENT_HEIGHT = Math.round(mmToPx(297 - 30)) // A4 height minus ~15mm top/bottom
+      const HALF_PAGE_HEIGHT = MAX_CONTENT_HEIGHT * 0.5
+
+      // ===== CHAPTER TITLE PAGE BREAK LOGIC =====
+      // If a chapter title is in the bottom 50% of page, move it to next page
+      const handleChapterTitlePageBreaks = () => {
+        const chapterTitles = Array.from(document.querySelectorAll('.chapter-title'))
+
+        chapterTitles.forEach((title) => {
+          const page = title.closest('.page')
+          if (!page || page.classList.contains('cover')) return
+
+          const pageBody = page.querySelector('.page-body')
+          if (!pageBody) return
+
+          const pageRect = pageBody.getBoundingClientRect()
+          const titleRect = title.getBoundingClientRect()
+
+          // Calculate position relative to page body
+          const titlePositionInPage = titleRect.top - pageRect.top
+
+          // If title is in bottom 50% of page, we need a page break
+          if (titlePositionInPage > HALF_PAGE_HEIGHT) {
+            // Find all siblings before this title (content that stays on current page)
+            const allChildren = Array.from(pageBody.children)
+            const titleIndex = allChildren.indexOf(title.closest('.section-block') || title)
+
+            if (titleIndex > 0 && title.parentElement) {
+              // Create a page break marker before the chapter title
+              const pageBreak = document.createElement('div')
+              pageBreak.className = 'chapter-page-break'
+              pageBreak.style.cssText = 'break-before: page; page-break-before: always; height: 0;'
+              title.parentElement.insertBefore(pageBreak, title)
+            }
+          }
+        })
+      }
+
+      // Run chapter title check before pagination
+      handleChapterTitlePageBreaks()
 
       const createEmptyPage = (referencePage) => {
         const newPage = document.createElement('section')
@@ -2909,13 +3015,17 @@ export function generateDocumentHTML(
         <div class="section-title">5.2&emsp;תחשיב שווי הנכס</div>
         <div class="section-block">
           <p>בשים לב לנתוני ההשוואה שלעיל, תוך כדי ביצוע התאמות נדרשות לנכס נשוא השומה, שווי מ"ר בנוי לנכס נשוא השומה בגבולות ${formatNumber(equivPricePerSqm)} ₪.</p>
-          
+
+          ${(() => {
+            const balconyAreaValue = Number((data.extractedData as any)?.balconyArea || (data as any).balconyArea || 0)
+            const hasBalcony = balconyAreaValue > 0
+            return `
           <table class="table">
                   <thead>
             <tr>
               <th>תיאור הנכס</th>
               <th>שטח דירה במ"ר</th>
-              <th>מרפסת</th>
+              ${hasBalcony ? '<th>מרפסת</th>' : ''}
               <th>מ"ר אקו'</th>
               <th>שווי מ"ר בנוי</th>
               <th>סה"כ שווי הנכס</th>
@@ -2923,32 +3033,28 @@ export function generateDocumentHTML(
                   </thead>
                   <tbody>
             <tr>
-              <td>${(() => {
-                const desc = `${normalizeText(data.propertyEssence, 'דירת מגורים')} ${data.rooms ? `${data.rooms} ח'` : ''}, בקומה ${data.floor || '—'} בכתובת ${normalizeText(data.street)} ${data.buildingNumber || ''}${data.neighborhood ? `, שכונת ${data.neighborhood}` : ''}${data.city ? `, ${data.city}` : ''}`
-                return desc
-              })()}</td>
+              <td>${normalizeText(data.propertyEssence, 'דירת מגורים')} ${data.rooms ? `${data.rooms} ח'` : ''}, בקומה ${data.floor || '—'} בכתובת ${normalizeText(data.street)} ${data.buildingNumber || ''}${data.neighborhood ? `, שכונת ${data.neighborhood}` : ''}${data.city ? `, ${data.city}` : ''}</td>
               <td>${formatNumber(registeredAreaSqm || data.extractedData?.builtArea || data.builtArea)}</td>
-              <td>${formatNumber((data.extractedData as any)?.balconyArea || (data as any).balconyArea || 0)}</td>
+              ${hasBalcony ? `<td>${formatNumber(balconyAreaValue)}</td>` : ''}
               <td>${(() => {
                 // Equivalent Area = Apartment Area (registered, NOT built) + Balcony * 0.5
-                // Use registered area as the base, not built area
                 const apartmentArea = Number(registeredAreaSqm || (data as any).registeredArea || data.extractedData?.apartment_registered_area || 0)
-                const balcony = Number((data.extractedData as any)?.balconyArea || (data as any).balconyArea || 0)
                 if (!apartmentArea) return '—'
-                return Math.round(apartmentArea + balcony * 0.5)
+                return Math.round(apartmentArea + balconyAreaValue * 0.5)
               })()}</td>
               <td>${formatNumber(equivPricePerSqm)} ₪</td>
               <td>${(() => {
                 // Calculate total value dynamically: equivalent area * price per sqm
                 const apartmentArea = Number(registeredAreaSqm || (data as any).registeredArea || data.extractedData?.apartment_registered_area || 0)
-                const balcony = Number((data.extractedData as any)?.balconyArea || (data as any).balconyArea || 0)
-                const equivalentArea = Math.round(apartmentArea + balcony * 0.5)
+                const equivalentArea = Math.round(apartmentArea + balconyAreaValue * 0.5)
                 const calculatedValue = equivalentArea * equivPricePerSqm
                 return formatNumber(calculatedValue) + ' ₪'
               })()}</td>
                       </tr>
               </tbody>
             </table>
+          `
+          })()}
           <p style="margin-top: 12px;">השווי כולל מע"מ.</p>
         </div>
       </div>
@@ -3016,7 +3122,7 @@ export function generateDocumentHTML(
     </section>
   `
 
-  const css = buildBaseCss()
+  const css = buildBaseCss(companySettings)
   
   // Runtime scripts for preview mode
   const previewScripts = isPreview

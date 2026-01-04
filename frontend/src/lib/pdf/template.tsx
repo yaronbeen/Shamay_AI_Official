@@ -1,5 +1,5 @@
 import React from 'react';
-import { Document, Page, Text, View, Image, StyleSheet } from '@react-pdf/renderer';
+import { Document, Page, Text, View, Image, StyleSheet, Font } from '@react-pdf/renderer';
 import { ReportData } from './types';
 import {
   PURPOSE_TEXT,
@@ -11,11 +11,17 @@ import {
   SECTION6_FREE_FROM_DEBTS_TEXT,
 } from './constants';
 
-// Register Hebrew fonts (you'll need to add font files)
-// Font.register({
-//   family: 'Assistant',
-//   src: '/fonts/Assistant-Regular.ttf',
-// });
+// Register David Libre Hebrew font
+Font.register({
+  family: 'David Libre',
+  fonts: [
+    { src: '/fonts/DavidLibre-Regular.ttf', fontWeight: 'normal' },
+    { src: '/fonts/DavidLibre-Bold.ttf', fontWeight: 'bold' },
+  ],
+});
+
+// Disable hyphenation for Hebrew
+Font.registerHyphenationCallback((word) => [word]);
 
 // MMBL Color Scheme
 const COLORS = {
@@ -30,8 +36,8 @@ const styles = StyleSheet.create({
   // ===== PAGE LAYOUT =====
   page: {
     padding: '56.7 56.7 70 56.7', // 2cm margins, extra bottom for footer
-    fontFamily: 'Helvetica',
-    fontSize: 10.5,
+    fontFamily: 'David Libre',
+    fontSize: 12,
     lineHeight: 1.7,
     direction: 'rtl',
     textAlign: 'right',
@@ -400,6 +406,23 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: COLORS.black,
+  },
+  footnoteRef: {
+    fontSize: 8,
+    color: COLORS.primary,
+  },
+  footnoteNumber: {
+    fontWeight: 'bold',
+  },
+  pageFootnotes: {
+    position: 'absolute',
+    bottom: 70,
+    right: 56.7,
+    left: 56.7,
+    fontSize: 9,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.black,
+    paddingTop: 6,
   },
   boundaryRow: {
     flexDirection: 'row',
@@ -1022,7 +1045,9 @@ const Section5: React.FC<{ data: ReportData }> = ({ data }) => (
       <View style={[styles.tableRow, styles.tableHeader]}>
         <Text style={styles.tableCell}>תיאור הנכס</Text>
         <Text style={styles.tableCell}>שטח דירה בנוי (מ"ר)</Text>
-        <Text style={styles.tableCell}>שטח מרפסות בנוי (מ"ר)</Text>
+        {data.section5.valuationCalc.balconyAreaSqm > 0 && (
+          <Text style={styles.tableCell}>שטח מרפסות בנוי (מ"ר)</Text>
+        )}
         <Text style={styles.tableCell}>שטח אקוו' (מ"ר)</Text>
         <Text style={styles.tableCell}>שווי למ"ר אקוו' (₪)</Text>
         <Text style={styles.tableCell}>שווי הנכס במעוגל (₪)</Text>
@@ -1030,7 +1055,9 @@ const Section5: React.FC<{ data: ReportData }> = ({ data }) => (
       <View style={styles.tableRow}>
         <Text style={styles.tableCell}>{data.section5.valuationCalc.description}</Text>
         <Text style={styles.tableCell}>{formatNumber(data.section5.valuationCalc.builtAreaSqm)}</Text>
-        <Text style={styles.tableCell}>{formatNumber(data.section5.valuationCalc.balconyAreaSqm)}</Text>
+        {data.section5.valuationCalc.balconyAreaSqm > 0 && (
+          <Text style={styles.tableCell}>{formatNumber(data.section5.valuationCalc.balconyAreaSqm)}</Text>
+        )}
         <Text style={styles.tableCell}>{formatNumber(data.section5.valuationCalc.equityAreaSqm)}</Text>
         <Text style={styles.tableCell}>{formatCurrency(data.section5.valuationCalc.pricePerBuiltSqmIls)}</Text>
         <Text style={styles.tableCell}>{formatCurrency(data.section5.valuationCalc.totalValueIls)}</Text>
