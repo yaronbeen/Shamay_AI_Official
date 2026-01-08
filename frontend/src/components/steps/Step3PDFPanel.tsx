@@ -41,11 +41,16 @@ export function Step3PDFPanel({
   loading = false,
   sessionId,
 }: Step3PDFPanelProps) {
-  const currentFile = files[currentIndex]
+  // Bounds check to prevent accessing beyond array length
+  const safeIndex = files.length > 0 ? Math.min(currentIndex, files.length - 1) : 0
+  const currentFile = files[safeIndex]
 
   const openInNewTab = () => {
-    if (sessionId) {
-      window.open(`/panel/step3-pdf?sessionId=${sessionId}`, '_blank')
+    if (sessionId && typeof window !== 'undefined') {
+      const opened = window.open(`/panel/step3-pdf?sessionId=${sessionId}`, '_blank', 'noopener,noreferrer')
+      if (!opened) {
+        console.warn('Popup blocked by browser')
+      }
     }
   }
 
@@ -58,8 +63,9 @@ export function Step3PDFPanel({
           {sessionId && (
             <button
               onClick={openInNewTab}
-              className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+              className="p-1.5 hover:bg-gray-100 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
               title="פתח בלשונית חדשה"
+              aria-label="פתח PDF בלשונית חדשה"
             >
               <ExternalLink className="w-4 h-4 text-gray-600" />
             </button>
@@ -97,10 +103,12 @@ export function Step3PDFPanel({
           </div>
         ) : currentFile?.url ? (
           <iframe
-            key={`pdf-${currentIndex}-${currentFile.url}`}
+            key="pdf-viewer"
             src={currentFile.url}
             title={currentFile.name || 'מסמך PDF'}
             className="w-full h-full bg-white"
+            sandbox="allow-same-origin"
+            referrerPolicy="no-referrer"
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-100">

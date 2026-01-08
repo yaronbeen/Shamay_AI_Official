@@ -35,9 +35,7 @@ interface EditableDocumentPreviewProps {
 export function EditableDocumentPreview({ data, onDataChange }: EditableDocumentPreviewProps) {
   const [companySettings, setCompanySettings] = useState<CompanySettings | undefined>(undefined)
   const [htmlContent, setHtmlContent] = useState<string>('')
-  const [pageCount, setPageCount] = useState<number>(8)
-  const [currentPage, setCurrentPage] = useState<number>(1)
-  const [viewMode, setViewMode] = useState<'continuous' | 'paged'>('continuous')
+  // Note: pageCount, currentPage, and viewMode were removed as unused dead code
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null)
   const [isEditMode, setIsEditMode] = useState(false)
@@ -62,6 +60,7 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
   const toolbarStateRef = useRef<ToolbarState>(toolbarState)
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const htmlUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const bindingsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const previousImageDataRef = useRef<{
     propertyImages: any[]
     selectedImagePreview: string | null
@@ -504,17 +503,28 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
     interiorImages: data.interiorImages || []
   }), [data.propertyImages, data.selectedImagePreview, data.interiorImages])
 
+  // Performance: Shallow array comparison (much faster than JSON.stringify for large image arrays)
+  const arraysShallowEqual = useCallback((a: any[], b: any[]): boolean => {
+    if (a === b) return true
+    if (!a || !b) return false
+    if (a.length !== b.length) return false
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) return false
+    }
+    return true
+  }, [])
+
   // Check if image data actually changed (pure computation - no side effects)
   const imageDataChanged = useMemo(() => {
     const prev = previousImageDataRef.current
     const current = imageData
 
-    const imagesChanged = JSON.stringify(prev.propertyImages) !== JSON.stringify(current.propertyImages)
+    const imagesChanged = !arraysShallowEqual(prev.propertyImages, current.propertyImages)
     const previewChanged = prev.selectedImagePreview !== current.selectedImagePreview
-    const interiorChanged = JSON.stringify(prev.interiorImages) !== JSON.stringify(current.interiorImages)
+    const interiorChanged = !arraysShallowEqual(prev.interiorImages, current.interiorImages)
 
     return imagesChanged || previewChanged || interiorChanged
-  }, [imageData])
+  }, [imageData, arraysShallowEqual])
 
   // Update the previous image data ref when images change (side effect in useEffect, not useMemo)
   useEffect(() => {
@@ -551,11 +561,6 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
 
       const html = generateDocumentHTML(mergedData as ValuationData, true, companySettings)
       setHtmlContent(html)
-      
-      // Count actual pages in generated HTML
-      const pageMatches = html.match(/<section[^>]*class="page"/g)
-      const actualPageCount = pageMatches ? pageMatches.length : 8
-      setPageCount(actualPageCount)
       return
     }
     
@@ -574,11 +579,6 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
 
       const html = generateDocumentHTML(mergedData as ValuationData, true, companySettings)
       setHtmlContent(html)
-      
-      // Count actual pages in generated HTML
-      const pageMatches = html.match(/<section[^>]*class="page"/g)
-      const actualPageCount = pageMatches ? pageMatches.length : 8
-      setPageCount(actualPageCount)
     }, 1000) // 1 second debounce for text field changes
     
     return () => {
@@ -803,10 +803,24 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
     if (observerRef.current) {
       observerRef.current.disconnect()
     }
-    observerRef.current = new MutationObserver(() => {
-      applyEditableBindings()
+    // Performance: Debounce MutationObserver to avoid excessive re-binding loops
+    observerRef.current = new MutationObserver((mutations) => {
+      // Skip if mutations are only attribute changes from our own bindings
+      const hasRelevantMutation = mutations.some(m =>
+        m.type === 'childList' ||
+        (m.type === 'attributes' && m.attributeName !== 'data-edit-bound' && m.attributeName !== 'contenteditable')
+      )
+      if (!hasRelevantMutation) return
+
+      // Debounce binding application
+      if (bindingsDebounceRef.current) {
+        clearTimeout(bindingsDebounceRef.current)
+      }
+      bindingsDebounceRef.current = setTimeout(() => {
+        applyEditableBindings()
+      }, 100)
     })
-    observerRef.current.observe(doc.body, { childList: true, subtree: true })
+    observerRef.current.observe(doc.body, { childList: true, subtree: true, attributes: false })
 
     const delayed = window.setTimeout(() => {
       applyEditableBindings()
@@ -814,6 +828,11 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
 
     return () => {
       window.clearTimeout(delayed)
+      // Clean up bindings debounce timer
+      if (bindingsDebounceRef.current) {
+        clearTimeout(bindingsDebounceRef.current)
+        bindingsDebounceRef.current = null
+      }
       doc.removeEventListener('selectionchange', selectionHandler)
       doc.removeEventListener('click', clickHandler, true)
       if (observerRef.current) {
@@ -1329,25 +1348,6 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
     { icon: '⇥', command: 'justifyCenter', label: 'יישור למרכז' }
   ]
 
-  const handleSelectPage = useCallback(
-    (page: number) => {
-      setCurrentPage(page)
-      const frame = previewFrameRef.current
-      if (!frame) {
-        return
-      }
-      const doc = frame.contentDocument || frame.contentWindow?.document
-      if (!doc) {
-        return
-      }
-      const target = doc.getElementById(`page-${page}`)
-      if (target) {
-        target.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }
-    },
-    []
-  )
-
   const handleIframeLoad = useCallback(() => {
     updateIframeHeight(previewFrameRef.current)
     applyOverridesToDocument()
@@ -1549,39 +1549,78 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
       </div>
       
       <div className="p-4 overflow-x-auto">
-        <iframe
-          ref={previewFrameRef}
-          srcDoc={htmlContent}
-          className="w-full border border-gray-200 rounded shadow-sm bg-white mx-auto"
-          style={{ minHeight: '1122px', width: '100%', maxWidth: '1200px' }}
-          title="Document preview"
-          onLoad={handleIframeLoad}
-        />
+        {!htmlContent ? (
+          <div
+            className="w-full border border-gray-200 rounded shadow-sm bg-gray-50 mx-auto flex flex-col items-center justify-center"
+            style={{ minHeight: '1122px', width: '100%', maxWidth: '1200px' }}
+            dir="rtl"
+          >
+            <div className="text-center p-8">
+              <div className="text-6xl mb-4 opacity-50">📄</div>
+              <h3 className="text-xl font-medium text-gray-600 mb-2">טוען את התצוגה המקדימה...</h3>
+              <p className="text-gray-500 text-sm">
+                {!(data as any).sessionId
+                  ? 'לא נמצא מזהה סשן. יש לחזור לשלב קודם ולהתחיל מחדש.'
+                  : 'המסמך בתהליך הכנה. אנא המתן...'}
+              </p>
+              {!(data as any).sessionId && (
+                <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-sm">
+                  שגיאה: חסר מזהה סשן. לא ניתן לטעון את המסמך.
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <iframe
+            ref={previewFrameRef}
+            srcDoc={htmlContent}
+            className="w-full border border-gray-200 rounded shadow-sm bg-white mx-auto"
+            style={{ minHeight: '1122px', width: '100%', maxWidth: '1200px' }}
+            title="Document preview"
+            onLoad={handleIframeLoad}
+          />
+        )}
         {isEditMode && toolbarState.visible && (
           <div
             data-edit-toolbar="true"
-            className="fixed top-24 right-8 z-[1200] flex flex-wrap items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-2 shadow-xl"
+            role="toolbar"
+            aria-label="כלי עריכת טקסט"
+            aria-orientation="horizontal"
+            className="fixed top-20 sm:top-24 right-2 sm:right-8 z-[1200] flex flex-wrap items-center gap-1 rounded-lg border border-gray-300 bg-white px-2 sm:px-3 py-2 shadow-xl max-w-[calc(100vw-1rem)] sm:max-w-none"
             style={{ direction: 'rtl' }}
+            onKeyDown={(e) => {
+              const buttons = e.currentTarget.querySelectorAll('button:not([disabled])')
+              const currentIndex = Array.from(buttons).indexOf(document.activeElement as HTMLButtonElement)
+              if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+                e.preventDefault()
+                const direction = e.key === 'ArrowRight' ? -1 : 1
+                const nextIndex = (currentIndex + direction + buttons.length) % buttons.length
+                ;(buttons[nextIndex] as HTMLButtonElement).focus()
+              } else if (e.key === 'Escape') {
+                hideToolbar()
+              }
+            }}
           >
             {toolbarState.mode === 'text' ? (
               <>
                 {textToolbarButtons.map((btn) => {
                   const disabled = toolbarState.mode !== 'text' || !toolbarState.targetSelector
                   return (
-              <button
+                    <button
                       key={btn.command}
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => executeCommand(btn.command)}
                       disabled={disabled}
+                      aria-label={btn.label}
                       className={`min-w-[36px] rounded-md border px-2 py-1 text-xs font-semibold ${
                         disabled
                           ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-                          : 'border-gray-200 text-gray-700 hover:border-blue-400 hover:text-blue-600'
+                          : 'border-gray-200 text-gray-700 hover:border-blue-400 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500'
                       }`}
                       title={btn.label}
                     >
                       {btn.icon}
-              </button>
+                    </button>
                   )
                 })}
               <button

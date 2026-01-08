@@ -28,7 +28,7 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
 
   const openExportInNewTab = () => {
     if (effectiveSessionId) {
-      window.open(`/panel/step5-export?sessionId=${effectiveSessionId}`, '_blank')
+      window.open(`/panel/step5-export?sessionId=${effectiveSessionId}`, '_blank', 'noopener,noreferrer')
     }
   }
 
@@ -64,14 +64,16 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
         setExportStatus('success')
 
         const url = URL.createObjectURL(pdfBlob)
-        const link = document.createElement('a')
-        link.href = url
-        link.download = `shamay-valuation-${effectiveSessionId}.pdf`
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-
-        setTimeout(() => URL.revokeObjectURL(url), 60000)
+        try {
+          const link = document.createElement('a')
+          link.href = url
+          link.download = `shamay-valuation-${effectiveSessionId}.pdf`
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+        } finally {
+          URL.revokeObjectURL(url)
+        }
 
       } else if (contentType?.includes('text/html')) {
         const html = await response.text()
@@ -101,15 +103,18 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
   }
 
   const handleDownloadPDF = () => {
-    if (pdfBlob) {
+    if (pdfBlob && effectiveSessionId) {
       const url = URL.createObjectURL(pdfBlob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `shamay-valuation-${data.sessionId}.pdf`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(url)
+      try {
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `shamay-valuation-${effectiveSessionId}.pdf`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      } finally {
+        URL.revokeObjectURL(url)
+      }
     }
   }
 
@@ -147,8 +152,9 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
               {effectiveSessionId && (
                 <button
                   onClick={openExportInNewTab}
-                  className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                  className="p-1.5 hover:bg-gray-100 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
                   title="פתח בלשונית חדשה"
+                  aria-label="פתח ייצוא בלשונית חדשה"
                 >
                   <ExternalLink className="w-4 h-4 text-gray-600" />
                 </button>

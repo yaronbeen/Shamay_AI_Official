@@ -84,8 +84,7 @@ export async function POST(
     const { buffer: docxBuffer, imageErrors, stats } = await renderDocxToBuffer(reportData)
 
     // Log image loading stats
-    console.log(`📄 DOCX Export: Loaded ${stats.loaded}/${stats.attempted} images` +
-      (stats.placeholders > 0 ? ` (${stats.placeholders} placeholders)` : ''))
+    console.log(`📄 DOCX Export: Loaded ${stats.loaded}/${stats.attempted} images`)
     if (imageErrors.length > 0) {
       console.warn(`⚠️ Failed to load ${imageErrors.length} images:`,
         imageErrors.map(e => `${e.key}: ${e.error}`).join(', ')
@@ -99,6 +98,7 @@ export async function POST(
     const safeSessionId = sessionId.replace(/[^a-zA-Z0-9-]/g, '')
 
     // Return the DOCX with proper headers for download
+    // Include image stats in custom headers for debugging
     return new NextResponse(docxUint8Array, {
       status: 200,
       headers: {
@@ -107,7 +107,6 @@ export async function POST(
         'Content-Length': docxBuffer.length.toString(),
         'X-Images-Loaded': `${stats.loaded}/${stats.attempted}`,
         'X-Images-Failed': imageErrors.length.toString(),
-        'X-Images-Placeholders': stats.placeholders.toString(),
       },
     })
   } catch (error) {
