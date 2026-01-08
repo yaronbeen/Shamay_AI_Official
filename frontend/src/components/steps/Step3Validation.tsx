@@ -431,7 +431,6 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
               isOpen={isDrawerOpen}
               onToggle={() => setIsDrawerOpen(!isDrawerOpen)}
               width="w-1/2"
-              newTabUrl={sessionId ? `/panel/step3-fields?sessionId=${sessionId}` : undefined}
             >
               <div className="overflow-y-auto border-l bg-white p-4 h-full">
                 <Step3FieldsPanel
@@ -455,6 +454,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
                 currentIndex={currentFileIndex}
                 onIndexChange={setCurrentFileIndex}
                 loading={filesLoading}
+                sessionId={sessionId}
               />
             </div>
           </>

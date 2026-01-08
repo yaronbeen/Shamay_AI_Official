@@ -3,9 +3,10 @@
 import { useSearchParams } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { Step3FieldsPanel } from '@/components/steps/Step3FieldsPanel'
+import { Step3PDFPanel, PDFFile } from '@/components/steps/Step3PDFPanel'
 import { Step5ValuationPanel } from '@/components/steps/Step5ValuationPanel'
 import { ValuationData } from '@/components/ValuationWizard'
-import { Loader2 } from 'lucide-react'
+import { Loader2, FileText, Download, CheckCircle, ExternalLink } from 'lucide-react'
 
 interface PanelPageProps {
   params: { type: string }
@@ -17,6 +18,11 @@ export default function PanelPage({ params }: PanelPageProps) {
   const [data, setData] = useState<ValuationData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [pdfFiles, setPdfFiles] = useState<PDFFile[]>([])
+  const [currentFileIndex, setCurrentFileIndex] = useState(0)
+  const [exporting, setExporting] = useState(false)
+  const [exportStatus, setExportStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [pdfBlob, setPdfBlob] = useState<Blob | null>(null)
 
   useEffect(() => {
     const loadSessionData = async () => {

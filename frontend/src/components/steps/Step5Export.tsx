@@ -26,6 +26,12 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
   // Use prop sessionId or fall back to data.sessionId
   const effectiveSessionId = sessionId || data.sessionId
 
+  const openExportInNewTab = () => {
+    if (effectiveSessionId) {
+      window.open(`/panel/step5-export?sessionId=${effectiveSessionId}`, '_blank')
+    }
+  }
+
   const handleExportPDF = async () => {
     if (!effectiveSessionId) {
       console.error('No session ID available')
@@ -122,7 +128,6 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
           isOpen={isDrawerOpen}
           onToggle={() => setIsDrawerOpen(!isDrawerOpen)}
           width="w-1/2"
-          newTabUrl={effectiveSessionId ? `/panel/step5-valuation?sessionId=${effectiveSessionId}` : undefined}
         >
           <Step5ValuationPanel
             data={data}
@@ -137,6 +142,18 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
           isDrawerOpen ? 'flex-1' : 'w-full'
         )}>
           <div className="bg-white border-2 border-gray-200 rounded-xl p-6 shadow-lg h-full">
+            {/* Header with open in new tab button */}
+            <div className="flex justify-end mb-2">
+              {effectiveSessionId && (
+                <button
+                  onClick={openExportInNewTab}
+                  className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                  title="פתח בלשונית חדשה"
+                >
+                  <ExternalLink className="w-4 h-4 text-gray-600" />
+                </button>
+              )}
+            </div>
             <div className="text-center mb-6">
               <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
                 <FileText className="h-8 w-8 text-blue-600" />

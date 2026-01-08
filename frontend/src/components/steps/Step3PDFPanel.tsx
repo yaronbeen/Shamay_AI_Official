@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { FileText, Loader2 } from 'lucide-react'
+import { FileText, Loader2, ExternalLink } from 'lucide-react'
 
 export type PDFFile = {
   type?: string
@@ -31,6 +31,7 @@ interface Step3PDFPanelProps {
   currentIndex: number
   onIndexChange: (index: number) => void
   loading?: boolean
+  sessionId?: string
 }
 
 export function Step3PDFPanel({
@@ -38,8 +39,15 @@ export function Step3PDFPanel({
   currentIndex,
   onIndexChange,
   loading = false,
+  sessionId,
 }: Step3PDFPanelProps) {
   const currentFile = files[currentIndex]
+
+  const openInNewTab = () => {
+    if (sessionId) {
+      window.open(`/panel/step3-pdf?sessionId=${sessionId}`, '_blank')
+    }
+  }
 
   return (
     <div className="h-full flex flex-col bg-gray-50">
@@ -47,6 +55,15 @@ export function Step3PDFPanel({
       <div className="bg-white border-b border-gray-200 p-3">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-semibold text-gray-700">מסמכים</h3>
+          {sessionId && (
+            <button
+              onClick={openInNewTab}
+              className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+              title="פתח בלשונית חדשה"
+            >
+              <ExternalLink className="w-4 h-4 text-gray-600" />
+            </button>
+          )}
         </div>
 
         {/* Document Tabs */}

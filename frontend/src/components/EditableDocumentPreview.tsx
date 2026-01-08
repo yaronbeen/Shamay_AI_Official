@@ -1,10 +1,23 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
+import DOMPurify from 'dompurify'
 
 import { ValuationData, CustomTable } from './ValuationWizard'
 import { generateDocumentHTML, CompanySettings } from '../lib/document-template'
 import { CSVUploadDialog } from './ui/CSVUploadDialog'
+
+// Security: Allowed MIME types for image uploads
+const ALLOWED_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+const MAX_IMAGE_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+
+// Security: DOMPurify configuration for sanitizing HTML
+const DOMPURIFY_CONFIG = {
+  ALLOWED_TAGS: ['b', 'i', 'u', 'strong', 'em', 'p', 'br', 'span', 'ul', 'ol', 'li', 'table', 'tr', 'td', 'th', 'thead', 'tbody', 'sup', 'sub', 'div', 'img', 'figure', 'figcaption'],
+  ALLOWED_ATTR: ['class', 'style', 'data-row', 'data-col', 'data-edit-selector', 'src', 'alt', 'width', 'height'],
+  FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'textarea', 'select', 'button'],
+  FORBID_ATTR: ['onclick', 'onerror', 'onload', 'onmouseover', 'onmouseout', 'onfocus', 'onblur']
+}
 
 type ToolbarMode = 'text' | 'image' | 'table'
 
@@ -181,8 +194,10 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
         if (!elements.length) {
           return
         }
+        // Security: Sanitize HTML before injection to prevent XSS
+        const sanitizedHtml = DOMPurify.sanitize(html, DOMPURIFY_CONFIG)
         elements.forEach((element) => {
-          element.innerHTML = html
+          element.innerHTML = sanitizedHtml
         })
       } catch (error) {
         console.warn('Failed to apply custom edit selector:', selector, error)
@@ -392,12 +407,45 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
     }
     const input = document.createElement('input')
     input.type = 'file'
-    input.accept = 'image/*'
-    input.onchange = (event) => {
+    input.accept = 'image/jpeg,image/png,image/gif,image/webp'
+    input.onchange = async (event) => {
       const file = (event.target as HTMLInputElement).files?.[0]
       if (!file) {
         return
       }
+
+      // Security: Validate file type
+      if (!ALLOWED_IMAGE_MIME_TYPES.includes(file.type)) {
+        alert('סוג קובץ לא נתמך. יש להעלות JPG, PNG, GIF או WebP')
+        return
+      }
+
+      // Security: Validate file size
+      if (file.size > MAX_IMAGE_FILE_SIZE) {
+        alert('הקובץ גדול מדי. הגודל המרבי הוא 10MB')
+        return
+      }
+
+      // Security: Validate image can be loaded (prevents polyglot attacks)
+      const isValidImage = await new Promise<boolean>((resolve) => {
+        const testImg = new Image()
+        const objectUrl = URL.createObjectURL(file)
+        testImg.onload = () => {
+          URL.revokeObjectURL(objectUrl)
+          resolve(true)
+        }
+        testImg.onerror = () => {
+          URL.revokeObjectURL(objectUrl)
+          resolve(false)
+        }
+        testImg.src = objectUrl
+      })
+
+      if (!isValidImage) {
+        alert('הקובץ אינו תמונה תקינה')
+        return
+      }
+
       const reader = new FileReader()
       reader.onload = (loadEvent) => {
         const result = loadEvent.target?.result as string
@@ -456,28 +504,28 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
     interiorImages: data.interiorImages || []
   }), [data.propertyImages, data.selectedImagePreview, data.interiorImages])
 
-  // Check if image data actually changed
+  // Check if image data actually changed (pure computation - no side effects)
   const imageDataChanged = useMemo(() => {
     const prev = previousImageDataRef.current
     const current = imageData
-    
+
     const imagesChanged = JSON.stringify(prev.propertyImages) !== JSON.stringify(current.propertyImages)
     const previewChanged = prev.selectedImagePreview !== current.selectedImagePreview
     const interiorChanged = JSON.stringify(prev.interiorImages) !== JSON.stringify(current.interiorImages)
-    
-    const changed = imagesChanged || previewChanged || interiorChanged
-    
-    if (changed) {
-      // Update reference for next comparison
+
+    return imagesChanged || previewChanged || interiorChanged
+  }, [imageData])
+
+  // Update the previous image data ref when images change (side effect in useEffect, not useMemo)
+  useEffect(() => {
+    if (imageDataChanged) {
       previousImageDataRef.current = {
-        propertyImages: [...current.propertyImages],
-        selectedImagePreview: current.selectedImagePreview,
-        interiorImages: [...current.interiorImages]
+        propertyImages: [...imageData.propertyImages],
+        selectedImagePreview: imageData.selectedImagePreview,
+        interiorImages: [...imageData.interiorImages]
       }
     }
-    
-    return changed
-  }, [imageData])
+  }, [imageDataChanged, imageData])
 
   useEffect(() => {
     if (isEditMode) {
@@ -933,14 +981,6 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
       return
     }
 
-    // Escape HTML to prevent XSS
-    const escapeHtml = (text: string): string => {
-      const div = doc.createElement('div')
-      div.textContent = text
-      return div.innerHTML
-    }
-    const escapedFootnoteText = escapeHtml(footnoteText)
-
     // Find the current page element
     const range = selection.getRangeAt(0)
     let currentPage = range.startContainer as Element
@@ -962,21 +1002,28 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
     let footnotesContainer = currentPage.querySelector('.page-footnotes')
 
     // Count ALL existing footnote references on the page (both built-in and user-added)
-    // Look for: <sup> with footnote-ref class, or any <sup> containing just a number
-    const existingFootnoteRefs = currentPage.querySelectorAll('sup.footnote-ref, sup[class*="footnote"]')
-    const existingFootnoteNumbers = Array.from(existingFootnoteRefs)
-      .map(el => parseInt(el.textContent || '0', 10))
-      .filter(n => !isNaN(n) && n > 0)
+    const existingFootnoteRefs = currentPage.querySelectorAll('sup.footnote-ref')
+    const existingFootnoteNumbers = new Set(
+      Array.from(existingFootnoteRefs)
+        .map(el => parseInt(el.textContent || '0', 10))
+        .filter(n => !isNaN(n) && n > 0)
+    )
 
-    // Also count footnotes in the container if it exists
-    let containerFootnoteCount = 0
+    // Also check footnote container for existing numbers
     if (footnotesContainer) {
-      containerFootnoteCount = footnotesContainer.querySelectorAll('p, .footnote-item').length
+      footnotesContainer.querySelectorAll('.footnote-number').forEach(el => {
+        const num = parseInt(el.textContent?.replace('.', '') || '0', 10)
+        if (!isNaN(num) && num > 0) {
+          existingFootnoteNumbers.add(num)
+        }
+      })
     }
 
-    // Get the highest existing footnote number
-    const maxExistingNumber = Math.max(0, ...existingFootnoteNumbers, containerFootnoteCount)
-    let footnoteNumber = maxExistingNumber + 1
+    // Find the first available footnote number (fills gaps instead of always using max+1)
+    let footnoteNumber = 1
+    while (existingFootnoteNumbers.has(footnoteNumber)) {
+      footnoteNumber++
+    }
 
     if (!footnotesContainer) {
       footnotesContainer = doc.createElement('div')
@@ -995,9 +1042,15 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
     range.collapse(false)
     range.insertNode(supElement)
 
-    // Add footnote text to footer (escaped to prevent XSS)
+    // Add footnote text to footer using safe DOM methods (not innerHTML)
     const footnoteP = doc.createElement('p')
-    footnoteP.innerHTML = `<span class="footnote-number" style="font-weight: bold;">${footnoteNumber}.</span> ${escapedFootnoteText}`
+    const numberSpan = doc.createElement('span')
+    numberSpan.className = 'footnote-number'
+    numberSpan.style.fontWeight = 'bold'
+    numberSpan.textContent = `${footnoteNumber}.`
+    const textNode = doc.createTextNode(` ${footnoteText}`)
+    footnoteP.appendChild(numberSpan)
+    footnoteP.appendChild(textNode)
     footnotesContainer.appendChild(footnoteP)
 
     // Save the changes to customHtmlOverrides
@@ -1006,14 +1059,15 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
     // Find the parent element containing the superscript to persist it
     const editableParent = supElement.closest('[data-edit-selector]') as Element | null
 
+    // Security: Sanitize HTML before storing to prevent XSS on retrieval
     const updates: Record<string, string> = {
-      [`${pageSelector} .page-footnotes`]: footnotesContainer!.innerHTML
+      [`${pageSelector} .page-footnotes`]: DOMPurify.sanitize(footnotesContainer!.innerHTML, DOMPURIFY_CONFIG)
     }
 
     // Also save the text block containing the superscript reference
     if (editableParent && editableParent.getAttribute('data-edit-selector')) {
       const parentSelector = editableParent.getAttribute('data-edit-selector')!
-      updates[parentSelector] = editableParent.innerHTML
+      updates[parentSelector] = DOMPurify.sanitize(editableParent.innerHTML, DOMPURIFY_CONFIG)
     }
 
     setCustomHtmlOverrides(prev => ({
@@ -1081,7 +1135,9 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
           updatedAt: new Date().toISOString()
         }
         // Update currentTableCell to reflect deleted row
-        const newRowIndex = row >= table.rows.length - 1 ? row - 1 : row
+        // After deletion, new length = table.rows.length - 1, so max valid index = table.rows.length - 2
+        const newLength = table.rows.length - 1
+        const newRowIndex = row >= newLength ? newLength - 1 : row
         setCurrentTableCell(prev => prev ? { ...prev, row: Math.max(0, newRowIndex) } : null)
         break
       }
@@ -1109,7 +1165,9 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
           updatedAt: new Date().toISOString()
         }
         // Update currentTableCell to reflect deleted column
-        const newColIndex = col >= table.headers.length - 1 ? col - 1 : col
+        // After deletion, new length = table.headers.length - 1, so max valid index = table.headers.length - 2
+        const newLength = table.headers.length - 1
+        const newColIndex = col >= newLength ? newLength - 1 : col
         setCurrentTableCell(prev => prev ? { ...prev, col: Math.max(0, newColIndex) } : null)
         break
       }
@@ -1293,11 +1351,19 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
   const handleIframeLoad = useCallback(() => {
     updateIframeHeight(previewFrameRef.current)
     applyOverridesToDocument()
-  }, [applyOverridesToDocument, updateIframeHeight])
+
+    // Apply edit bindings if in edit mode - ensures bindings are ready after iframe reload
+    if (isEditMode) {
+      // Use setTimeout to ensure DOM is fully settled
+      window.setTimeout(() => {
+        applyEditableBindings()
+      }, 100)
+    }
+  }, [applyOverridesToDocument, applyEditableBindings, isEditMode, updateIframeHeight])
 
   return (
     <div className="bg-white shadow-lg rounded-lg overflow-hidden max-w-[1400px] mx-auto">
-      <div className="bg-gray-100 px-4 py-3 border-b flex justify-between items-center">
+      <div className="bg-gray-100 px-4 py-3 border-b flex justify-between items-center sticky top-0 z-50">
         <div>
           <h3 className="text-sm font-medium text-gray-700">תצוגה מקדימה של הדוח</h3>
           <p className="text-xs text-gray-500 mt-1">
