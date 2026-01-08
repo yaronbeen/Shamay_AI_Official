@@ -5,10 +5,33 @@ import { Search, Loader2, AlertCircle, CheckCircle, X, SlidersHorizontal } from 
 import { ValuationData } from '../ValuationWizard'
 import FinalAssetValuation from '../valuation/FinalAssetValuation'
 
+// Analysis result interface for type safety
+interface AnalysisResult {
+  success: boolean
+  totalComparables: number
+  averagePrice: number
+  medianPrice: number
+  averagePricePerSqm: number
+  medianPricePerSqm: number
+  estimatedValue?: number
+  finalValue?: number
+  estimatedRange?: {
+    low: number
+    high: number
+  }
+  comparables: ComparableTransaction[]
+  priceRange: {
+    min: number
+    max: number
+  }
+  section52?: unknown
+  warning?: string
+}
+
 interface ComparableDataViewerProps {
   data: ValuationData
   sessionId?: string
-  onAnalysisComplete?: (analysis: any) => void
+  onAnalysisComplete?: (analysis: AnalysisResult) => void
 }
 
 interface ComparableTransaction {
@@ -181,7 +204,7 @@ export default function ComparableDataViewer({
   )
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [analysisResult, setAnalysisResult] = useState<any>(
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(
     persistedState?.analysisResult || null
   )
   const [showSection52, setShowSection52] = useState(
@@ -537,7 +560,11 @@ export default function ComparableDataViewer({
 
       console.log('🔍 Searching with params:', Object.fromEntries(params))
 
-      const response = await fetch(`/api/asset-details/search?${params.toString()}`)
+      const response = await fetch(`/api/asset-details/search?${params.toString()}`, { signal })
+
+      // Check if request was aborted before processing response
+      if (signal?.aborted) return
+
       const result = await response.json()
 
       if (result.success) {
@@ -560,6 +587,10 @@ export default function ComparableDataViewer({
         setError(result.error || 'שגיאה בטעינת הנתונים')
       }
     } catch (err) {
+      // Ignore AbortError - request was cancelled intentionally
+      if (err instanceof Error && err.name === 'AbortError') {
+        return
+      }
       console.error('❌ Search failed:', err)
       setError('שגיאה בחיפוש עסקאות')
     } finally {
@@ -567,13 +598,24 @@ export default function ComparableDataViewer({
     }
   }, [filters, page, pageSize])
 
-  // Debounce search (500ms delay)
+  // Debounce search (500ms delay) with request cancellation to prevent race conditions
   useEffect(() => {
+    // Cancel any previous in-flight request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+
     const timer = setTimeout(() => {
-      searchTransactions()
+      searchTransactions(controller.signal)
     }, 500)
 
-    return () => clearTimeout(timer)
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
   }, [searchTransactions])
 
   // Initial load based on property data - update filters when data changes
@@ -1084,16 +1126,16 @@ export default function ComparableDataViewer({
           propertyDescription={(data as any).address || 'נכס נשוא השומה'}
           onValuationComplete={(valuation) => {
             console.log('✅ Section 5.2 complete:', valuation)
-            if (onAnalysisComplete) {
+            if (onAnalysisComplete && analysisResult) {
               // Ensure estimatedValue/finalValue is preserved when section52 completes
               // Priority: section52.asset_value_nis > analysisResult.estimatedValue > analysisResult.finalValue
-              const finalValue = valuation.asset_value_nis || analysisResult?.estimatedValue || analysisResult?.finalValue
+              const finalValue = valuation.asset_value_nis || analysisResult.estimatedValue || analysisResult.finalValue
               onAnalysisComplete({
                 ...analysisResult,
                 estimatedValue: finalValue,
                 finalValue: finalValue, // Also include as finalValue for compatibility
                 section52: valuation
-              })
+              } as AnalysisResult)
             }
           }}
         />
@@ -1129,8 +1171,16 @@ export default function ComparableDataViewer({
           </div>
         )}
 
-      {/* Enhanced Filter Bar */}
-      <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200 space-y-4">
+      {/* Enhanced Filter Bar - wrapped in form for accessibility */}
+      <form
+        className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200 space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault()
+          // Search is triggered automatically via debounce
+        }}
+        role="search"
+        aria-label="חיפוש עסקאות השוואה"
+      >
         {/* Search Type Selector */}
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex-shrink-0">
@@ -1457,7 +1507,7 @@ export default function ComparableDataViewer({
         <div className="mt-3 text-xs text-gray-600">
           💡 המערכת תחפש עסקאות דומות לפי הפילטרים שהוגדרו
         </div>
-      </div>
+      </form>
 
       {/* Error Message */}
       {error && (
@@ -1480,7 +1530,26 @@ export default function ComparableDataViewer({
         <div className="flex items-center justify-center py-8">
           <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
           <span className="mr-2 text-sm text-gray-600">טוען עסקאות...</span>
-            </div>
+        </div>
+      )}
+
+      {/* Empty State - No Search Yet */}
+      {!isLoading && transactions.length === 0 && !error && (
+        <div className="flex flex-col items-center justify-center py-12 text-center bg-gray-50 rounded-lg border border-gray-200">
+          <Search className="w-12 h-12 text-gray-300 mb-4" />
+          <h4 className="text-lg font-medium text-gray-600 mb-2">
+            לא בוצע חיפוש עדיין
+          </h4>
+          <p className="text-sm text-gray-500 max-w-md">
+            הזן מספר גוש או בחר קריטריונים לחיפוש בפילטרים למעלה כדי למצוא עסקאות השוואה
+          </p>
+          {!filters.blockNumber && !filters.streetName && !filters.cityName && filters.blockNumbers.length === 0 && (
+            <p className="text-xs text-amber-600 mt-3 flex items-center gap-1">
+              <AlertCircle className="w-4 h-4" />
+              נא למלא לפחות שדה חיפוש אחד
+            </p>
+          )}
+        </div>
       )}
 
       {/* Results Table */}
@@ -1549,8 +1618,12 @@ export default function ComparableDataViewer({
             })}
           </div>
 
-          <div className="border rounded-lg overflow-hidden">
-            <div className="max-h-96 overflow-auto">
+          <div className="border rounded-lg overflow-hidden relative">
+            {/* Mobile scroll indicator */}
+            <div className="md:hidden absolute top-0 left-0 bottom-0 w-6 bg-gradient-to-r from-transparent to-gray-200/80 pointer-events-none z-30 flex items-center">
+              <span className="text-gray-400 text-[10px] transform -rotate-90 whitespace-nowrap">גלול ←</span>
+            </div>
+            <div className="max-h-96 overflow-auto scrollbar-thin scrollbar-thumb-gray-300">
               <table className="min-w-max text-sm" dir="rtl">
                 <thead className="bg-gray-100 sticky top-0 z-10">
                   <tr className="text-right whitespace-nowrap">
@@ -1755,15 +1828,20 @@ export default function ComparableDataViewer({
             </div>
           </div>
 
+          {/* Mobile scroll hint */}
+          <p className="md:hidden text-xs text-gray-500 text-center mt-2">
+            💡 גלול ימינה לראות עמודות נוספות
+          </p>
+
           <div className="mt-4 text-sm text-gray-600">
             נבחרו: {selectedIds.size} מתוך {transactions.length}
-            </div>
+          </div>
         </div>
       )}
 
       {/* Action Buttons */}
       {!isLoading && transactions.length > 0 && (
-        <div className="flex gap-3 justify-end">
+        <div className="flex flex-col sm:flex-row gap-3 justify-end">
               <button
             onClick={analyzeSelected}
                 disabled={selectedIds.size === 0}

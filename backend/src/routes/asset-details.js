@@ -2,6 +2,145 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../models/ShumaDB');
 
+// ============================================================================
+// SHARED UTILITIES - DRY: Used by /search, /analyze, and /save-selection
+// ============================================================================
+
+/**
+ * Build the base SELECT query for comparable transactions
+ * Centralizes the 50+ column SELECT to avoid code duplication
+ * @returns {string} SQL SELECT clause with all fields
+ */
+function getComparablesSelectClause() {
+  return `
+    SELECT
+      p.id,
+      p.sale_day as sale_day,
+      COALESCE(
+        NULLIF(
+          TRIM(
+            COALESCE(ad.street, '') ||
+            CASE WHEN ad.street IS NOT NULL AND ad.house_number IS NOT NULL THEN ' ' ELSE '' END ||
+            COALESCE(ad.house_number::text, '') ||
+            CASE WHEN (ad.street IS NOT NULL OR ad.house_number IS NOT NULL) AND ad.city IS NOT NULL THEN ', ' ELSE '' END ||
+            COALESCE(ad.city, '')
+          ),
+          ''
+        ),
+        p.settlement,
+        'N/A'
+      ) as address,
+      COALESCE(NULLIF(ad.street, ''), 'N/A') as street,
+      COALESCE(NULLIF(ad.house_number::text, ''), 'N/A') as house_number,
+      COALESCE(NULLIF(ad.city, ''), p.settlement, 'N/A') as city,
+      p.settlement,
+      p.block_of_land,
+      p.rooms,
+      COALESCE(ad.floor, NULL) as floor,
+      p.surface,
+      p.year_of_construction as year_of_constru,
+      p.sale_value_nis,
+      CASE
+        WHEN p.surface > 0 AND CAST(p.sale_value_nis AS NUMERIC) > 0
+        THEN ROUND(CAST(p.sale_value_nis AS NUMERIC) / p.surface)
+        ELSE NULL
+      END as price_per_sqm,
+      p.asset_type,
+      ad.entrance,
+      ad.apartment_number,
+      ad.arnona_area_sqm,
+      ad.registered_area_sqm,
+      ad.shares,
+      ad.plot,
+      ad.roof,
+      ad.storage,
+      ad.yard,
+      ad.gallery,
+      ad.parking_spaces,
+      ad.elevator,
+      ad.total_floors,
+      ad.apartments_in_building,
+      ad.building_function,
+      ad.unit_function,
+      ad.transaction_type,
+      ad.declared_price_ils,
+      ad.declared_price_usd,
+      ad.estimated_price_usd,
+      ad.price_per_room,
+      ad.rights,
+      ad.zoning_plan
+    FROM properties p
+    LEFT JOIN asset_details ad ON p.block_of_land = ad.parcel_id`;
+}
+
+/**
+ * Process raw database rows to ensure numeric types and add aliases
+ * @param {Array} rows - Raw database result rows
+ * @returns {Array} - Processed rows with numeric types
+ */
+function processComparableRows(rows) {
+  return rows.map(row => {
+    const saleValueNis = typeof row.sale_value_nis === 'string'
+      ? parseFloat(row.sale_value_nis.trim())
+      : (typeof row.sale_value_nis === 'number' ? row.sale_value_nis : null);
+
+    const pricePerSqm = typeof row.price_per_sqm === 'string'
+      ? parseFloat(row.price_per_sqm.trim())
+      : (typeof row.price_per_sqm === 'number' ? row.price_per_sqm : null);
+
+    return {
+      ...row,
+      sale_value_nis: saleValueNis,
+      estimated_price_ils: saleValueNis,
+      price_per_sqm: pricePerSqm
+    };
+  });
+}
+
+/**
+ * Calculate median of numeric array
+ * @param {number[]} arr - Array of numbers
+ * @returns {number} - Median value, or 0 if empty
+ */
+function calculateMedian(arr) {
+  if (!Array.isArray(arr) || arr.length === 0) return 0;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[mid - 1] + sorted[mid]) / 2
+    : sorted[mid];
+}
+
+/**
+ * Safely parse integer with validation
+ * @param {string|number} value - Value to parse
+ * @param {number} defaultValue - Default if invalid
+ * @param {number} min - Minimum allowed
+ * @param {number} max - Maximum allowed
+ * @returns {number} - Validated integer
+ */
+function safeParseInt(value, defaultValue = 0, min = Number.MIN_SAFE_INTEGER, max = Number.MAX_SAFE_INTEGER) {
+  const parsed = parseInt(value, 10);
+  if (isNaN(parsed) || !Number.isFinite(parsed)) return defaultValue;
+  return Math.max(min, Math.min(max, parsed));
+}
+
+/**
+ * Safely parse float with validation
+ * @param {string|number} value - Value to parse
+ * @param {number} defaultValue - Default if invalid
+ * @returns {number} - Validated float
+ */
+function safeParseFloat(value, defaultValue = 0) {
+  const parsed = parseFloat(value);
+  if (isNaN(parsed) || !Number.isFinite(parsed)) return defaultValue;
+  return parsed;
+}
+
+// ============================================================================
+// END SHARED UTILITIES
+// ============================================================================
+
 /**
  * Field mapping: Spec fields → properties columns (with asset_details join for address)
  * 
@@ -95,73 +234,11 @@ router.get('/search', async (req, res) => {
     }
 
     // ⚡ Enforce maximum limit to prevent memory issues
-    const safeLimit = Math.min(parseInt(limit, 10), 100);
-    const safeOffset = Math.max(parseInt(offset, 10), 0);
+    const safeLimit = safeParseInt(limit, 50, 1, 100);
+    const safeOffset = safeParseInt(offset, 0, 0, Number.MAX_SAFE_INTEGER);
 
-    // Build optimized query with index-friendly WHERE clauses
-    // Order matters: Put most selective filters first
-    // properties table is the source of truth, LEFT JOIN asset_details for address
-    // Try to join on block_of_land or id - we'll test which works
-    let query = `
-      SELECT
-        p.id,
-        p.sale_day as sale_day,
-        COALESCE(
-          NULLIF(
-            TRIM(
-              COALESCE(ad.street, '') ||
-              CASE WHEN ad.street IS NOT NULL AND ad.house_number IS NOT NULL THEN ' ' ELSE '' END ||
-              COALESCE(ad.house_number::text, '') ||
-              CASE WHEN (ad.street IS NOT NULL OR ad.house_number IS NOT NULL) AND ad.city IS NOT NULL THEN ', ' ELSE '' END ||
-              COALESCE(ad.city, '')
-            ),
-            ''
-          ),
-          p.settlement,
-          'N/A'
-        ) as address,
-        COALESCE(NULLIF(ad.street, ''), 'N/A') as street,
-        COALESCE(NULLIF(ad.house_number::text, ''), 'N/A') as house_number,
-        COALESCE(NULLIF(ad.city, ''), p.settlement, 'N/A') as city,
-        p.settlement,
-        p.block_of_land,
-        p.rooms,
-        COALESCE(ad.floor, NULL) as floor,
-        p.surface,
-        p.year_of_construction as year_of_constru,
-        p.sale_value_nis,
-        CASE
-          WHEN p.surface > 0 AND CAST(p.sale_value_nis AS NUMERIC) > 0
-          THEN ROUND(CAST(p.sale_value_nis AS NUMERIC) / p.surface)
-          ELSE NULL
-        END as price_per_sqm,
-        p.asset_type,
-        -- NEW FIELDS FROM ASSET_DETAILS (25 additional fields)
-        ad.entrance,
-        ad.apartment_number,
-        ad.arnona_area_sqm,
-        ad.registered_area_sqm,
-        ad.shares,
-        ad.plot,
-        ad.roof,
-        ad.storage,
-        ad.yard,
-        ad.gallery,
-        ad.parking_spaces,
-        ad.elevator,
-        ad.total_floors,
-        ad.apartments_in_building,
-        ad.building_function,
-        ad.unit_function,
-        ad.transaction_type,
-        ad.declared_price_ils,
-        ad.declared_price_usd,
-        ad.estimated_price_usd,
-        ad.price_per_room,
-        ad.rights,
-        ad.zoning_plan
-      FROM properties p
-      LEFT JOIN asset_details ad ON p.block_of_land = ad.parcel_id
+    // Build optimized query using shared SELECT clause
+    let query = getComparablesSelectClause() + `
       WHERE 1=1
     `;
 
@@ -201,13 +278,21 @@ router.get('/search', async (req, res) => {
       });
       query += ` AND (${blockConditions.join(' OR ')})`;
     } else if (block_range_from && block_range_to) {
-      // Block number range search
+      // Block number range search - with safe parsing for non-standard formats
       const fromBlock = parseInt(block_range_from, 10);
       const toBlock = parseInt(block_range_to, 10);
-      // Extract block number from block_of_land and compare numerically
+      // Extract block number from block_of_land with safety check for non-numeric values
       query += ` AND (
-        CAST(SPLIT_PART(CAST(p.block_of_land AS TEXT), '-', 1) AS INTEGER) >= $${paramIndex}
-        AND CAST(SPLIT_PART(CAST(p.block_of_land AS TEXT), '-', 1) AS INTEGER) <= $${paramIndex + 1}
+        CASE
+          WHEN SPLIT_PART(CAST(p.block_of_land AS TEXT), '-', 1) ~ '^[0-9]+$'
+          THEN CAST(SPLIT_PART(CAST(p.block_of_land AS TEXT), '-', 1) AS INTEGER)
+          ELSE NULL
+        END >= $${paramIndex}
+        AND CASE
+          WHEN SPLIT_PART(CAST(p.block_of_land AS TEXT), '-', 1) ~ '^[0-9]+$'
+          THEN CAST(SPLIT_PART(CAST(p.block_of_land AS TEXT), '-', 1) AS INTEGER)
+          ELSE NULL
+        END <= $${paramIndex + 1}
       )`;
       params.push(fromBlock, toBlock);
       paramIndex += 2;
@@ -266,9 +351,17 @@ router.get('/search', async (req, res) => {
 
     if (rooms) {
       const roomNum = parseFloat(rooms);
-      query += ` AND p.rooms >= $${paramIndex} AND p.rooms < $${paramIndex + 1}`;
-      params.push(roomNum, roomNum + 1);
-      paramIndex += 2;
+      if (rooms === '5' || rooms === '5+') {
+        // "5+" means 5 or more rooms
+        query += ` AND p.rooms >= $${paramIndex}`;
+        params.push(5);
+        paramIndex++;
+      } else {
+        // For specific room counts, allow half-room tolerance (e.g., 3 includes 3.0-3.5)
+        query += ` AND p.rooms >= $${paramIndex} AND p.rooms < $${paramIndex + 1}`;
+        params.push(roomNum, roomNum + 0.6);
+        paramIndex += 2;
+      }
     }
 
     if (floor) {
@@ -283,14 +376,22 @@ router.get('/search', async (req, res) => {
       paramIndex++;
     }
 
-    // Parcel (chelka) range filter - extract from block_of_land
+    // Parcel (chelka) range filter - extract from block_of_land with safety check
     if (parcel_from) {
-      query += ` AND CAST(SPLIT_PART(CAST(p.block_of_land AS TEXT), '-', 2) AS INTEGER) >= $${paramIndex}`;
+      query += ` AND CASE
+        WHEN SPLIT_PART(CAST(p.block_of_land AS TEXT), '-', 2) ~ '^[0-9]+$'
+        THEN CAST(SPLIT_PART(CAST(p.block_of_land AS TEXT), '-', 2) AS INTEGER)
+        ELSE NULL
+      END >= $${paramIndex}`;
       params.push(parseInt(parcel_from, 10));
       paramIndex++;
     }
     if (parcel_to) {
-      query += ` AND CAST(SPLIT_PART(CAST(p.block_of_land AS TEXT), '-', 2) AS INTEGER) <= $${paramIndex}`;
+      query += ` AND CASE
+        WHEN SPLIT_PART(CAST(p.block_of_land AS TEXT), '-', 2) ~ '^[0-9]+$'
+        THEN CAST(SPLIT_PART(CAST(p.block_of_land AS TEXT), '-', 2) AS INTEGER)
+        ELSE NULL
+      END <= $${paramIndex}`;
       params.push(parseInt(parcel_to, 10));
       paramIndex++;
     }
@@ -410,26 +511,8 @@ router.get('/search', async (req, res) => {
       console.log(`⚡ Query executed in ${queryTime}ms, returned ${result.rows.length} rows`);
     }
 
-    // Price per sqm is already calculated in SQL query
-    // Parse string values to numbers (sale_value_nis is stored as character varying)
-    const processedRows = result.rows.map(row => {
-      // Parse sale_value_nis from string to number
-      const saleValueNis = typeof row.sale_value_nis === 'string' 
-        ? parseFloat(row.sale_value_nis.trim()) 
-        : (typeof row.sale_value_nis === 'number' ? row.sale_value_nis : null);
-      
-      // Ensure price_per_sqm is numeric
-      const pricePerSqm = typeof row.price_per_sqm === 'string'
-        ? parseFloat(row.price_per_sqm.trim())
-        : (typeof row.price_per_sqm === 'number' ? row.price_per_sqm : null);
-      
-      return {
-        ...row,
-        sale_value_nis: saleValueNis, // Ensure numeric type
-        estimated_price_ils: saleValueNis, // Add estimated_price_ils alias (numeric)
-        price_per_sqm: pricePerSqm // Ensure numeric type
-      };
-    });
+    // Process rows using shared utility
+    const processedRows = processComparableRows(result.rows);
 
     return res.json({
       success: true,
@@ -478,6 +561,11 @@ router.get('/search', async (req, res) => {
 let statsCache = null;
 let statsCacheTime = 0;
 const STATS_CACHE_TTL = 3600000; // 1 hour in milliseconds
+
+// Property types cache (24 hours - types change rarely)
+let propertyTypesCache = null;
+let propertyTypesCacheTime = 0;
+const PROPERTY_TYPES_CACHE_TTL = 86400000; // 24 hours
 
 router.get('/stats', async (req, res) => {
   try {
@@ -594,94 +682,36 @@ router.post('/analyze', async (req, res) => {
       });
     }
 
-    console.log(`📊 Analyzing ${selectedIds.length} selected comparables`);
-    
-    // Fetch selected comparables
-    const placeholders = selectedIds.map((_, i) => `$${i + 1}`).join(',');
-    const query = `
-      SELECT
-        p.id,
-        p.sale_day as sale_day,
-        COALESCE(
-          NULLIF(
-            TRIM(
-              COALESCE(ad.street, '') ||
-              CASE WHEN ad.street IS NOT NULL AND ad.house_number IS NOT NULL THEN ' ' ELSE '' END ||
-              COALESCE(ad.house_number::text, '') ||
-              CASE WHEN (ad.street IS NOT NULL OR ad.house_number IS NOT NULL) AND ad.city IS NOT NULL THEN ', ' ELSE '' END ||
-              COALESCE(ad.city, '')
-            ),
-            ''
-          ),
-          p.settlement,
-          'N/A'
-        ) as address,
-        COALESCE(ad.street, 'N/A') as street,
-        COALESCE(ad.house_number::text, 'N/A') as house_number,
-        COALESCE(ad.city, p.settlement, 'N/A') as city,
-        p.settlement,
-        p.block_of_land,
-        p.rooms,
-        COALESCE(ad.floor, NULL) as floor,
-        p.surface,
-        p.year_of_construction as year_of_constru,
-        p.sale_value_nis,
-        CASE
-          WHEN p.surface > 0 AND CAST(p.sale_value_nis AS NUMERIC) > 0
-          THEN ROUND(CAST(p.sale_value_nis AS NUMERIC) / p.surface)
-          ELSE NULL
-        END as price_per_sqm,
-        p.asset_type,
-        -- NEW FIELDS FROM ASSET_DETAILS (25 additional fields)
-        ad.entrance,
-        ad.apartment_number,
-        ad.arnona_area_sqm,
-        ad.registered_area_sqm,
-        ad.shares,
-        ad.plot,
-        ad.roof,
-        ad.storage,
-        ad.yard,
-        ad.gallery,
-        ad.parking_spaces,
-        ad.elevator,
-        ad.total_floors,
-        ad.apartments_in_building,
-        ad.building_function,
-        ad.unit_function,
-        ad.transaction_type,
-        ad.declared_price_ils,
-        ad.declared_price_usd,
-        ad.estimated_price_usd,
-        ad.price_per_room,
-        ad.rights,
-        ad.zoning_plan
-      FROM properties p
-      LEFT JOIN asset_details ad ON p.id = ad.property_id
-      WHERE p.id IN (${placeholders})
-    `;
+    // SECURITY: Validate that all selectedIds are positive integers
+    const sanitizedIds = selectedIds
+      .map(id => parseInt(id, 10))
+      .filter(id => Number.isInteger(id) && id > 0);
 
-    const result = await db.query(query, selectedIds);
-    
-    // Process comparables: add estimated_price_ils alias and ensure numeric types
-    const comparables = result.rows.map(row => {
-      // Parse sale_value_nis from string to number (it's stored as character varying)
-      const saleValueNis = typeof row.sale_value_nis === 'string' 
-        ? parseFloat(row.sale_value_nis.trim()) 
-        : (typeof row.sale_value_nis === 'number' ? row.sale_value_nis : null);
-      
-      // Ensure price_per_sqm is numeric
-      const pricePerSqm = typeof row.price_per_sqm === 'string'
-        ? parseFloat(row.price_per_sqm.trim())
-        : (typeof row.price_per_sqm === 'number' ? row.price_per_sqm : null);
-      
-      return {
-        ...row,
-        sale_value_nis: saleValueNis, // Ensure numeric type
-        estimated_price_ils: saleValueNis, // Add estimated_price_ils alias (numeric)
-        price_per_sqm: pricePerSqm // Ensure numeric type
-      };
-    });
+    if (sanitizedIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No valid IDs provided'
+      });
+    }
+
+    // SECURITY: Limit maximum selection to prevent DoS
+    const MAX_SELECTION = 500;
+    if (sanitizedIds.length > MAX_SELECTION) {
+      return res.status(400).json({
+        success: false,
+        error: `Maximum ${MAX_SELECTION} comparables can be selected`
+      });
+    }
+
+    console.log(`📊 Analyzing ${sanitizedIds.length} selected comparables`);
+
+    // Fetch selected comparables using shared query builder
+    const placeholders = sanitizedIds.map((_, i) => `$${i + 1}`).join(',');
+    const query = getComparablesSelectClause() + ` WHERE p.id IN (${placeholders})`;
+    const result = await db.query(query, sanitizedIds);
+
+    // Process rows using shared utility
+    const comparables = processComparableRows(result.rows);
 
     const isDev = process.env.NODE_ENV !== 'production';
     const isVercel = process.env.VERCEL === '1';
@@ -728,15 +758,7 @@ router.post('/analyze', async (req, res) => {
       console.log('📊 Valid prices per sqm:', pricesPerSqm.length, 'values:', pricesPerSqm.slice(0, 3));
     }
 
-    const calculateMedian = (arr) => {
-      if (arr.length === 0) return 0;
-      const sorted = [...arr].sort((a, b) => a - b);
-      const mid = Math.floor(sorted.length / 2);
-      return sorted.length % 2 === 0
-        ? (sorted[mid - 1] + sorted[mid]) / 2
-        : sorted[mid];
-    };
-
+    // Using shared calculateMedian function from top of file
     const averagePrice = prices.length > 0
       ? prices.reduce((a, b) => a + b, 0) / prices.length
       : 0;
@@ -852,84 +874,36 @@ router.post('/save-selection', async (req, res) => {
       });
     }
 
-    console.log(`💾 Saving selection for session ${sessionId}: ${selectedIds.length} comparables`);
-    
-    // Fetch full details of selected comparables
-    const placeholders = selectedIds.map((_, i) => `$${i + 1}`).join(',');
-    const query = `
-      SELECT
-        p.id,
-        p.sale_day as sale_day,
-        COALESCE(
-          NULLIF(
-            TRIM(
-              COALESCE(ad.street, '') ||
-              CASE WHEN ad.street IS NOT NULL AND ad.house_number IS NOT NULL THEN ' ' ELSE '' END ||
-              COALESCE(ad.house_number::text, '') ||
-              CASE WHEN (ad.street IS NOT NULL OR ad.house_number IS NOT NULL) AND ad.city IS NOT NULL THEN ', ' ELSE '' END ||
-              COALESCE(ad.city, '')
-            ),
-            ''
-          ),
-          p.settlement,
-          'N/A'
-        ) as address,
-        COALESCE(ad.street, 'N/A') as street,
-        COALESCE(ad.house_number::text, 'N/A') as house_number,
-        COALESCE(ad.city, p.settlement, 'N/A') as city,
-        p.settlement,
-        p.block_of_land,
-        p.rooms,
-        COALESCE(ad.floor, NULL) as floor,
-        p.surface,
-        p.year_of_construction as year_of_constru,
-        p.sale_value_nis,
-        CASE
-          WHEN p.surface > 0 AND CAST(p.sale_value_nis AS NUMERIC) > 0
-          THEN ROUND(CAST(p.sale_value_nis AS NUMERIC) / p.surface)
-          ELSE NULL
-        END as price_per_sqm,
-        p.asset_type,
-        -- NEW FIELDS FROM ASSET_DETAILS (25 additional fields)
-        ad.entrance,
-        ad.apartment_number,
-        ad.arnona_area_sqm,
-        ad.registered_area_sqm,
-        ad.shares,
-        ad.plot,
-        ad.roof,
-        ad.storage,
-        ad.yard,
-        ad.gallery,
-        ad.parking_spaces,
-        ad.elevator,
-        ad.total_floors,
-        ad.apartments_in_building,
-        ad.building_function,
-        ad.unit_function,
-        ad.transaction_type,
-        ad.declared_price_ils,
-        ad.declared_price_usd,
-        ad.estimated_price_usd,
-        ad.price_per_room,
-        ad.rights,
-        ad.zoning_plan
-      FROM properties p
-      LEFT JOIN asset_details ad ON p.id = ad.property_id
-      WHERE p.id IN (${placeholders})
-      ORDER BY p.sale_day DESC
-    `;
+    // SECURITY: Validate that all selectedIds are positive integers
+    const sanitizedIds = selectedIds
+      .map(id => parseInt(id, 10))
+      .filter(id => Number.isInteger(id) && id > 0);
 
-    const result = await db.query(query, selectedIds);
-    
-    // Add estimated_price_ils alias
-    const selectedComparables = result.rows.map(row => {
-      return {
-        ...row,
-        estimated_price_ils: row.sale_value_nis, // Add estimated_price_ils alias
-        price_per_sqm: row.price_per_sqm // Already calculated in SQL
-      };
-    });
+    if (sanitizedIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No valid IDs provided'
+      });
+    }
+
+    // SECURITY: Limit maximum selection
+    const MAX_SELECTION = 500;
+    if (sanitizedIds.length > MAX_SELECTION) {
+      return res.status(400).json({
+        success: false,
+        error: `Maximum ${MAX_SELECTION} comparables can be selected`
+      });
+    }
+
+    console.log(`💾 Saving selection for session ${sessionId}: ${sanitizedIds.length} comparables`);
+
+    // Fetch full details using shared query builder
+    const placeholders = sanitizedIds.map((_, i) => `$${i + 1}`).join(',');
+    const query = getComparablesSelectClause() + ` WHERE p.id IN (${placeholders}) ORDER BY p.sale_day DESC`;
+    const result = await db.query(query, sanitizedIds);
+
+    // Process rows using shared utility
+    const selectedComparables = processComparableRows(result.rows);
 
     // Format for Section 5.1 JSON output
     const section51Output = {
@@ -962,9 +936,21 @@ router.post('/save-selection', async (req, res) => {
 /**
  * GET /api/asset-details/property-types
  * Get distinct property types from the database for filter dropdown
+ * ⚡ OPTIMIZATION: Cached for 24 hours (property types rarely change)
  */
 router.get('/property-types', async (req, res) => {
   try {
+    // Return cached types if available and fresh
+    const now = Date.now();
+    if (propertyTypesCache && (now - propertyTypesCacheTime) < PROPERTY_TYPES_CACHE_TTL) {
+      return res.json({
+        success: true,
+        types: propertyTypesCache,
+        count: propertyTypesCache.length,
+        cached: true
+      });
+    }
+
     const query = `
       SELECT DISTINCT asset_type
       FROM properties
@@ -976,10 +962,15 @@ router.get('/property-types', async (req, res) => {
     const result = await db.query(query);
     const types = result.rows.map(r => r.asset_type);
 
+    // Cache the results
+    propertyTypesCache = types;
+    propertyTypesCacheTime = now;
+
     return res.json({
       success: true,
       types: types,
-      count: types.length
+      count: types.length,
+      cached: false
     });
   } catch (error) {
     console.error('❌ Failed to get property types:', error);
