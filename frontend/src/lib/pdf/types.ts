@@ -180,5 +180,12 @@ export type ReportData = {
     declarationText: string;              // הצהרה
     standardsText: string;                // תקנים/אתיקה
   };
+  // Custom tables uploaded by user
+  customTables?: Array<{
+    id: string;
+    title?: string;
+    headers: string[];
+    rows: string[][];
+  }>;
 };
 

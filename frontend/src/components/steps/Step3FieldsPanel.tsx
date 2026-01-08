@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   CheckCircle,
   XCircle,
@@ -9,8 +9,10 @@ import {
   Edit3,
   Save,
   Info,
+  Loader2,
 } from 'lucide-react'
 import { ValuationData } from '../ValuationWizard'
+import type { ProcessingStatus } from '../../lib/session-store-global'
 
 interface Step3FieldsPanelProps {
   data: ValuationData
@@ -178,6 +180,72 @@ export function Step3FieldsPanel({
 }: Step3FieldsPanelProps) {
   const [editingField, setEditingField] = useState<string | null>(null)
   const [tempValue, setTempValue] = useState<string>('')
+  const [processingStatus, setProcessingStatus] = useState<ProcessingStatus | null>(null)
+  const [isPolling, setIsPolling] = useState(false)
+
+  // Poll for background processing status
+  // Note: extractedData removed from deps to prevent multiple intervals
+  useEffect(() => {
+    if (!sessionId) return
+
+    let pollInterval: NodeJS.Timeout | null = null
+    let isMounted = true
+
+    const checkProcessingStatus = async (): Promise<boolean> => {
+      if (!isMounted) return false
+      try {
+        const response = await fetch(`/api/session/${sessionId}/processing-status`)
+        if (response.ok && isMounted) {
+          const { processingStatus: status, allComplete, extractedData: newData } = await response.json()
+          setProcessingStatus(status)
+
+          // If we have new extracted data, update the parent
+          if (newData && Object.keys(newData).length > 0 && updateData) {
+            console.log('📦 Step3: Received new extracted data from background processing')
+            // Merge new data with existing extractedData
+            updateData({ extractedData: { ...extractedData, ...newData } })
+          }
+
+          // Determine if we need to continue polling
+          const hasProcessing = status && Object.values(status).some(
+            (s) => s === 'processing'
+          )
+          setIsPolling(!!hasProcessing)
+
+          return !allComplete && !!hasProcessing
+        }
+      } catch (error) {
+        console.error('❌ Error checking processing status:', error)
+      }
+      return false
+    }
+
+    // Initial check
+    checkProcessingStatus().then(shouldContinue => {
+      if (shouldContinue && isMounted) {
+        setIsPolling(true)
+        // Only start polling if not already running
+        if (!pollInterval) {
+          pollInterval = setInterval(async () => {
+            const shouldContinue = await checkProcessingStatus()
+            if (!shouldContinue && pollInterval) {
+              clearInterval(pollInterval)
+              pollInterval = null
+              setIsPolling(false)
+            }
+          }, 3000)
+        }
+      }
+    })
+
+    return () => {
+      isMounted = false
+      if (pollInterval) {
+        clearInterval(pollInterval)
+        pollInterval = null
+      }
+    }
+  }, [sessionId, updateData]) // Removed extractedData to prevent infinite loop
 
   const handleFieldEdit = (field: string, currentValue: string) => {
     setEditingField(field)
@@ -290,15 +358,46 @@ export function Step3FieldsPanel({
         </p>
       </div>
 
-      {/* Success Status */}
-      <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-        <div className="flex items-center gap-2">
-          <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />
-          <div>
-            <p className="text-green-700 text-sm">עיבוד הושלם בהצלחה</p>
+      {/* Background Processing Status Banner */}
+      {isPolling && processingStatus && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+          <div className="flex items-center gap-2">
+            <Loader2 className="w-4 h-4 text-blue-600 animate-spin flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-blue-700 text-sm font-medium">מעבד מסמכים ברקע...</p>
+              <div className="flex gap-2 mt-1 text-xs">
+                {(['tabu', 'condo', 'permit'] as const).map(docType => {
+                  const status = processingStatus[docType]
+                  if (status === 'pending') return null
+                  return (
+                    <span key={docType} className={`px-2 py-0.5 rounded ${
+                      status === 'processing' ? 'bg-blue-100 text-blue-700' :
+                      status === 'completed' ? 'bg-green-100 text-green-700' :
+                      status === 'error' ? 'bg-red-100 text-red-700' : ''
+                    }`}>
+                      {docType === 'tabu' ? 'טאבו' : docType === 'condo' ? 'צו בית משותף' : 'היתר'}
+                      {status === 'completed' && ' ✓'}
+                      {status === 'error' && ' ✗'}
+                    </span>
+                  )
+                })}
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Success Status - Only show when NOT polling */}
+      {hasExtractedData && !isPolling && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />
+            <div>
+              <p className="text-green-700 text-sm">עיבוד הושלם בהצלחה</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Extraction Summary */}
       {hasExtractedData && (

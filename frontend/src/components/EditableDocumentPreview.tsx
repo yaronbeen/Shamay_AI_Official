@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 
-import { ValuationData } from './ValuationWizard'
+import { ValuationData, CustomTable } from './ValuationWizard'
 import { generateDocumentHTML, CompanySettings } from '../lib/document-template'
+import { CSVUploadDialog } from './ui/CSVUploadDialog'
 
-type ToolbarMode = 'text' | 'image'
+type ToolbarMode = 'text' | 'image' | 'table'
 
 interface ToolbarState {
   visible: boolean
@@ -31,6 +32,13 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
   const [debouncedOverrides, setDebouncedOverrides] = useState<Record<string, string>>({})
   const [isSaving, setIsSaving] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  const [showCSVUploadDialog, setShowCSVUploadDialog] = useState(false)
+  // Track current table cell for table operations
+  const [currentTableCell, setCurrentTableCell] = useState<{
+    tableId: string
+    row: number
+    col: number
+  } | null>(null)
   const [toolbarState, setToolbarState] = useState<ToolbarState>({
     visible: false,
     mode: 'text',
@@ -216,6 +224,23 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
       target.dataset.prevOutline = target.style.outline || ''
       target.style.backgroundColor = 'rgba(191, 219, 254, 0.45)'
       target.style.outline = '2px solid rgba(37, 99, 235, 0.65)'
+
+      // Check if this is a custom table cell
+      const customTableContainer = target.closest('.custom-table-container')
+      if (customTableContainer && (target.tagName === 'TD' || target.tagName === 'TH')) {
+        const tableId = customTableContainer.getAttribute('data-custom-table-id')
+        const row = parseInt(target.getAttribute('data-row') || '-1', 10)
+        const col = parseInt(target.getAttribute('data-col') || '-1', 10)
+
+        if (tableId) {
+          setCurrentTableCell({ tableId, row, col })
+          showToolbarForElement(target, 'table')
+          return
+        }
+      }
+
+      // Not a custom table cell - clear table state and show text toolbar
+      setCurrentTableCell(null)
       showToolbarForElement(target, 'text')
     },
     [showToolbarForElement]
@@ -578,6 +603,10 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
       '.valuation-card p',
       '.bullet-list li',
       'table td',
+      'table th',
+      '.custom-table-container td',
+      '.custom-table-container th',
+      '.custom-table-container .sub-title',
       '.rich-text'
     ]
 
@@ -868,6 +897,228 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
     }
   }, [customHtmlOverrides, data, onDataChange])
 
+  // Footnote handling
+  const handleAddFootnote = useCallback(() => {
+    const frame = previewFrameRef.current
+    if (!frame) {
+      alert('לא ניתן להוסיף הערת שוליים - המסמך לא נטען')
+      return
+    }
+
+    const doc = frame.contentDocument || frame.contentWindow?.document
+    if (!doc) {
+      alert('לא ניתן להוסיף הערת שוליים - המסמך לא נטען')
+      return
+    }
+
+    const selection = doc.getSelection()
+    if (!selection || selection.rangeCount === 0) {
+      alert('יש לבחור מיקום בטקסט להוספת הערת שוליים')
+      return
+    }
+
+    // Check if text is selected (not just cursor position)
+    if (!selection.isCollapsed) {
+      const selectedText = selection.toString().trim()
+      if (selectedText.length > 0) {
+        const confirmDelete = confirm(`הטקסט "${selectedText.substring(0, 50)}${selectedText.length > 50 ? '...' : ''}" יימחק. להמשיך?`)
+        if (!confirmDelete) {
+          return
+        }
+      }
+    }
+
+    const footnoteText = prompt('הכנס את טקסט הערת השוליים:')
+    if (!footnoteText || footnoteText.trim() === '') {
+      return
+    }
+
+    // Escape HTML to prevent XSS
+    const escapeHtml = (text: string): string => {
+      const div = doc.createElement('div')
+      div.textContent = text
+      return div.innerHTML
+    }
+    const escapedFootnoteText = escapeHtml(footnoteText)
+
+    // Find the current page element
+    const range = selection.getRangeAt(0)
+    let currentPage = range.startContainer as Element
+    while (currentPage && !currentPage.classList?.contains('page')) {
+      currentPage = currentPage.parentElement as Element
+    }
+
+    if (!currentPage) {
+      alert('לא ניתן לזהות את העמוד הנוכחי')
+      return
+    }
+
+    // Ensure page has an ID for CSS selector
+    if (!currentPage.id) {
+      currentPage.id = `page-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    }
+
+    // Get or create footnotes container for this page
+    let footnotesContainer = currentPage.querySelector('.page-footnotes')
+    let footnoteNumber = 1
+
+    if (!footnotesContainer) {
+      footnotesContainer = doc.createElement('div')
+      footnotesContainer.className = 'page-footnotes'
+      footnotesContainer.setAttribute('data-edit-selector', `#${currentPage.id} .page-footnotes`)
+      currentPage.appendChild(footnotesContainer)
+    } else {
+      // Count existing footnotes
+      footnoteNumber = footnotesContainer.querySelectorAll('p').length + 1
+    }
+
+    // Insert superscript reference at cursor position
+    const supElement = doc.createElement('sup')
+    supElement.className = 'footnote-ref'
+    supElement.textContent = String(footnoteNumber)
+    supElement.style.cssText = 'font-size: 8pt; color: #1e3a8a; cursor: pointer;'
+
+    // Collapse selection to avoid deleting selected text unexpectedly
+    range.collapse(false)
+    range.insertNode(supElement)
+
+    // Add footnote text to footer (escaped to prevent XSS)
+    const footnoteP = doc.createElement('p')
+    footnoteP.innerHTML = `<span class="footnote-number" style="font-weight: bold;">${footnoteNumber}.</span> ${escapedFootnoteText}`
+    footnotesContainer.appendChild(footnoteP)
+
+    // Save the changes to customHtmlOverrides
+    const pageSelector = `#${currentPage.id}`
+
+    // Find the parent element containing the superscript to persist it
+    const editableParent = supElement.closest('[data-edit-selector]') as Element | null
+
+    const updates: Record<string, string> = {
+      [`${pageSelector} .page-footnotes`]: footnotesContainer!.innerHTML
+    }
+
+    // Also save the text block containing the superscript reference
+    if (editableParent && editableParent.getAttribute('data-edit-selector')) {
+      const parentSelector = editableParent.getAttribute('data-edit-selector')!
+      updates[parentSelector] = editableParent.innerHTML
+    }
+
+    setCustomHtmlOverrides(prev => ({
+      ...prev,
+      ...updates
+    }))
+
+    // Clear selection
+    selection.removeAllRanges()
+
+    alert(`✅ הערת שוליים מספר ${footnoteNumber} נוספה בהצלחה`)
+  }, [])
+
+  // Handle inserting a custom table from CSV
+  const handleInsertCustomTable = useCallback((table: CustomTable) => {
+    const existingTables = (data as any).customTables || []
+    const updatedTables = [...existingTables, table]
+
+    onDataChange({
+      customTables: updatedTables
+    } as any)
+
+    alert(`✅ טבלה "${table.title || 'ללא כותרת'}" נוספה בהצלחה! (${table.rows.length} שורות)`)
+  }, [data, onDataChange])
+
+  // Table operations for custom tables
+  const handleTableOperation = useCallback((
+    operation: 'addRow' | 'deleteRow' | 'addColumn' | 'deleteColumn' | 'deleteTable'
+  ) => {
+    if (!currentTableCell) {
+      alert('יש לבחור תא בטבלה')
+      return
+    }
+
+    const { tableId, row, col } = currentTableCell
+    const existingTables: CustomTable[] = (data as any).customTables || []
+    const tableIndex = existingTables.findIndex(t => t.id === tableId)
+
+    if (tableIndex === -1) {
+      alert('לא נמצאה הטבלה')
+      return
+    }
+
+    const table = existingTables[tableIndex]
+
+    let updatedTable: CustomTable | null = null
+
+    switch (operation) {
+      case 'addRow': {
+        const newRow = new Array(table.headers.length).fill('')
+        const insertIndex = row >= 0 ? row + 1 : table.rows.length
+        const newRows = [...table.rows]
+        newRows.splice(insertIndex, 0, newRow)
+        updatedTable = { ...table, rows: newRows, updatedAt: new Date().toISOString() }
+        break
+      }
+      case 'deleteRow': {
+        if (row < 0 || table.rows.length <= 1) {
+          alert('לא ניתן למחוק את השורה היחידה')
+          return
+        }
+        updatedTable = {
+          ...table,
+          rows: table.rows.filter((_, idx) => idx !== row),
+          updatedAt: new Date().toISOString()
+        }
+        // Update currentTableCell to reflect deleted row
+        const newRowIndex = row >= table.rows.length - 1 ? row - 1 : row
+        setCurrentTableCell(prev => prev ? { ...prev, row: Math.max(0, newRowIndex) } : null)
+        break
+      }
+      case 'addColumn': {
+        const insertIndex = col >= 0 ? col + 1 : table.headers.length
+        const newHeaders = [...table.headers]
+        newHeaders.splice(insertIndex, 0, 'עמודה חדשה')
+        const newRows = table.rows.map(r => {
+          const newRow = [...r]
+          newRow.splice(insertIndex, 0, '')
+          return newRow
+        })
+        updatedTable = { ...table, headers: newHeaders, rows: newRows, updatedAt: new Date().toISOString() }
+        break
+      }
+      case 'deleteColumn': {
+        if (col < 0 || table.headers.length <= 1) {
+          alert('לא ניתן למחוק את העמודה היחידה')
+          return
+        }
+        updatedTable = {
+          ...table,
+          headers: table.headers.filter((_, idx) => idx !== col),
+          rows: table.rows.map(r => r.filter((_, idx) => idx !== col)),
+          updatedAt: new Date().toISOString()
+        }
+        // Update currentTableCell to reflect deleted column
+        const newColIndex = col >= table.headers.length - 1 ? col - 1 : col
+        setCurrentTableCell(prev => prev ? { ...prev, col: Math.max(0, newColIndex) } : null)
+        break
+      }
+      case 'deleteTable': {
+        if (!confirm('האם אתה בטוח שברצונך למחוק את הטבלה?')) {
+          return
+        }
+        const updatedTables = existingTables.filter(t => t.id !== tableId)
+        onDataChange({ customTables: updatedTables } as any)
+        setCurrentTableCell(null)
+        setToolbarState(prev => ({ ...prev, mode: 'text' }))
+        return
+      }
+    }
+
+    if (updatedTable) {
+      const updatedTables = [...existingTables]
+      updatedTables[tableIndex] = updatedTable
+      onDataChange({ customTables: updatedTables } as any)
+    }
+  }, [currentTableCell, data, onDataChange])
+
   const handleExportPDF = useCallback(async (useReactPdf: boolean = false) => {
     const sessionId = (data as any).sessionId
     if (!sessionId) {
@@ -914,6 +1165,52 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
     } catch (error) {
       console.error('Error exporting PDF:', error)
       alert(`❌ שגיאה בייצוא PDF: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setIsExporting(false)
+    }
+  }, [data, customHtmlOverrides])
+
+  const handleExportDOCX = useCallback(async () => {
+    const sessionId = (data as any).sessionId
+    if (!sessionId) {
+      alert('לא ניתן לייצא - חסר מזהה סשן')
+      return
+    }
+
+    setIsExporting(true)
+    try {
+      const mergedEdits = {
+        ...((data as any).customDocumentEdits || (data as any).propertyAnalysis?.__customDocumentEdits || {}),
+        ...customHtmlOverrides
+      }
+
+      const response = await fetch(`/api/session/${sessionId}/export-docx`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customDocumentEdits: mergedEdits
+        })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`Failed to export DOCX: ${errorText}`)
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `shamay-valuation-${sessionId}.docx`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      alert('✅ קובץ Word הורד בהצלחה!')
+    } catch (error) {
+      console.error('Error exporting DOCX:', error)
+      alert(`❌ שגיאה בייצוא Word: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setIsExporting(false)
     }
@@ -1026,8 +1323,8 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
                   onClick={() => handleExportPDF(true)}
                   disabled={isExporting}
                   className={`px-3 py-2 text-sm rounded-lg font-medium transition-all duration-200 ${
-                    isExporting 
-                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                    isExporting
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                       : 'bg-blue-500 text-white hover:bg-blue-600 shadow-md'
                   }`}
                   title="ייצא PDF של הדוח הערוך (React-PDF - חדש)"
@@ -1039,6 +1336,25 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
                     </>
                   ) : (
                     <>⚡ ייצא PDF (React-PDF)</>
+                  )}
+                </button>
+                <button
+                  onClick={handleExportDOCX}
+                  disabled={isExporting}
+                  className={`px-3 py-2 text-sm rounded-lg font-medium transition-all duration-200 ${
+                    isExporting
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : 'bg-purple-500 text-white hover:bg-purple-600 shadow-md'
+                  }`}
+                  title="ייצא קובץ Word (DOCX)"
+                >
+                  {isExporting ? (
+                    <>
+                      <span className="inline-block animate-spin mr-1">⟳</span>
+                      מייצא...
+                    </>
+                  ) : (
+                    <>📝 ייצא Word</>
                   )}
                 </button>
               </div>
@@ -1112,10 +1428,10 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
                     : 'bg-red-500 text-white border-red-600 hover:bg-red-600'
                 }`}
                 title={
-                  isSaving 
-                    ? 'מבטל...' 
+                  isSaving
+                    ? 'מבטל...'
                     : (Object.keys(customHtmlOverrides).length === 0 && !(data as any).customDocumentEdits && !(data as any).propertyAnalysis?.__customDocumentEdits)
-                      ? 'אין שינויים לביטול' 
+                      ? 'אין שינויים לביטול'
                       : 'בטל את כל השינויים'
                 }
               >
@@ -1128,7 +1444,23 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
                   <>↶ בטל שינויים</>
                 )}
               </button>
-              
+
+              <button
+                onClick={handleAddFootnote}
+                className="px-3 py-1 text-xs rounded border transition-colors bg-purple-500 text-white border-purple-600 hover:bg-purple-600"
+                title="הוסף הערת שוליים במיקום הסמן"
+              >
+                📝 הוספת הערת שוליים
+              </button>
+
+              <button
+                onClick={() => setShowCSVUploadDialog(true)}
+                className="px-3 py-1 text-xs rounded border transition-colors bg-blue-500 text-white border-blue-600 hover:bg-blue-600"
+                title="העלה קובץ CSV כטבלה"
+              >
+                📊 הוסף טבלה מ-CSV
+              </button>
+
               <div className="text-xs text-blue-600 bg-blue-50 px-3 py-1 rounded">
                 💡 לחץ על טקסט או תמונה כדי לערוך
             </div>
@@ -1221,6 +1553,58 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
                   ✖
               </button>
               </>
+            ) : toolbarState.mode === 'table' ? (
+              <>
+                <span className="text-xs text-gray-500 ml-2">פעולות טבלה:</span>
+                <button
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => handleTableOperation('addRow')}
+                  className="rounded-md border border-green-300 bg-green-50 px-2 py-1 text-xs font-semibold text-green-700 hover:bg-green-100"
+                  title="הוסף שורה מתחת לשורה הנוכחית"
+                >
+                  ➕ שורה
+                </button>
+                <button
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => handleTableOperation('deleteRow')}
+                  className="rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
+                  title="מחק שורה נוכחית"
+                >
+                  ➖ שורה
+                </button>
+                <button
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => handleTableOperation('addColumn')}
+                  className="rounded-md border border-green-300 bg-green-50 px-2 py-1 text-xs font-semibold text-green-700 hover:bg-green-100"
+                  title="הוסף עמודה אחרי העמודה הנוכחית"
+                >
+                  ➕ עמודה
+                </button>
+                <button
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => handleTableOperation('deleteColumn')}
+                  className="rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
+                  title="מחק עמודה נוכחית"
+                >
+                  ➖ עמודה
+                </button>
+                <button
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => handleTableOperation('deleteTable')}
+                  className="rounded-md border border-red-400 bg-red-100 px-2 py-1 text-xs font-semibold text-red-800 hover:bg-red-200"
+                  title="מחק את כל הטבלה"
+                >
+                  🗑️ מחק טבלה
+                </button>
+                <button
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={hideToolbar}
+                  className="rounded-md border border-gray-200 px-2 py-1 text-xs font-semibold text-gray-600 hover:border-red-400 hover:text-red-600"
+                  title="הסתרת סרגל"
+                >
+                  ✖
+                </button>
+              </>
             ) : (
               <>
               <button
@@ -1306,6 +1690,13 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
           }
         `}</style>
       </div>
+
+      {/* CSV Upload Dialog */}
+      <CSVUploadDialog
+        isOpen={showCSVUploadDialog}
+        onClose={() => setShowCSVUploadDialog(false)}
+        onTableInsert={handleInsertCustomTable}
+      />
     </div>
   )
 }

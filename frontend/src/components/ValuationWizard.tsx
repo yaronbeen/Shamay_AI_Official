@@ -398,6 +398,23 @@ export interface ValuationData {
     fileName: string
     pngExport?: string // Base64 PNG export of the measurements
   }
+
+  // Custom Tables (uploaded CSV tables)
+  customTables?: CustomTable[]
+
+  // Custom document edits (CSS selector → HTML content)
+  customDocumentEdits?: Record<string, string>
+}
+
+// Custom table structure for CSV uploads
+export interface CustomTable {
+  id: string                    // Unique ID: `custom-table-${timestamp}`
+  title?: string                // Optional table title
+  headers: string[]             // Column headers from CSV
+  rows: string[][]              // 2D array of cell values
+  sectionId?: string            // Which page/section it belongs to
+  createdAt: string             // ISO timestamp
+  updatedAt: string             // ISO timestamp
 }
 
 export function ValuationWizard() {

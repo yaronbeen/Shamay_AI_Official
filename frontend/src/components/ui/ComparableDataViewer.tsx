@@ -31,7 +31,37 @@ interface ComparableTransaction {
 }
 
 interface FilterState {
+  // Search type
+  searchType: 'block' | 'blockRange' | 'street' | 'city'
+
+  // Block search (existing + enhanced)
   blockNumber: string
+  blockNumbers: string[] // Array for multiple blocks
+  blockRangeFrom: string
+  blockRangeTo: string
+
+  // Street/City search (new)
+  streetName: string
+  cityName: string
+
+  // Parcel range (new)
+  parcelFrom: string
+  parcelTo: string
+
+  // Sale value range (new)
+  saleValueMin: number | null
+  saleValueMax: number | null
+
+  // Sale date preset (new)
+  saleDatePreset: 'all' | 'lastYear' | 'last2Years' | 'last5Years' | 'custom'
+
+  // Property type (new)
+  propertyType: string // 'all' or specific type
+
+  // Rooms (new)
+  rooms: string // 'all' or specific number
+
+  // Existing fields
   surfaceMin: number
   surfaceMax: number
   yearMin: number
@@ -172,18 +202,64 @@ export default function ComparableDataViewer({
   }, [data])
 
   // Filter state with defaults based on property data
-  // Filters: גוש (Block), מ"ר (Surface), שנת בנייה (Year), תאריך מכירה (Sale Date)
   const [filters, setFilters] = useState<FilterState>(
     persistedState?.filters || {
+      // Search type
+      searchType: 'block',
+
+      // Block search
       blockNumber: propertyBlock,
+      blockNumbers: [],
+      blockRangeFrom: '',
+      blockRangeTo: '',
+
+      // Street/City search
+      streetName: '',
+      cityName: '',
+
+      // Parcel range
+      parcelFrom: '',
+      parcelTo: '',
+
+      // Sale value range
+      saleValueMin: null,
+      saleValueMax: null,
+
+      // Sale date preset
+      saleDatePreset: 'all',
+
+      // Property type and rooms
+      propertyType: 'all',
+      rooms: 'all',
+
+      // Existing fields
       surfaceMin: Math.max(0, propertyArea - 15),
       surfaceMax: propertyArea + 15,
       yearMin: Math.max(1900, propertyYear - 10),
       yearMax: Math.min(new Date().getFullYear() + 5, propertyYear + 10),
-      dateFrom: '', // No default - user can set if needed
-      dateTo: '' // No default - user can set if needed
+      dateFrom: '',
+      dateTo: ''
     }
   )
+
+  // State for property types (loaded from API)
+  const [propertyTypes, setPropertyTypes] = useState<string[]>([])
+
+  // Load property types on mount
+  useEffect(() => {
+    const loadPropertyTypes = async () => {
+      try {
+        const response = await fetch('/api/asset-details/property-types')
+        const result = await response.json()
+        if (result.success) {
+          setPropertyTypes(result.types || [])
+        }
+      } catch (err) {
+        console.error('Failed to load property types:', err)
+      }
+    }
+    loadPropertyTypes()
+  }, [])
 
   // Persist state to localStorage whenever it changes
   useEffect(() => {
@@ -223,6 +299,32 @@ export default function ComparableDataViewer({
     storageKey
   ])
 
+  // Helper to calculate date range based on preset
+  const getDateRangeFromPreset = (preset: string): { from: string; to: string } => {
+    const today = new Date()
+    const formatDate = (d: Date) => d.toISOString().split('T')[0]
+
+    switch (preset) {
+      case 'lastYear': {
+        const yearAgo = new Date(today)
+        yearAgo.setFullYear(today.getFullYear() - 1)
+        return { from: formatDate(yearAgo), to: formatDate(today) }
+      }
+      case 'last2Years': {
+        const twoYearsAgo = new Date(today)
+        twoYearsAgo.setFullYear(today.getFullYear() - 2)
+        return { from: formatDate(twoYearsAgo), to: formatDate(today) }
+      }
+      case 'last5Years': {
+        const fiveYearsAgo = new Date(today)
+        fiveYearsAgo.setFullYear(today.getFullYear() - 5)
+        return { from: formatDate(fiveYearsAgo), to: formatDate(today) }
+      }
+      default:
+        return { from: '', to: '' }
+    }
+  }
+
   // Debounced search function
   const searchTransactions = useCallback(async () => {
     setIsLoading(true)
@@ -234,14 +336,67 @@ export default function ComparableDataViewer({
         offset: String(page * pageSize)
       })
 
-      // Filters: גוש (Block), מ"ר (Surface), שנת בנייה (Year), תאריך מכירה (Sale Date)
-      if (filters.blockNumber) params.append('block_number', filters.blockNumber)
+      // Primary search filters based on search type
+      switch (filters.searchType) {
+        case 'block':
+          if (filters.blockNumber) params.append('block_number', filters.blockNumber)
+          break
+        case 'blockRange':
+          if (filters.blockRangeFrom) params.append('block_range_from', filters.blockRangeFrom)
+          if (filters.blockRangeTo) params.append('block_range_to', filters.blockRangeTo)
+          break
+        case 'street':
+          if (filters.streetName) params.append('street', filters.streetName)
+          break
+        case 'city':
+          if (filters.cityName) params.append('city', filters.cityName)
+          break
+      }
+
+      // Multiple block numbers (for chips)
+      if (filters.blockNumbers && filters.blockNumbers.length > 0) {
+        params.append('block_numbers', filters.blockNumbers.join(','))
+      }
+
+      // Surface area range
       if (filters.surfaceMin > 0) params.append('surface_min', String(filters.surfaceMin))
       if (filters.surfaceMax > 0) params.append('surface_max', String(filters.surfaceMax))
+
+      // Construction year range
       if (filters.yearMin) params.append('year_min', String(filters.yearMin))
       if (filters.yearMax) params.append('year_max', String(filters.yearMax))
-      if (filters.dateFrom) params.append('sale_date_from', filters.dateFrom)
-      if (filters.dateTo) params.append('sale_date_to', filters.dateTo)
+
+      // Sale date - use preset or custom dates
+      if (filters.saleDatePreset !== 'all' && filters.saleDatePreset !== 'custom') {
+        const { from, to } = getDateRangeFromPreset(filters.saleDatePreset)
+        if (from) params.append('sale_date_from', from)
+        if (to) params.append('sale_date_to', to)
+      } else if (filters.saleDatePreset === 'custom') {
+        if (filters.dateFrom) params.append('sale_date_from', filters.dateFrom)
+        if (filters.dateTo) params.append('sale_date_to', filters.dateTo)
+      }
+
+      // Sale value range
+      if (filters.saleValueMin !== null && filters.saleValueMin > 0) {
+        params.append('sale_value_min', String(filters.saleValueMin))
+      }
+      if (filters.saleValueMax !== null && filters.saleValueMax > 0) {
+        params.append('sale_value_max', String(filters.saleValueMax))
+      }
+
+      // Property type
+      if (filters.propertyType && filters.propertyType !== 'all') {
+        params.append('asset_type', filters.propertyType)
+      }
+
+      // Rooms
+      if (filters.rooms && filters.rooms !== 'all') {
+        params.append('rooms', filters.rooms)
+      }
+
+      // Parcel range
+      if (filters.parcelFrom) params.append('parcel_from', filters.parcelFrom)
+      if (filters.parcelTo) params.append('parcel_to', filters.parcelTo)
 
       console.log('🔍 Searching with params:', Object.fromEntries(params))
 
@@ -426,7 +581,20 @@ export default function ComparableDataViewer({
       setPage(0)
       setHasMore(false)
       setFilters({
+        searchType: 'block',
         blockNumber: propertyBlock,
+        blockNumbers: [],
+        blockRangeFrom: '',
+        blockRangeTo: '',
+        streetName: '',
+        cityName: '',
+        parcelFrom: '',
+        parcelTo: '',
+        saleValueMin: null,
+        saleValueMax: null,
+        saleDatePreset: 'all',
+        propertyType: 'all',
+        rooms: 'all',
         surfaceMin: Math.max(0, propertyArea - 15),
         surfaceMax: propertyArea + 15,
         yearMin: Math.max(1900, propertyYear - 10),
@@ -659,63 +827,318 @@ export default function ComparableDataViewer({
           </div>
         )}
 
-      {/* Filter Bar - Filters: גוש, מ"ר, שנת בנייה, תאריך מכירה */}
-      <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Filter 1: גוש (Block Number) */}
-          <div>
+      {/* Enhanced Filter Bar */}
+      <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200 space-y-4">
+        {/* Search Type Selector */}
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex-shrink-0">
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              <span className="text-red-600">*</span> גוש (חובה)
+              חיפוש נוסף
             </label>
-            <input
-              type="text"
-              value={filters.blockNumber || propertyBlock || ''}
-              onChange={(e) => setFilters(prev => ({ ...prev, blockNumber: e.target.value }))}
-              placeholder={propertyBlock ? `מספר גוש (${propertyBlock})` : "מספר גוש"}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
-            />
-            {propertyBlock && !filters.blockNumber && (
-              <p className="text-xs text-blue-600 mt-1">📋 נשלף מהדיבי: {propertyBlock}</p>
-            )}
-            </div>
+            <select
+              value={filters.searchType}
+              onChange={(e) => setFilters(prev => ({
+                ...prev,
+                searchType: e.target.value as FilterState['searchType'],
+                // Clear search fields when changing type
+                blockNumber: e.target.value === 'block' ? prev.blockNumber : '',
+                blockRangeFrom: '',
+                blockRangeTo: '',
+                streetName: '',
+                cityName: ''
+              }))}
+              className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+            >
+              <option value="block">לפי נושא (גוש)</option>
+              <option value="blockRange">לפי טווח נושאים</option>
+              <option value="street">לפי רחוב</option>
+              <option value="city">לפי יישוב</option>
+            </select>
+          </div>
 
-          {/* Filter 2: מ"ר (Surface Area) */}
+          {/* Dynamic Search Input based on type */}
+          <div className="flex-1 min-w-[200px]">
+            {filters.searchType === 'block' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <span className="text-red-600">*</span> נושא (גוש)
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={filters.blockNumber || ''}
+                    onChange={(e) => setFilters(prev => ({ ...prev, blockNumber: e.target.value }))}
+                    placeholder={propertyBlock ? `מספר גוש (${propertyBlock})` : "מספר גוש"}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (filters.blockNumber && !filters.blockNumbers.includes(filters.blockNumber)) {
+                        setFilters(prev => ({
+                          ...prev,
+                          blockNumbers: [...prev.blockNumbers, prev.blockNumber],
+                          blockNumber: ''
+                        }))
+                      }
+                    }}
+                    className="px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+                  >
+                    + הוסף
+                  </button>
+                </div>
+                {propertyBlock && !filters.blockNumber && filters.blockNumbers.length === 0 && (
+                  <p className="text-xs text-blue-600 mt-1">📋 נשלף מהדיבי: {propertyBlock}</p>
+                )}
+              </div>
+            )}
+
+            {filters.searchType === 'blockRange' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <span className="text-red-600">*</span> טווח נושאים
+                </label>
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="text"
+                    value={filters.blockRangeFrom}
+                    onChange={(e) => setFilters(prev => ({ ...prev, blockRangeFrom: e.target.value }))}
+                    placeholder="מגוש"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <span className="text-gray-500">עד</span>
+                  <input
+                    type="text"
+                    value={filters.blockRangeTo}
+                    onChange={(e) => setFilters(prev => ({ ...prev, blockRangeTo: e.target.value }))}
+                    placeholder="עד גוש"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+            )}
+
+            {filters.searchType === 'street' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <span className="text-red-600">*</span> רחוב
+                </label>
+                <input
+                  type="text"
+                  value={filters.streetName}
+                  onChange={(e) => setFilters(prev => ({ ...prev, streetName: e.target.value }))}
+                  placeholder="שם הרחוב"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            )}
+
+            {filters.searchType === 'city' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <span className="text-red-600">*</span> יישוב
+                </label>
+                <input
+                  type="text"
+                  value={filters.cityName}
+                  onChange={(e) => setFilters(prev => ({ ...prev, cityName: e.target.value }))}
+                  placeholder="שם היישוב"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Block Chips (for multiple blocks) */}
+        {filters.blockNumbers.length > 0 && (
+          <div className="flex flex-wrap gap-2 p-2 bg-white rounded-md border border-gray-200">
+            <span className="text-sm text-gray-600">נושאים:</span>
+            {filters.blockNumbers.map((block, index) => (
+              <span
+                key={index}
+                className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded-md text-sm"
+              >
+                {block}
+                <button
+                  type="button"
+                  onClick={() => setFilters(prev => ({
+                    ...prev,
+                    blockNumbers: prev.blockNumbers.filter((_, i) => i !== index)
+                  }))}
+                  className="text-blue-600 hover:text-blue-800"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Filters Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {/* תאריך מכירה (Sale Date) */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              טווח שטח (מ"ר)
+              תאריך מכירה
+            </label>
+            <select
+              value={filters.saleDatePreset}
+              onChange={(e) => setFilters(prev => ({
+                ...prev,
+                saleDatePreset: e.target.value as FilterState['saleDatePreset'],
+                dateFrom: e.target.value === 'custom' ? prev.dateFrom : '',
+                dateTo: e.target.value === 'custom' ? prev.dateTo : ''
+              }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+            >
+              <option value="all">הכל</option>
+              <option value="lastYear">שנה אחרונה</option>
+              <option value="last2Years">שנתיים אחרונות</option>
+              <option value="last5Years">5 שנים אחרונות</option>
+              <option value="custom">טווח מותאם</option>
+            </select>
+            {filters.saleDatePreset === 'custom' && (
+              <div className="flex gap-2 mt-2">
+                <input
+                  type="date"
+                  value={filters.dateFrom}
+                  onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+                  className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded-md"
+                  placeholder="מתאריך"
+                />
+                <input
+                  type="date"
+                  value={filters.dateTo}
+                  onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+                  className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded-md"
+                  placeholder="עד תאריך"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* שווי מכירה (Sale Value) */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              שווי מכירה (₪)
+            </label>
+            <div className="flex gap-2 items-center">
+              <input
+                type="number"
+                value={filters.saleValueMin || ''}
+                onChange={(e) => setFilters(prev => ({ ...prev, saleValueMin: e.target.value ? parseFloat(e.target.value) : null }))}
+                placeholder="מ"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <span className="text-gray-500">-</span>
+              <input
+                type="number"
+                value={filters.saleValueMax || ''}
+                onChange={(e) => setFilters(prev => ({ ...prev, saleValueMax: e.target.value ? parseFloat(e.target.value) : null }))}
+                placeholder="עד"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+          </div>
+
+          {/* סוג נכס (Property Type) */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              סוג נכס
+            </label>
+            <select
+              value={filters.propertyType}
+              onChange={(e) => setFilters(prev => ({ ...prev, propertyType: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+            >
+              <option value="all">הכל</option>
+              {propertyTypes.map((type) => (
+                <option key={type} value={type}>{type}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* מספר חדרים (Rooms) */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              מספר חדרים
+            </label>
+            <select
+              value={filters.rooms}
+              onChange={(e) => setFilters(prev => ({ ...prev, rooms: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+            >
+              <option value="all">הכל</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5+</option>
+            </select>
+          </div>
+
+          {/* חלקה (Parcel Range) */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              חלקה
+            </label>
+            <div className="flex gap-2 items-center">
+              <input
+                type="text"
+                value={filters.parcelFrom}
+                onChange={(e) => setFilters(prev => ({ ...prev, parcelFrom: e.target.value }))}
+                placeholder="מחלקה"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <span className="text-gray-500">-</span>
+              <input
+                type="text"
+                value={filters.parcelTo}
+                onChange={(e) => setFilters(prev => ({ ...prev, parcelTo: e.target.value }))}
+                placeholder="עד"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+          </div>
+
+          {/* שטח (Surface Area) */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              שטח (מ"ר)
             </label>
             <div className="flex gap-2 items-center">
               <input
                 type="number"
                 value={filters.surfaceMin}
                 onChange={(e) => setFilters(prev => ({ ...prev, surfaceMin: parseFloat(e.target.value) || 0 }))}
-                placeholder="מינימום"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="מ"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
               <span className="text-gray-500">-</span>
               <input
                 type="number"
                 value={filters.surfaceMax}
                 onChange={(e) => setFilters(prev => ({ ...prev, surfaceMax: parseFloat(e.target.value) || 0 }))}
-                placeholder="מקסימום"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="עד"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
+            </div>
           </div>
-      </div>
 
-          {/* Filter 3: שנת בנייה (Construction Year) */}
+          {/* שנת בנייה (Construction Year) */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              טווח שנת בנייה
-                </label>
+              שנת בנייה
+            </label>
             <div className="flex gap-2 items-center">
               <input
                 type="number"
                 value={filters.yearMin}
                 onChange={(e) => setFilters(prev => ({ ...prev, yearMin: parseInt(e.target.value, 10) || 1900 }))}
                 placeholder="מ"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
               <span className="text-gray-500">-</span>
               <input
@@ -723,47 +1146,16 @@ export default function ComparableDataViewer({
                 value={filters.yearMax}
                 onChange={(e) => setFilters(prev => ({ ...prev, yearMax: parseInt(e.target.value, 10) || new Date().getFullYear() }))}
                 placeholder="עד"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
-              </div>
-              </div>
-
-          {/* Filter 4: תאריך מכירה (Sale Date Range) */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              טווח תאריך מכירה
-            </label>
-            <div className="flex flex-col gap-2">
-              <div>
-                <label className="block text-xs text-gray-600 mb-1">
-                  מתאריך
-                </label>
-                <input
-                  type="date"
-                  value={filters.dateFrom}
-                  onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-600 mb-1">
-                  עד תאריך
-                </label>
-                <input
-                  type="date"
-                  value={filters.dateTo}
-                  onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
             </div>
           </div>
-              </div>
+        </div>
 
         <div className="mt-3 text-xs text-gray-600">
-          💡 המערכת תחפש עסקאות דומות בגוש, בטווח שטח, שנת בנייה ותאריך מכירה שהוגדרו
-              </div>
-              </div>
+          💡 המערכת תחפש עסקאות דומות לפי הפילטרים שהוגדרו
+        </div>
+      </div>
 
       {/* Error Message */}
       {error && (

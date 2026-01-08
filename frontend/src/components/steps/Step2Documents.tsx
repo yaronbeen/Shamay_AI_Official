@@ -1,8 +1,9 @@
 'use client'
 
 import React, { useState, useCallback, useRef, useEffect } from 'react'
-import { Upload, FileText, Image, CheckCircle, AlertCircle, X, Eye, Star, Loader2, AlertTriangle, Brain } from 'lucide-react'
+import { Upload, FileText, Image, CheckCircle, AlertCircle, X, Eye, Star, Loader2, AlertTriangle, Brain, Clock } from 'lucide-react'
 import { DataSource } from '../ui/DataSource'
+import type { ProcessingStatus, ProcessingStatusType } from '../../lib/session-store-global'
 
 interface DocumentUpload {
   id: string
@@ -88,6 +89,13 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
     permit: false,
     condo: false,
     images: false
+  })
+
+  // Background processing status (per document type)
+  const [backgroundProcessing, setBackgroundProcessing] = useState<ProcessingStatus>({
+    tabu: 'pending',
+    condo: 'pending',
+    permit: 'pending'
   })
 
   // Load uploads from session on mount
@@ -231,6 +239,81 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
   const getUploadsByType = (type: string) => {
     return uploads.filter(upload => upload.type === type)
   }
+
+  // Trigger background processing for a document type (fire-and-forget)
+  const triggerBackgroundProcessing = async (docType: 'tabu' | 'condo' | 'permit') => {
+    if (!sessionId) return
+
+    console.log(`🚀 Triggering background processing for ${docType}`)
+
+    // Update local status
+    setBackgroundProcessing(prev => ({ ...prev, [docType]: 'processing' as ProcessingStatusType }))
+
+    try {
+      // Fire-and-forget - don't await the processing, just trigger it
+      fetch(`/api/session/${sessionId}/process-document`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: docType })
+      }).then(response => {
+        if (!response.ok) {
+          console.error(`❌ Failed to trigger processing for ${docType}`)
+          setBackgroundProcessing(prev => ({ ...prev, [docType]: 'error' as ProcessingStatusType }))
+        }
+      }).catch(error => {
+        console.error(`❌ Error triggering processing for ${docType}:`, error)
+        setBackgroundProcessing(prev => ({ ...prev, [docType]: 'error' as ProcessingStatusType }))
+      })
+
+      console.log(`✅ Background processing triggered for ${docType}`)
+    } catch (error) {
+      console.error(`❌ Error triggering background processing for ${docType}:`, error)
+    }
+  }
+
+  // Poll for processing status updates
+  useEffect(() => {
+    if (!sessionId) return
+
+    // Check if any document is processing
+    const hasProcessing = Object.values(backgroundProcessing).some(s => s === 'processing')
+    if (!hasProcessing) return
+
+    console.log('🔄 Starting processing status polling...')
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/session/${sessionId}/processing-status`)
+        if (response.ok) {
+          const { processingStatus, allComplete, extractedData: newData } = await response.json()
+
+          // Update local status
+          setBackgroundProcessing(processingStatus)
+
+          // If we have new extracted data, update it
+          if (newData && Object.keys(newData).length > 0) {
+            console.log('📦 Received extracted data from background processing:', Object.keys(newData))
+            // Use functional update to avoid stale closure issue
+            setExtractedData((prev: any) => {
+              const merged = { ...prev, ...newData }
+              updateData({ extractedData: merged })
+              return merged
+            })
+          }
+
+          // Stop polling if all complete
+          if (allComplete) {
+            console.log('✅ All background processing complete')
+            clearInterval(pollInterval)
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error polling processing status:', error)
+      }
+    }, 3000) // Poll every 3 seconds
+
+    return () => clearInterval(pollInterval)
+  }, [sessionId, backgroundProcessing, extractedData, updateData])
 
   // Process documents using AI services
   const processDocuments = async (reprocessSelection?: typeof selectiveReprocess) => {
@@ -990,9 +1073,16 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
             console.log('🖼️ updateImageData returned nothing, using updated')
           }
         }
-        
+
         return updated
       })
+
+      // 🚀 FIRE BACKGROUND PROCESSING IMMEDIATELY AFTER UPLOAD
+      // For document types (tabu, condo, permit), trigger AI extraction right away
+      if (upload.type === 'tabu' || upload.type === 'condo' || upload.type === 'permit') {
+        console.log(`🚀 Upload complete - firing background processing for ${upload.type}`)
+        triggerBackgroundProcessing(upload.type)
+      }
 
     } catch (error) {
       console.error('❌ Upload failed:', error)
@@ -1555,10 +1645,41 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
                 {/* Data Source Info */}
                 {typeUploads.some(u => u.status === 'completed') && (
                   <div className="mt-4">
-                    <DataSource 
-                      source={type as any} 
+                    <DataSource
+                      source={type as any}
                       details="נשלף אוטומטית מהמסמך"
                     />
+                  </div>
+                )}
+
+                {/* Background Processing Status Indicator */}
+                {(type === 'tabu' || type === 'condo' || type === 'permit') &&
+                 typeUploads.some(u => u.status === 'completed') && (
+                  <div className="mt-3 p-2 rounded-lg bg-gray-50 border">
+                    {backgroundProcessing[type as 'tabu' | 'condo' | 'permit'] === 'processing' && (
+                      <div className="flex items-center gap-2 text-blue-600">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span className="text-xs">מעבד ברקע...</span>
+                      </div>
+                    )}
+                    {backgroundProcessing[type as 'tabu' | 'condo' | 'permit'] === 'completed' && (
+                      <div className="flex items-center gap-2 text-green-600">
+                        <CheckCircle className="w-4 h-4" />
+                        <span className="text-xs">העיבוד הושלם</span>
+                      </div>
+                    )}
+                    {backgroundProcessing[type as 'tabu' | 'condo' | 'permit'] === 'error' && (
+                      <div className="flex items-center gap-2 text-red-600">
+                        <AlertCircle className="w-4 h-4" />
+                        <span className="text-xs">שגיאה בעיבוד</span>
+                      </div>
+                    )}
+                    {backgroundProcessing[type as 'tabu' | 'condo' | 'permit'] === 'pending' && (
+                      <div className="flex items-center gap-2 text-gray-500">
+                        <Clock className="w-4 h-4" />
+                        <span className="text-xs">ממתין לעיבוד</span>
+                      </div>
+                    )}
                   </div>
                 )}
             </div>
@@ -1566,6 +1687,44 @@ export function Step2Documents({ data, updateData, onValidationChange, sessionId
     )
         })}
       </div>
+
+      {/* Background Processing Summary Banner */}
+      {Object.values(backgroundProcessing).some(s => s === 'processing') && (
+        <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="w-8 h-8 border-3 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+                <Brain className="w-4 h-4 text-blue-600 absolute inset-0 m-auto" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-blue-900">מעבד מסמכים ברקע</h3>
+                <p className="text-blue-700 text-xs">
+                  ניתן להמשיך לשלב הבא - הנתונים יתעדכנו אוטומטית
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              {(['tabu', 'condo', 'permit'] as const).map(docType => {
+                const status = backgroundProcessing[docType]
+                if (status === 'pending') return null
+                return (
+                  <div key={docType} className={`px-2 py-1 rounded text-xs ${
+                    status === 'processing' ? 'bg-blue-100 text-blue-700' :
+                    status === 'completed' ? 'bg-green-100 text-green-700' :
+                    status === 'error' ? 'bg-red-100 text-red-700' : ''
+                  }`}>
+                    {docType === 'tabu' ? 'טאבו' : docType === 'condo' ? 'צו בית משותף' : 'היתר'}
+                    {status === 'processing' && <Loader2 className="w-3 h-3 inline mr-1 animate-spin" />}
+                    {status === 'completed' && <CheckCircle className="w-3 h-3 inline mr-1" />}
+                    {status === 'error' && <AlertCircle className="w-3 h-3 inline mr-1" />}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Process Documents Section */}
       {uploads.some(u => u.status === 'completed') && (

@@ -197,6 +197,64 @@ const formatFloor = (floor?: number | string) => {
   return `בקומה ${floor}`
 }
 
+// Escape HTML special characters for safe rendering
+const escapeHtmlForTable = (text: string): string => {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+// Generate HTML for a single custom table
+const generateCustomTableHTML = (table: { id: string; title?: string; headers: string[]; rows: string[][] }): string => {
+  const tableId = `custom-table-${table.id}`
+
+  const headerCells = table.headers
+    .map((h, i) => `<th data-col="${i}">${escapeHtmlForTable(h || `עמודה ${i + 1}`)}</th>`)
+    .join('')
+
+  const bodyRows = table.rows
+    .map((row, rowIdx) => {
+      const cells = row
+        .map((cell, colIdx) => `<td data-row="${rowIdx}" data-col="${colIdx}">${escapeHtmlForTable(cell || '')}</td>`)
+        .join('')
+      return `<tr data-row="${rowIdx}">${cells}</tr>`
+    })
+    .join('')
+
+  return `
+    <div id="${tableId}" class="custom-table-container section-block" data-custom-table-id="${table.id}">
+      ${table.title ? `<div class="sub-title">${escapeHtmlForTable(table.title)}</div>` : ''}
+      <table class="table">
+        <thead>
+          <tr>${headerCells}</tr>
+        </thead>
+        <tbody>
+          ${bodyRows}
+        </tbody>
+      </table>
+    </div>
+  `
+}
+
+// Generate HTML for all custom tables
+const generateAllCustomTablesHTML = (customTables?: Array<{ id: string; title?: string; headers: string[]; rows: string[][] }>): string => {
+  if (!customTables || customTables.length === 0) {
+    return ''
+  }
+
+  return `
+    <section class="page custom-tables-section">
+      <div class="chapter-title">נספחים - טבלאות מותאמות אישית</div>
+      <div class="page-body">
+        ${customTables.map(table => generateCustomTableHTML(table)).join('\n')}
+      </div>
+    </section>
+  `
+}
+
 const formatOwnership = (data: ValuationData) => {
   const landRegistry = resolveLandRegistryData(data).landRegistry
   // Only return ownership TYPE (e.g., "בעלות פרטית"), never owner names
@@ -1121,7 +1179,47 @@ const buildBaseCss = (settings?: CompanySettings) => `
   .details-table td {
     font-weight: 400;
   }
-  
+
+  /* ===== CUSTOM UPLOADED TABLES ===== */
+  .custom-table-container {
+    margin: 16px 0;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .custom-table-container .sub-title {
+    margin-bottom: 8px;
+  }
+  .custom-table-container .table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9.5pt;
+  }
+  .custom-table-container .table th,
+  .custom-table-container .table td {
+    border: none;
+    border-bottom: 1px solid #cccccc;
+    padding: 6px 8px;
+    text-align: right;
+    vertical-align: middle;
+  }
+  .custom-table-container .table thead th {
+    border-bottom: 2px solid #000000;
+    font-weight: 700;
+  }
+  /* Edit mode hover effects for custom tables */
+  .custom-table-container[data-edit-mode="true"] {
+    outline: 2px dashed transparent;
+    transition: outline-color 0.2s;
+  }
+  .custom-table-container[data-edit-mode="true"]:hover {
+    outline-color: rgba(59, 130, 246, 0.4);
+  }
+  .custom-table-container[data-edit-mode="true"] td:hover,
+  .custom-table-container[data-edit-mode="true"] th:hover {
+    background: rgba(191, 219, 254, 0.3);
+    cursor: text;
+  }
+
   /* ===== FOOTNOTES ===== */
   .page-footnotes {
     position: absolute;
@@ -3129,6 +3227,9 @@ export function generateDocumentHTML(
     ? [pageNumberScript, autoPaginateScript].join('\n')
     : ''
 
+  // Generate custom tables section if any custom tables exist
+  const customTablesSection = generateAllCustomTablesHTML((data as any).customTables)
+
   const bodyContent = `
     <div class="document">
       ${headerBlock}
@@ -3139,6 +3240,7 @@ export function generateDocumentHTML(
       ${considerationsSection}
       ${valuationSection}
       ${summarySection}
+      ${customTablesSection}
     </div>
     ${previewScripts}
     ${(() => {
@@ -3430,6 +3532,7 @@ export function generateDocumentHTML(
                 ${considerationsSection}
                 ${valuationSection}
                 ${summarySection}
+                ${customTablesSection}
                 ${customEditsScript}
               </main>
             </div>

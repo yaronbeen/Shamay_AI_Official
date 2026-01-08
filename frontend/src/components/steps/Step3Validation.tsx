@@ -6,6 +6,8 @@ import { ValuationData } from '../ValuationWizard'
 import { Step3FieldsPanel } from './Step3FieldsPanel'
 import { Step3PDFPanel, PDFFile } from './Step3PDFPanel'
 import { PlanningInformationSection } from './PlanningInformationSection'
+import { CollapsibleDrawer } from '../ui/CollapsibleDrawer'
+import { cn } from '@/lib/utils'
 
 interface Step3ValidationProps {
   data: ValuationData
@@ -86,6 +88,9 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
   const [aiExtractions, setAIExtractions] = useState<any[]>([])
   const [showAIHistory, setShowAIHistory] = useState(false)
   const [isRestoringAI, setIsRestoringAI] = useState(false)
+
+  // Drawer state
+  const [isDrawerOpen, setIsDrawerOpen] = useState(true)
 
   const sections: Step3Section[] = [
     {
@@ -421,20 +426,30 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
         {activeSection === 'fields_validation' ? (
           /* Split Layout for Fields Validation */
           <>
-            {/* Left Panel - Fields */}
-            <div className="w-1/2 overflow-y-auto border-l bg-white p-4">
-              <Step3FieldsPanel
-                data={data}
-                extractedData={displayExtractedData}
-                onFieldSave={handleFieldSave}
-                provenanceData={provenanceData}
-                updateData={updateData}
-                sessionId={sessionId}
-              />
-            </div>
+            {/* Left Panel - Fields (Collapsible Drawer) */}
+            <CollapsibleDrawer
+              isOpen={isDrawerOpen}
+              onToggle={() => setIsDrawerOpen(!isDrawerOpen)}
+              width="w-1/2"
+              newTabUrl={sessionId ? `/panel/step3-fields?sessionId=${sessionId}` : undefined}
+            >
+              <div className="overflow-y-auto border-l bg-white p-4 h-full">
+                <Step3FieldsPanel
+                  data={data}
+                  extractedData={displayExtractedData}
+                  onFieldSave={handleFieldSave}
+                  provenanceData={provenanceData}
+                  updateData={updateData}
+                  sessionId={sessionId}
+                />
+              </div>
+            </CollapsibleDrawer>
 
-            {/* Right Panel - PDF */}
-            <div className="w-1/2 relative">
+            {/* Right Panel - PDF (expands when drawer closed) */}
+            <div className={cn(
+              'relative transition-all duration-300',
+              isDrawerOpen ? 'flex-1' : 'w-full'
+            )}>
               <Step3PDFPanel
                 files={pdfFiles}
                 currentIndex={currentFileIndex}

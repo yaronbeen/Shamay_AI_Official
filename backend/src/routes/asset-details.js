@@ -58,6 +58,9 @@ router.get('/search', async (req, res) => {
     
     const {
       block_number,
+      block_numbers,        // Comma-separated list of block numbers
+      block_range_from,     // Block number range start
+      block_range_to,       // Block number range end
       surface_min,
       surface_max,
       year_min,
@@ -65,6 +68,11 @@ router.get('/search', async (req, res) => {
       sale_date_from,
       sale_date_to,
       city,
+      street,               // Street name search
+      parcel_from,          // Parcel (chelka) range start
+      parcel_to,            // Parcel (chelka) range end
+      sale_value_min,       // Minimum sale value
+      sale_value_max,       // Maximum sale value
       rooms,
       floor,
       asset_type,
@@ -72,13 +80,17 @@ router.get('/search', async (req, res) => {
       offset = 0
     } = req.query;
 
-    // ⚡ CRITICAL OPTIMIZATION: Require block_number (גוש)
-    // This is mandatory for searching comparable data
-    if (!block_number) {
+    // ⚡ CRITICAL OPTIMIZATION: Require at least one primary filter
+    // Options: block_number, block_numbers, block_range, city, or street
+    const hasBlockFilter = block_number || block_numbers || (block_range_from && block_range_to);
+    const hasCityFilter = city && city.trim().length > 0;
+    const hasStreetFilter = street && street.trim().length > 0;
+
+    if (!hasBlockFilter && !hasCityFilter && !hasStreetFilter) {
       return res.status(400).json({
         success: false,
-        error: 'חובה לציין מספר גוש לביצוע חיפוש',
-        message: 'Performance optimization: block_number is required'
+        error: 'חובה לציין לפחות אחד מהבאים: גוש, טווח גושים, יישוב או רחוב',
+        message: 'Performance optimization: at least one primary filter is required'
       });
     }
 
@@ -132,26 +144,59 @@ router.get('/search', async (req, res) => {
     const params = [];
     let paramIndex = 1;
 
-    // ⚡ OPTIMIZATION 1: Filter by block_number FIRST (most selective)
+    // ⚡ OPTIMIZATION 1: Filter by block_number(s) FIRST (most selective)
     // block_of_land format may vary, try to match block number
     if (block_number) {
-      // Try to match block number in block_of_land field
-      // Handle both string format (like "006154-0330-004-00") and integer/numeric format
+      // Single block number search
       const paddedBlock = String(block_number).padStart(6, '0');
       query += ` AND (
-        CAST(p.block_of_land AS TEXT) LIKE $${paramIndex} 
+        CAST(p.block_of_land AS TEXT) LIKE $${paramIndex}
         OR CAST(p.block_of_land AS TEXT) LIKE $${paramIndex + 1}
         OR CAST(p.block_of_land AS TEXT) = $${paramIndex + 2}
       )`;
       params.push(`${paddedBlock}-%`, `%${block_number}%`, block_number);
       paramIndex += 3;
+    } else if (block_numbers) {
+      // Multiple block numbers (comma-separated)
+      const blocks = block_numbers.split(',').map(b => b.trim()).filter(b => b);
+      if (blocks.length > 0) {
+        const blockConditions = blocks.map(block => {
+          const paddedBlock = String(block).padStart(6, '0');
+          params.push(`${paddedBlock}-%`, `%${block}%`, block);
+          const conditions = `(
+            CAST(p.block_of_land AS TEXT) LIKE $${paramIndex}
+            OR CAST(p.block_of_land AS TEXT) LIKE $${paramIndex + 1}
+            OR CAST(p.block_of_land AS TEXT) = $${paramIndex + 2}
+          )`;
+          paramIndex += 3;
+          return conditions;
+        });
+        query += ` AND (${blockConditions.join(' OR ')})`;
+      }
+    } else if (block_range_from && block_range_to) {
+      // Block number range search
+      const fromBlock = parseInt(block_range_from, 10);
+      const toBlock = parseInt(block_range_to, 10);
+      // Extract block number from block_of_land and compare numerically
+      query += ` AND (
+        CAST(SPLIT_PART(CAST(p.block_of_land AS TEXT), '-', 1) AS INTEGER) >= $${paramIndex}
+        AND CAST(SPLIT_PART(CAST(p.block_of_land AS TEXT), '-', 1) AS INTEGER) <= $${paramIndex + 1}
+      )`;
+      params.push(fromBlock, toBlock);
+      paramIndex += 2;
     }
 
-    // ⚡ OPTIMIZATION 2: Settlement filter (from properties table)
-    if (city && !block_number) {
-      // Use settlement field from properties table
-      query += ` AND LOWER(p.settlement) = LOWER($${paramIndex})`;
-      params.push(city);
+    // ⚡ OPTIMIZATION 2: Settlement/City filter (from properties table)
+    if (city) {
+      query += ` AND LOWER(p.settlement) LIKE LOWER($${paramIndex})`;
+      params.push(`%${city}%`);
+      paramIndex++;
+    }
+
+    // ⚡ OPTIMIZATION 2b: Street filter (from asset_details table)
+    if (street) {
+      query += ` AND LOWER(ad.street) LIKE LOWER($${paramIndex})`;
+      params.push(`%${street}%`);
       paramIndex++;
     }
 
@@ -208,6 +253,30 @@ router.get('/search', async (req, res) => {
     if (asset_type) {
       query += ` AND p.asset_type ILIKE $${paramIndex}`;
       params.push(`%${asset_type}%`);
+      paramIndex++;
+    }
+
+    // Parcel (chelka) range filter - extract from block_of_land
+    if (parcel_from) {
+      query += ` AND CAST(SPLIT_PART(CAST(p.block_of_land AS TEXT), '-', 2) AS INTEGER) >= $${paramIndex}`;
+      params.push(parseInt(parcel_from, 10));
+      paramIndex++;
+    }
+    if (parcel_to) {
+      query += ` AND CAST(SPLIT_PART(CAST(p.block_of_land AS TEXT), '-', 2) AS INTEGER) <= $${paramIndex}`;
+      params.push(parseInt(parcel_to, 10));
+      paramIndex++;
+    }
+
+    // Sale value range filter
+    if (sale_value_min) {
+      query += ` AND CAST(p.sale_value_nis AS NUMERIC) >= $${paramIndex}`;
+      params.push(parseFloat(sale_value_min));
+      paramIndex++;
+    }
+    if (sale_value_max) {
+      query += ` AND CAST(p.sale_value_nis AS NUMERIC) <= $${paramIndex}`;
+      params.push(parseFloat(sale_value_max));
       paramIndex++;
     }
 
@@ -811,6 +880,37 @@ router.post('/save-selection', async (req, res) => {
     return res.status(500).json({
       success: false,
       error: error.message || 'Failed to save selection'
+    });
+  }
+});
+
+/**
+ * GET /api/asset-details/property-types
+ * Get distinct property types from the database for filter dropdown
+ */
+router.get('/property-types', async (req, res) => {
+  try {
+    const query = `
+      SELECT DISTINCT asset_type
+      FROM properties
+      WHERE asset_type IS NOT NULL
+        AND asset_type != ''
+      ORDER BY asset_type
+    `;
+
+    const result = await db.query(query);
+    const types = result.rows.map(r => r.asset_type);
+
+    return res.json({
+      success: true,
+      types: types,
+      count: types.length
+    });
+  } catch (error) {
+    console.error('❌ Failed to get property types:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to get property types'
     });
   }
 });
