@@ -431,6 +431,7 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
               isOpen={isDrawerOpen}
               onToggle={() => setIsDrawerOpen(!isDrawerOpen)}
               width="w-1/2"
+              collapsedLabel="בדיקת שדות"
             >
               <div className="overflow-y-auto border-l bg-white p-4 h-full">
                 <Step3FieldsPanel
@@ -444,10 +445,10 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
               </div>
             </CollapsibleDrawer>
 
-            {/* Right Panel - PDF (expands when drawer closed) */}
+            {/* Right Panel - PDF (50% when drawer open, full when closed) */}
             <div className={cn(
               'relative transition-all duration-300',
-              isDrawerOpen ? 'flex-1' : 'w-full'
+              isDrawerOpen ? 'w-1/2' : 'w-full'
             )}>
               <Step3PDFPanel
                 files={pdfFiles}

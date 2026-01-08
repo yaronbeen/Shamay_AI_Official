@@ -1,6 +1,6 @@
 'use client'
 
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useParams } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { Step3FieldsPanel } from '@/components/steps/Step3FieldsPanel'
 import { Step3PDFPanel, PDFFile } from '@/components/steps/Step3PDFPanel'
@@ -8,11 +8,8 @@ import { Step5ValuationPanel } from '@/components/steps/Step5ValuationPanel'
 import { ValuationData } from '@/components/ValuationWizard'
 import { Loader2, FileText, Download, CheckCircle, ExternalLink } from 'lucide-react'
 
-interface PanelPageProps {
-  params: { type: string }
-}
-
-export default function PanelPage({ params }: PanelPageProps) {
+export default function PanelPage() {
+  const params = useParams<{ type: string }>()
   const searchParams = useSearchParams()
   const sessionId = searchParams.get('sessionId')
   const [data, setData] = useState<ValuationData | null>(null)
