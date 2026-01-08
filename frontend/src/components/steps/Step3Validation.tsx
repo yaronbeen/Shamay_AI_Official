@@ -426,35 +426,33 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
         {activeSection === 'fields_validation' ? (
           /* Split Layout for Fields Validation */
           <>
-            {/* Left Panel - Fields (Collapsible Drawer) */}
+            {/* Left Panel - PDF (Collapsible Drawer) */}
             <CollapsibleDrawer
               isOpen={isDrawerOpen}
               onToggle={() => setIsDrawerOpen(!isDrawerOpen)}
               width="w-1/2"
-              collapsedLabel="בדיקת שדות"
+              collapsedLabel="מסמכים"
             >
-              <div className="overflow-y-auto border-l bg-white p-4 h-full">
-                <Step3FieldsPanel
-                  data={data}
-                  extractedData={displayExtractedData}
-                  onFieldSave={handleFieldSave}
-                  provenanceData={provenanceData}
-                  updateData={updateData}
-                  sessionId={sessionId}
-                />
-              </div>
-            </CollapsibleDrawer>
-
-            {/* Right Panel - PDF (50% when drawer open, fills rest when closed) */}
-            <div className={cn(
-              'relative transition-all duration-300',
-              isDrawerOpen ? 'w-1/2' : 'flex-1'
-            )}>
               <Step3PDFPanel
                 files={pdfFiles}
                 currentIndex={currentFileIndex}
                 onIndexChange={setCurrentFileIndex}
                 loading={filesLoading}
+                sessionId={sessionId}
+              />
+            </CollapsibleDrawer>
+
+            {/* Right Panel - Fields (50% when drawer open, fills rest when closed) */}
+            <div className={cn(
+              'overflow-y-auto border-r bg-white p-4 transition-all duration-300',
+              isDrawerOpen ? 'w-1/2' : 'flex-1'
+            )}>
+              <Step3FieldsPanel
+                data={data}
+                extractedData={displayExtractedData}
+                onFieldSave={handleFieldSave}
+                provenanceData={provenanceData}
+                updateData={updateData}
                 sessionId={sessionId}
               />
             </div>
