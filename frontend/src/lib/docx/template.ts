@@ -7,18 +7,11 @@ import {
   TableCell,
   ImageRun,
   AlignmentType,
-  TextDirection,
   BorderStyle,
   WidthType,
-  PageBreak,
-  HeadingLevel,
-  convertMillimetersToTwip,
-  ISectionOptions,
   UnderlineType,
-  Header,
   Footer,
   PageNumber,
-  NumberFormat,
 } from 'docx'
 import { ReportData } from '../pdf/types'
 
@@ -72,6 +65,33 @@ const SECTION6_STANDARDS_TEXT =
   'הדו"ח הוכן על פי תקנות שמאי המקרקעין (אתיקה מקצועית), התשכ"ו – 1966 ועל פי התקנים המקצועיים של הועדה לתקינה שמאית.'
 const SECTION6_FREE_FROM_DEBTS_TEXT =
   'הכול במצבו הנוכחי, כריק, פנוי וחופשי מכל מחזיק, חוב ושיעבוד, נכון לתאריך חוות-דעת זו.'
+
+// Helper to scale image dimensions while preserving aspect ratio
+function scaleImageToFit(
+  width: number,
+  height: number,
+  maxWidth: number,
+  maxHeight: number
+): { width: number; height: number } {
+  const aspectRatio = width / height
+
+  let newWidth = width
+  let newHeight = height
+
+  // Scale down if wider than max
+  if (newWidth > maxWidth) {
+    newWidth = maxWidth
+    newHeight = newWidth / aspectRatio
+  }
+
+  // Scale down if taller than max
+  if (newHeight > maxHeight) {
+    newHeight = maxHeight
+    newWidth = newHeight * aspectRatio
+  }
+
+  return { width: Math.round(newWidth), height: Math.round(newHeight) }
+}
 
 // Helper to create RTL paragraph
 function rtlParagraph(
@@ -285,6 +305,7 @@ function buildCoverPage(data: ReportData, images: ImageMap): (Paragraph | Table)
   // Cover image
   if (data.cover.coverImage?.src && images.has('coverImage')) {
     const imgData = images.get('coverImage')!
+    const scaledSize = scaleImageToFit(imgData.width, imgData.height, 450, 350)
     content.push(
       new Paragraph({
         alignment: AlignmentType.CENTER,
@@ -292,10 +313,7 @@ function buildCoverPage(data: ReportData, images: ImageMap): (Paragraph | Table)
         children: [
           new ImageRun({
             data: imgData.buffer,
-            transformation: {
-              width: Math.min(imgData.width, 450),
-              height: Math.min(imgData.height, 350),
-            },
+            transformation: scaledSize,
             type: 'png',
           }),
         ],
@@ -469,6 +487,7 @@ function buildSection1(data: ReportData, images: ImageMap): (Paragraph | Table)[
   // Environment map
   if (data.section1.environmentMap?.src && images.has('environmentMap')) {
     const imgData = images.get('environmentMap')!
+    const scaledSize = scaleImageToFit(imgData.width, imgData.height, 450, 300)
     content.push(
       new Paragraph({
         alignment: AlignmentType.CENTER,
@@ -476,10 +495,7 @@ function buildSection1(data: ReportData, images: ImageMap): (Paragraph | Table)[
         children: [
           new ImageRun({
             data: imgData.buffer,
-            transformation: {
-              width: Math.min(imgData.width, 450),
-              height: Math.min(imgData.height, 300),
-            },
+            transformation: scaledSize,
             type: 'png',
           }),
         ],
@@ -507,6 +523,7 @@ function buildSection1(data: ReportData, images: ImageMap): (Paragraph | Table)[
   // Parcel sketch
   if (parcel.parcelSketch?.src && images.has('parcelSketch')) {
     const imgData = images.get('parcelSketch')!
+    const scaledSize = scaleImageToFit(imgData.width, imgData.height, 400, 280)
     content.push(
       new Paragraph({
         alignment: AlignmentType.CENTER,
@@ -514,10 +531,7 @@ function buildSection1(data: ReportData, images: ImageMap): (Paragraph | Table)[
         children: [
           new ImageRun({
             data: imgData.buffer,
-            transformation: {
-              width: Math.min(imgData.width, 400),
-              height: Math.min(imgData.height, 280),
-            },
+            transformation: scaledSize,
             type: 'png',
           }),
         ],
@@ -561,6 +575,41 @@ function buildSection1(data: ReportData, images: ImageMap): (Paragraph | Table)[
       `הדירה בחלוקה פנימית: ${property.internalLayoutAndFinish || '[חסר]'}`
     )
   )
+
+  // Property photos section
+  if (property.photos && property.photos.length > 0) {
+    content.push(sectionTitle('1.4 תמונות הנכס'))
+
+    property.photos.forEach((photo, idx) => {
+      const imgKey = `propertyPhoto${idx}`
+      if (images.has(imgKey)) {
+        const imgData = images.get(imgKey)!
+        const scaledSize = scaleImageToFit(imgData.width, imgData.height, 400, 280)
+        content.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 100, after: 50 },
+            children: [
+              new ImageRun({
+                data: imgData.buffer,
+                transformation: scaledSize,
+                type: 'png',
+              }),
+            ],
+          })
+        )
+        if (photo.caption) {
+          content.push(
+            rtlParagraph(photo.caption, {
+              size: FONT_SIZES.FOOTNOTE,
+              color: COLORS.MUTED,
+              alignment: AlignmentType.CENTER,
+            })
+          )
+        }
+      }
+    })
+  }
 
   return content
 }
@@ -776,6 +825,7 @@ function buildSection3(data: ReportData, images: ImageMap): (Paragraph | Table)[
   // Apartment plan image
   if (data.section3.apartmentPlan?.src && images.has('apartmentPlan')) {
     const imgData = images.get('apartmentPlan')!
+    const scaledSize = scaleImageToFit(imgData.width, imgData.height, 400, 300)
     content.push(
       new Paragraph({
         alignment: AlignmentType.CENTER,
@@ -783,10 +833,7 @@ function buildSection3(data: ReportData, images: ImageMap): (Paragraph | Table)[
         children: [
           new ImageRun({
             data: imgData.buffer,
-            transformation: {
-              width: Math.min(imgData.width, 400),
-              height: Math.min(imgData.height, 300),
-            },
+            transformation: scaledSize,
             type: 'png',
           }),
         ],

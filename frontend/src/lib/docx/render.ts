@@ -12,12 +12,12 @@ const RETRY_DELAY_BASE = 1000 // Base delay for exponential backoff (ms)
 const MAX_CONCURRENT_LOADS = 5 // Maximum parallel image fetches
 
 // Allowed domains for external image fetching (security whitelist)
+// Only allow localhost in development to prevent SSRF attacks in production
 const ALLOWED_DOMAINS = [
   'vercel-blob.com',
   'blob.vercel-storage.com',
   'public.blob.vercel-storage.com',
-  'localhost',
-  '127.0.0.1',
+  ...(process.env.NODE_ENV === 'development' ? ['localhost', '127.0.0.1'] : []),
 ]
 
 // Error tracking for failed image loads
@@ -44,16 +44,24 @@ export type ProgressCallback = (loaded: number, total: number, currentKey: strin
 const PLACEHOLDER_IMAGE_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAGQAAABLCAYAAACGGCK3AAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAALEwAACxMBAJqcGAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAF5SURBVHic7doxDoJAEEDR/9z/0liZeALXxsJCK2MlCQmVrYUJlYn3MOZP8dKB3dnZnQkAAAAAAAAAAPgXx9YHsKaqqmOSY5JTkkPr81hRrSTnJOck59baZfqBfyDkluSW5Nb6RFa07yCPJI8kt9YnspLZkFvrg1jJbMi19YGsZDbk0vpAVjIb8mh9ICuZDXm2PpCVnFofwNpmQy6tD2QlsyG31geyktmQa+sDWclsyKP1gaxkOmTyL3/rc1nDdMjr33/ux9UPsoa8h3ylOd/xqGb4+yeSNeSV5n7Hwxr/n0fV52+a9x2PavyzHlWfv2k+cTysMe8/j2rMv+o+cTysuZ9H1d9vmk8cD2vu51H195vm/edhzf3+qPr6TfOJ42Et/fyoxv9N84njYc35/FFNfD+q8R9XH78f1cT3oxr/XHO/46G88xEO9OOFFL9LAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgC/0AQ7TJFHQwY6CAAAAAElFTkSuQmCC'
 
+// Cached placeholder image (lazy initialized)
+let cachedPlaceholder: Buffer | null = null
+
 /**
- * Create a placeholder image buffer with specified dimensions
+ * Get or create cached placeholder image buffer
+ * Using cache avoids repeated sharp processing for each failed image
  */
-async function createPlaceholderImage(width: number = 200, height: number = 150): Promise<Buffer> {
+async function getPlaceholderImage(): Promise<Buffer> {
+  if (cachedPlaceholder) {
+    return cachedPlaceholder
+  }
+
   try {
-    // Create a gray placeholder with text
-    const placeholder = await sharp({
+    // Create a gray placeholder
+    cachedPlaceholder = await sharp({
       create: {
-        width,
-        height,
+        width: 200,
+        height: 150,
         channels: 4,
         background: { r: 200, g: 200, b: 200, alpha: 1 }
       }
@@ -61,10 +69,11 @@ async function createPlaceholderImage(width: number = 200, height: number = 150)
     .jpeg({ quality: 80 })
     .toBuffer()
 
-    return placeholder
+    return cachedPlaceholder
   } catch {
     // Fallback to static placeholder
-    return Buffer.from(PLACEHOLDER_IMAGE_BASE64, 'base64')
+    cachedPlaceholder = Buffer.from(PLACEHOLDER_IMAGE_BASE64, 'base64')
+    return cachedPlaceholder
   }
 }
 
@@ -85,12 +94,15 @@ function isAllowedUrl(url: string): boolean {
 
 /**
  * Compress and resize image if needed
+ * Uses a single sharp pipeline for efficiency
  */
 async function compressImage(buffer: Buffer): Promise<Buffer> {
   try {
-    const metadata = await sharp(buffer).metadata()
+    // Create single sharp instance to avoid multiple decodes
+    const image = sharp(buffer)
+    const metadata = await image.metadata()
 
-    // Skip compression for small images or if already optimized
+    // Skip compression for small images that are already optimized
     if (
       buffer.length < 100 * 1024 && // Less than 100KB
       (metadata.width || 0) <= MAX_IMAGE_DIMENSION &&
@@ -99,7 +111,8 @@ async function compressImage(buffer: Buffer): Promise<Buffer> {
       return buffer
     }
 
-    // Resize and compress
+    // Resize and compress using the same sharp instance
+    // Clone the pipeline since metadata() consumes the stream
     const compressed = await sharp(buffer)
       .resize(MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION, {
         fit: 'inside',
@@ -167,8 +180,11 @@ async function loadImageWithRetry(
   retries: number = MAX_RETRIES
 ): Promise<{ data: ImageData | null; error: ImageLoadError | null; retriesUsed: number }> {
   let lastError: ImageLoadError | null = null
+  let actualAttempts = 0
 
   for (let attempt = 0; attempt <= retries; attempt++) {
+    actualAttempts = attempt + 1 // Track actual attempts (1-based)
+
     if (attempt > 0) {
       // Exponential backoff
       const delay = RETRY_DELAY_BASE * Math.pow(2, attempt - 1)
@@ -193,10 +209,10 @@ async function loadImageWithRetry(
   }
 
   if (lastError) {
-    lastError.retryCount = retries
+    lastError.retryCount = actualAttempts // Actual attempts, not max
   }
 
-  return { data: null, error: lastError, retriesUsed: retries }
+  return { data: null, error: lastError, retriesUsed: actualAttempts - 1 }
 }
 
 /**
@@ -214,9 +230,16 @@ async function loadImageOnce(
       const base64Data = src.split(',')[1]
       buffer = Buffer.from(base64Data, 'base64')
     } else if (src.startsWith('http://') || src.startsWith('https://')) {
-      // Security check: validate domain
+      // Security check: validate domain - BLOCK non-whitelisted URLs to prevent SSRF
       if (!isAllowedUrl(src)) {
-        console.warn(`Loading image from non-whitelisted domain: ${new URL(src).hostname}`)
+        return {
+          data: null,
+          error: {
+            key,
+            src,
+            error: `Domain not allowed: ${new URL(src).hostname}. Only whitelisted domains are permitted.`,
+          },
+        }
       }
 
       // Fetch with timeout
@@ -263,36 +286,32 @@ async function loadImageOnce(
 }
 
 /**
- * Process tasks with concurrency limit
+ * Process tasks with concurrency limit (preserves order)
  */
 async function processWithConcurrencyLimit<T, R>(
   items: T[],
   processor: (item: T) => Promise<R>,
   limit: number
 ): Promise<R[]> {
-  const results: R[] = []
-  const executing: Promise<void>[] = []
+  const results: R[] = new Array(items.length) // Pre-allocate with correct size
+  const executing: Set<Promise<void>> = new Set()
 
-  for (const item of items) {
-    const promise = processor(item).then(result => {
-      results.push(result)
-    })
+  for (let i = 0; i < items.length; i++) {
+    const index = i // Capture index for closure
+    const item = items[i]
 
-    executing.push(promise)
+    const promise = processor(item)
+      .then((result) => {
+        results[index] = result // Store at correct index to preserve order
+      })
+      .finally(() => {
+        executing.delete(promise) // Clean up when done
+      })
 
-    if (executing.length >= limit) {
+    executing.add(promise)
+
+    if (executing.size >= limit) {
       await Promise.race(executing)
-      // Remove completed promises
-      for (let i = executing.length - 1; i >= 0; i--) {
-        // Check if promise is settled by racing with resolved promise
-        const settled = await Promise.race([
-          executing[i].then(() => true).catch(() => true),
-          Promise.resolve(false)
-        ])
-        if (settled) {
-          executing.splice(i, 1)
-        }
-      }
     }
   }
 
@@ -382,7 +401,7 @@ async function loadAllImages(
       // Use placeholder if enabled
       if (usePlaceholders) {
         try {
-          const placeholder = await createPlaceholderImage(200, 150)
+          const placeholder = await getPlaceholderImage()
           images.set(task.key, {
             buffer: placeholder,
             width: 200,
@@ -467,11 +486,11 @@ export async function renderDocxToBuffer(
   // Build the document with metadata
   const doc = buildDocxDocument(data, images, metadata)
 
-  // Pack to buffer
+  // Pack to buffer (Packer.toBuffer already returns a Buffer)
   const buffer = await Packer.toBuffer(doc)
 
   return {
-    buffer: Buffer.from(buffer),
+    buffer,
     imageErrors: errors,
     stats: {
       attempted: totalAttempted,

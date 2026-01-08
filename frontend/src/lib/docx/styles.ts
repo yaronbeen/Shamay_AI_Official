@@ -166,12 +166,12 @@ export const TABLE_HEADER_CELL: Partial<ITableCellOptions> = {
 
 // Format number with thousands separator
 export function formatNumber(num: number | undefined): string {
-  if (num === undefined || num === null) return '—'
+  if (num === undefined || num === null || !Number.isFinite(num)) return '—'
   return num.toLocaleString('he-IL')
 }
 
 // Format currency
 export function formatCurrency(num: number | undefined): string {
-  if (num === undefined || num === null) return '—'
+  if (num === undefined || num === null || !Number.isFinite(num)) return '—'
   return `${formatNumber(num)} ש"ח`
 }
