@@ -30,12 +30,15 @@ export function CollapsibleDrawer({
   }
 
   return (
-    <div className="flex h-full">
+    <div className={cn(
+      'flex h-full transition-all duration-300 ease-in-out',
+      isOpen ? width : 'w-auto'
+    )}>
       {/* Drawer Content */}
       <div
         className={cn(
-          'transition-all duration-300 ease-in-out overflow-hidden h-full',
-          isOpen ? width : 'w-0',
+          'transition-all duration-300 ease-in-out overflow-hidden h-full flex-1',
+          isOpen ? 'w-full' : 'w-0',
           className
         )}
       >
