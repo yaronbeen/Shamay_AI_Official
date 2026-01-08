@@ -6,18 +6,21 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { 
-  Building2, 
-  Search, 
-  Filter, 
-  Edit, 
-  Copy, 
-  Trash2, 
+import {
+  Building2,
+  Search,
+  Filter,
+  Edit,
+  Copy,
+  Trash2,
   Calendar,
   MapPin,
   User,
   FileText,
-  AlertCircle
+  AlertCircle,
+  CheckSquare,
+  Square,
+  X
 } from 'lucide-react'
 import {
   AlertDialog,
@@ -51,6 +54,8 @@ export function ValuationsTable() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [valuationToDelete, setValuationToDelete] = useState<Valuation | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false)
 
   useEffect(() => {
     fetchValuations()
@@ -129,6 +134,41 @@ export function ValuationsTable() {
     setDeleteDialogOpen(true)
   }
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === valuations.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(valuations.map(v => v.id)))
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    setIsDeleting(true)
+    try {
+      const deletePromises = Array.from(selectedIds).map(id =>
+        fetch(`/api/valuations/${id}`, { method: 'DELETE' })
+      )
+      await Promise.all(deletePromises)
+      setValuations(prev => prev.filter(v => !selectedIds.has(v.id)))
+      setSelectedIds(new Set())
+      setBulkDeleteDialogOpen(false)
+    } catch (error) {
+      console.error('Error deleting valuations:', error)
+      alert('שגיאה במחיקת השומות')
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="text-center py-12" dir="rtl">
@@ -186,6 +226,39 @@ export function ValuationsTable() {
         </CardContent>
       </Card>
 
+      {/* Bulk Actions Toolbar */}
+      {selectedIds.size > 0 && (
+        <Card className="bg-blue-50 border-blue-200">
+          <CardContent className="py-3 px-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-blue-800">
+                  {selectedIds.size} שומות נבחרו
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setSelectedIds(new Set())}
+                  className="text-blue-600 hover:text-blue-800 gap-1"
+                >
+                  <X className="h-4 w-4" />
+                  בטל בחירה
+                </Button>
+              </div>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => setBulkDeleteDialogOpen(true)}
+                className="gap-1"
+              >
+                <Trash2 className="h-4 w-4" />
+                מחק נבחרים ({selectedIds.size})
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Valuations Table */}
       <Card>
         <CardHeader>
@@ -202,6 +275,15 @@ export function ValuationsTable() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-gray-50">
+                  <TableHead className="w-12">
+                    <button onClick={toggleSelectAll} className="p-1 hover:bg-gray-200 rounded">
+                      {selectedIds.size === valuations.length && valuations.length > 0 ? (
+                        <CheckSquare className="h-5 w-5 text-blue-600" />
+                      ) : (
+                        <Square className="h-5 w-5 text-gray-400" />
+                      )}
+                    </button>
+                  </TableHead>
                   <TableHead className="font-semibold">כתובת</TableHead>
                   <TableHead className="font-semibold">סטטוס</TableHead>
                   <TableHead className="font-semibold">עודכן לאחרונה</TableHead>
@@ -210,7 +292,16 @@ export function ValuationsTable() {
               </TableHeader>
               <TableBody>
                 {valuations.map((valuation) => (
-                  <TableRow key={valuation.id} className="hover:bg-gray-50 transition-colors">
+                  <TableRow key={valuation.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(valuation.id) ? 'bg-blue-50' : ''}`}>
+                    <TableCell>
+                      <button onClick={() => toggleSelect(valuation.id)} className="p-1 hover:bg-gray-200 rounded">
+                        {selectedIds.has(valuation.id) ? (
+                          <CheckSquare className="h-5 w-5 text-blue-600" />
+                        ) : (
+                          <Square className="h-5 w-5 text-gray-400" />
+                        )}
+                      </button>
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <MapPin className="h-4 w-4 text-gray-400 flex-shrink-0" />
@@ -350,6 +441,35 @@ export function ValuationsTable() {
               className="bg-red-600 hover:bg-red-700"
             >
               {isDeleting ? 'מוחק...' : 'מחק'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-red-600" />
+              מחיקת {selectedIds.size} שומות
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              האם אתה בטוח שברצונך למחוק את כל השומות שנבחרו?
+              <br /><br />
+              <span className="font-semibold text-red-600">
+                פעולה זו תמחק {selectedIds.size} שומות ולא ניתנת לביטול.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>ביטול</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              disabled={isDeleting}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {isDeleting ? 'מוחק...' : `מחק ${selectedIds.size} שומות`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

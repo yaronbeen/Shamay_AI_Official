@@ -13,6 +13,21 @@ interface CreateValuationModalProps {
 
 const LAST_ADDRESS_KEY = 'shamay_last_address'
 
+function parseAddress(address: string): { street: string; buildingNumber: string; city: string } {
+  const parts = { street: '', buildingNumber: '', city: '' }
+  if (!address) return parts
+  const buildingMatch = address.match(/(\d+)/)
+  if (buildingMatch) {
+    parts.buildingNumber = buildingMatch[1]
+    parts.street = address.substring(0, buildingMatch.index).trim().replace(/^רחוב\s*/i, '')
+  } else {
+    parts.street = address.split(',')[0].trim().replace(/^רחוב\s*/i, '')
+  }
+  const cityMatch = address.match(/,\s*([^,]+)$/)
+  if (cityMatch) parts.city = cityMatch[1].trim()
+  return parts
+}
+
 export function CreateValuationModal({ open, onOpenChange }: CreateValuationModalProps) {
   const [formData, setFormData] = useState({
     title: '',
@@ -43,11 +58,20 @@ export function CreateValuationModal({ open, onOpenChange }: CreateValuationModa
     setIsLoading(true)
     
     try {
-      // First create a new session for the wizard
+      // Parse address and create session with pre-populated data
+      const addressParts = parseAddress(formData.addressFull)
       const sessionResponse = await fetch('/api/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
+        body: JSON.stringify({
+          data: {
+            street: addressParts.street,
+            buildingNumber: addressParts.buildingNumber,
+            city: addressParts.city,
+            addressFull: formData.addressFull,
+            valuationName: formData.title
+          }
+        })
       })
       
       if (!sessionResponse.ok) {
