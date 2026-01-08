@@ -132,13 +132,14 @@ const COLUMN_GROUPS: ColumnGroup[] = [
     key: 'basic',
     label: 'בסיסי',
     icon: '🏠',
-    columns: ['sale_day', 'address', 'block_of_land', 'rooms', 'floor', 'surface', 'year_of_constru', 'sale_value_nis', 'price_per_sqm']
+    // Extended basic columns to show more useful data by default
+    columns: ['sale_day', 'address', 'block_of_land', 'rooms', 'floor', 'surface', 'year_of_constru', 'sale_value_nis', 'price_per_sqm', 'total_floors', 'parking_spaces', 'entrance']
   },
   {
     key: 'address',
     label: 'כתובת',
     icon: '📍',
-    columns: ['entrance', 'apartment_number', 'sub_chelka']
+    columns: ['apartment_number', 'sub_chelka']
   },
   {
     key: 'areas',
@@ -150,7 +151,7 @@ const COLUMN_GROUPS: ColumnGroup[] = [
     key: 'building',
     label: 'בניין',
     icon: '🏗️',
-    columns: ['total_floors', 'apartments_in_building', 'elevator', 'parking_spaces']
+    columns: ['apartments_in_building', 'elevator']
   },
   {
     key: 'amenities',

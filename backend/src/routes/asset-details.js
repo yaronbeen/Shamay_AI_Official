@@ -246,6 +246,7 @@ router.get('/search', async (req, res) => {
     let paramIndex = 1;
 
     // ⚡ OPTIMIZATION 1: Filter by block_number(s) FIRST (most selective)
+    // block_of_land format may vary, try to match block number
     // FIX: Combine block_number and block_numbers if both are provided
     const allBlockNumbers = [];
 
