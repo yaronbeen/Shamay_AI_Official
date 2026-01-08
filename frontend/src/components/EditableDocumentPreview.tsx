@@ -788,14 +788,12 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
       return
     }
 
-    // Check if iframe document is ready before applying bindings
+    applyEditableBindings()
+
     const doc = getFrameDocument()
-    if (!doc || !doc.body || !doc.body.innerHTML) {
-      // Iframe not ready yet - handleIframeLoad will apply bindings when ready
+    if (!doc) {
       return
     }
-
-    applyEditableBindings()
 
     const selectionHandler = () => handleSelectionChange()
     const clickHandler = (event: Event) => handleDocumentClick(event)
@@ -1354,22 +1352,14 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
     updateIframeHeight(previewFrameRef.current)
     applyOverridesToDocument()
 
-    // Apply edit bindings if in edit mode - with retry logic for reliability
+    // Apply edit bindings if in edit mode - ensures bindings are ready after iframe reload
     if (isEditMode) {
-      const attemptBindings = (retries = 3) => {
-        const doc = getFrameDocument()
-        if (!doc || !doc.body || !doc.body.innerHTML) {
-          if (retries > 0) {
-            window.setTimeout(() => attemptBindings(retries - 1), 200)
-          }
-          return
-        }
+      // Use setTimeout to ensure DOM is fully settled
+      window.setTimeout(() => {
         applyEditableBindings()
-      }
-      // Initial delay to ensure DOM is fully settled
-      window.setTimeout(() => attemptBindings(), 200)
+      }, 100)
     }
-  }, [applyOverridesToDocument, applyEditableBindings, isEditMode, updateIframeHeight, getFrameDocument])
+  }, [applyOverridesToDocument, applyEditableBindings, isEditMode, updateIframeHeight])
 
   return (
     <div className="bg-white shadow-lg rounded-lg overflow-hidden max-w-[1400px] mx-auto">

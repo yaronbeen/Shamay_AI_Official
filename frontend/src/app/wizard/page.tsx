@@ -792,9 +792,8 @@ export default function WizardPage() {
           </div>
 
           {/* Document Preview - Takes 5/12 of the width (42%) - Hidden on Step 3 which has its own layout */}
-          {/* Sticky positioning ensures it stays visible when scrolling the main content */}
           {currentStep !== 3 && (
-            <div className="xl:col-span-5 xl:sticky xl:top-24 xl:self-start xl:max-h-[calc(100vh-8rem)] xl:overflow-auto">
+            <div className="xl:col-span-5">
               <DocumentPreview data={data} onDataChange={updateData} />
             </div>
           )}
