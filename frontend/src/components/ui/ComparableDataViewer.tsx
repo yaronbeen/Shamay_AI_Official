@@ -849,8 +849,8 @@ export default function ComparableDataViewer({
               }))}
               className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
             >
-              <option value="block">לפי נושא (גוש)</option>
-              <option value="blockRange">לפי טווח נושאים</option>
+              <option value="block">לפי גוש</option>
+              <option value="blockRange">לפי טווח גושים</option>
               <option value="street">לפי רחוב</option>
               <option value="city">לפי יישוב</option>
             </select>
@@ -861,7 +861,7 @@ export default function ComparableDataViewer({
             {filters.searchType === 'block' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  <span className="text-red-600">*</span> נושא (גוש)
+                  <span className="text-red-600">*</span> גוש
                 </label>
                 <div className="flex gap-2">
                   <input
@@ -897,7 +897,7 @@ export default function ComparableDataViewer({
             {filters.searchType === 'blockRange' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  <span className="text-red-600">*</span> טווח נושאים
+                  <span className="text-red-600">*</span> טווח גושים
                 </label>
                 <div className="flex gap-2 items-center">
                   <input
@@ -954,7 +954,7 @@ export default function ComparableDataViewer({
         {/* Block Chips (for multiple blocks) */}
         {filters.blockNumbers.length > 0 && (
           <div className="flex flex-wrap gap-2 p-2 bg-white rounded-md border border-gray-200">
-            <span className="text-sm text-gray-600">נושאים:</span>
+            <span className="text-sm text-gray-600">גושים:</span>
             {filters.blockNumbers.map((block, index) => (
               <span
                 key={index}

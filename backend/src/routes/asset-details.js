@@ -145,34 +145,37 @@ router.get('/search', async (req, res) => {
     let paramIndex = 1;
 
     // ⚡ OPTIMIZATION 1: Filter by block_number(s) FIRST (most selective)
-    // block_of_land format may vary, try to match block number
+    // FIX: Combine block_number and block_numbers if both are provided
+    const allBlockNumbers = [];
+
+    // Add single block_number if provided
     if (block_number) {
-      // Single block number search
-      const paddedBlock = String(block_number).padStart(6, '0');
-      query += ` AND (
-        CAST(p.block_of_land AS TEXT) LIKE $${paramIndex}
-        OR CAST(p.block_of_land AS TEXT) LIKE $${paramIndex + 1}
-        OR CAST(p.block_of_land AS TEXT) = $${paramIndex + 2}
-      )`;
-      params.push(`${paddedBlock}-%`, `%${block_number}%`, block_number);
-      paramIndex += 3;
-    } else if (block_numbers) {
-      // Multiple block numbers (comma-separated)
+      allBlockNumbers.push(String(block_number).trim());
+    }
+
+    // Add multiple block_numbers if provided (comma-separated)
+    if (block_numbers) {
       const blocks = block_numbers.split(',').map(b => b.trim()).filter(b => b);
-      if (blocks.length > 0) {
-        const blockConditions = blocks.map(block => {
-          const paddedBlock = String(block).padStart(6, '0');
-          params.push(`${paddedBlock}-%`, `%${block}%`, block);
-          const conditions = `(
-            CAST(p.block_of_land AS TEXT) LIKE $${paramIndex}
-            OR CAST(p.block_of_land AS TEXT) LIKE $${paramIndex + 1}
-            OR CAST(p.block_of_land AS TEXT) = $${paramIndex + 2}
-          )`;
-          paramIndex += 3;
-          return conditions;
-        });
-        query += ` AND (${blockConditions.join(' OR ')})`;
-      }
+      allBlockNumbers.push(...blocks);
+    }
+
+    // Remove duplicates
+    const uniqueBlocks = [...new Set(allBlockNumbers)];
+
+    if (uniqueBlocks.length > 0) {
+      // Build conditions for all block numbers
+      const blockConditions = uniqueBlocks.map(block => {
+        const paddedBlock = String(block).padStart(6, '0');
+        params.push(`${paddedBlock}-%`, `%${block}%`, block);
+        const conditions = `(
+          CAST(p.block_of_land AS TEXT) LIKE $${paramIndex}
+          OR CAST(p.block_of_land AS TEXT) LIKE $${paramIndex + 1}
+          OR CAST(p.block_of_land AS TEXT) = $${paramIndex + 2}
+        )`;
+        paramIndex += 3;
+        return conditions;
+      });
+      query += ` AND (${blockConditions.join(' OR ')})`;
     } else if (block_range_from && block_range_to) {
       // Block number range search
       const fromBlock = parseInt(block_range_from, 10);
