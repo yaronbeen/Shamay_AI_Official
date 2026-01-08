@@ -60,8 +60,17 @@ export async function POST(
     // Convert ValuationData to ReportData format
     const reportData = convertValuationDataToReportData(valuationData, companySettings)
 
-    // Render DOCX
-    const docxBuffer = await renderDocxToBuffer(reportData)
+    // Render DOCX with error tracking
+    const { buffer: docxBuffer, imageErrors, stats } = await renderDocxToBuffer(reportData)
+
+    // Log image loading stats
+    console.log(`📄 DOCX Export: Loaded ${stats.loaded}/${stats.attempted} images` +
+      (stats.placeholders > 0 ? ` (${stats.placeholders} placeholders)` : ''))
+    if (imageErrors.length > 0) {
+      console.warn(`⚠️ Failed to load ${imageErrors.length} images:`,
+        imageErrors.map(e => `${e.key}: ${e.error}`).join(', ')
+      )
+    }
 
     // Convert Buffer to Uint8Array for NextResponse compatibility
     const docxUint8Array = new Uint8Array(docxBuffer)
@@ -73,6 +82,9 @@ export async function POST(
         'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         'Content-Disposition': `attachment; filename="shamay-valuation-${sessionId}.docx"`,
         'Content-Length': docxBuffer.length.toString(),
+        'X-Images-Loaded': `${stats.loaded}/${stats.attempted}`,
+        'X-Images-Failed': imageErrors.length.toString(),
+        'X-Images-Placeholders': stats.placeholders.toString(),
       },
     })
   } catch (error) {

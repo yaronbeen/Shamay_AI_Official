@@ -1,11 +1,211 @@
 import { Packer } from 'docx'
 import { ReportData } from '../pdf/types'
-import { buildDocxDocument, ImageMap, ImageData } from './template'
+import { buildDocxDocument, ImageMap, ImageData, DocumentMetadata } from './template'
+
+// Configuration constants
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024 // 5MB max per image
+const FETCH_TIMEOUT = 10000 // 10 seconds timeout
+const MAX_IMAGE_DIMENSION = 1600 // Max width/height after compression
+const JPEG_QUALITY = 85 // Compression quality
+const MAX_RETRIES = 3 // Number of retry attempts for failed image loads
+const RETRY_DELAY_BASE = 1000 // Base delay for exponential backoff (ms)
+const MAX_CONCURRENT_LOADS = 5 // Maximum parallel image fetches
+
+// Allowed domains for external image fetching (security whitelist)
+const ALLOWED_DOMAINS = [
+  'vercel-blob.com',
+  'blob.vercel-storage.com',
+  'public.blob.vercel-storage.com',
+  'localhost',
+  '127.0.0.1',
+]
+
+// Error tracking for failed image loads
+export interface ImageLoadError {
+  key: string
+  src: string
+  error: string
+  retryCount?: number
+}
+
+export interface ImageLoadResult {
+  images: ImageMap
+  errors: ImageLoadError[]
+  totalAttempted: number
+  totalLoaded: number
+  placeholdersUsed: number
+}
+
+// Progress callback type
+export type ProgressCallback = (loaded: number, total: number, currentKey: string) => void
+
+// Placeholder image - a simple gray rectangle with "Image not available" text
+// This is a minimal 100x75 gray PNG
+const PLACEHOLDER_IMAGE_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAGQAAABLCAYAAACGGCK3AAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAALEwAACxMBAJqcGAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAF5SURBVHic7doxDoJAEEDR/9z/0liZeALXxsJCK2MlCQmVrYUJlYn3MOZP8dKB3dnZnQkAAAAAAAAAAPgXx9YHsKaqqmOSY5JTkkPr81hRrSTnJOck59baZfqBfyDkluSW5Nb6RFa07yCPJI8kt9YnspLZkFvrg1jJbMi19YGsZDbk0vpAVjIb8mh9ICuZDXm2PpCVnFofwNpmQy6tD2QlsyG31geyktmQa+sDWclsyKP1gaxkOmTyL3/rc1nDdMjr33/ux9UPsoa8h3ylOd/xqGb4+yeSNeSV5n7Hwxr/n0fV52+a9x2PavyzHlWfv2k+cTysMe8/j2rMv+o+cTysuZ9H1d9vmk8cD2vu51H195vm/edhzf3+qPr6TfOJ42Et/fyoxv9N84njYc35/FFNfD+q8R9XH78f1cT3oxr/XHO/46G88xEO9OOFFL9LAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgC/0AQ7TJFHQwY6CAAAAAElFTkSuQmCC'
 
 /**
- * Load an image from URL or base64 and return as Buffer with dimensions
+ * Create a placeholder image buffer with specified dimensions
  */
-async function loadImage(src: string): Promise<ImageData | null> {
+async function createPlaceholderImage(width: number = 200, height: number = 150): Promise<Buffer> {
+  try {
+    // Create a gray placeholder with text
+    const placeholder = await sharp({
+      create: {
+        width,
+        height,
+        channels: 4,
+        background: { r: 200, g: 200, b: 200, alpha: 1 }
+      }
+    })
+    .jpeg({ quality: 80 })
+    .toBuffer()
+
+    return placeholder
+  } catch {
+    // Fallback to static placeholder
+    return Buffer.from(PLACEHOLDER_IMAGE_BASE64, 'base64')
+  }
+}
+
+/**
+ * Check if a URL is from an allowed domain
+ */
+function isAllowedUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return ALLOWED_DOMAINS.some(
+      (domain) =>
+        parsed.hostname === domain || parsed.hostname.endsWith(`.${domain}`)
+    )
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Compress and resize image if needed
+ */
+async function compressImage(buffer: Buffer): Promise<Buffer> {
+  try {
+    const metadata = await sharp(buffer).metadata()
+
+    // Skip compression for small images or if already optimized
+    if (
+      buffer.length < 100 * 1024 && // Less than 100KB
+      (metadata.width || 0) <= MAX_IMAGE_DIMENSION &&
+      (metadata.height || 0) <= MAX_IMAGE_DIMENSION
+    ) {
+      return buffer
+    }
+
+    // Resize and compress
+    const compressed = await sharp(buffer)
+      .resize(MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION, {
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
+      .jpeg({ quality: JPEG_QUALITY, mozjpeg: true })
+      .toBuffer()
+
+    // Only use compressed if it's actually smaller
+    return compressed.length < buffer.length ? compressed : buffer
+  } catch (error) {
+    // If compression fails, return original buffer
+    console.warn('Image compression failed, using original:', error)
+    return buffer
+  }
+}
+
+/**
+ * Get actual image dimensions from buffer
+ */
+function getImageDimensions(buffer: Buffer): { width: number; height: number } {
+  try {
+    const dimensions = sizeOf(buffer)
+    return {
+      width: dimensions.width || 400,
+      height: dimensions.height || 300,
+    }
+  } catch (error) {
+    console.warn('Failed to get image dimensions, using defaults:', error)
+    return { width: 400, height: 300 }
+  }
+}
+
+/**
+ * Fetch with timeout support
+ */
+async function fetchWithTimeout(
+  url: string,
+  timeout: number
+): Promise<Response> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeout)
+
+  try {
+    const response = await fetch(url, { signal: controller.signal })
+    return response
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+/**
+ * Sleep for specified milliseconds
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+/**
+ * Load an image from URL or base64 with retry logic
+ */
+async function loadImageWithRetry(
+  src: string,
+  key: string,
+  retries: number = MAX_RETRIES
+): Promise<{ data: ImageData | null; error: ImageLoadError | null; retriesUsed: number }> {
+  let lastError: ImageLoadError | null = null
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    if (attempt > 0) {
+      // Exponential backoff
+      const delay = RETRY_DELAY_BASE * Math.pow(2, attempt - 1)
+      console.log(`Retrying image ${key} (attempt ${attempt + 1}/${retries + 1}) after ${delay}ms`)
+      await sleep(delay)
+    }
+
+    const result = await loadImageOnce(src, key)
+
+    if (result.data) {
+      return { data: result.data, error: null, retriesUsed: attempt }
+    }
+
+    lastError = result.error
+
+    // Don't retry certain errors
+    if (lastError?.error.includes('Invalid base64') ||
+        lastError?.error.includes('Unknown image source') ||
+        lastError?.error.includes('Relative URLs')) {
+      break
+    }
+  }
+
+  if (lastError) {
+    lastError.retryCount = retries
+  }
+
+  return { data: null, error: lastError, retriesUsed: retries }
+}
+
+/**
+ * Load an image from URL or base64 (single attempt)
+ */
+async function loadImageOnce(
+  src: string,
+  key: string
+): Promise<{ data: ImageData | null; error: ImageLoadError | null }> {
   try {
     let buffer: Buffer
 
@@ -14,8 +214,25 @@ async function loadImage(src: string): Promise<ImageData | null> {
       const base64Data = src.split(',')[1]
       buffer = Buffer.from(base64Data, 'base64')
     } else if (src.startsWith('http://') || src.startsWith('https://')) {
-      // External URL
-      const response = await fetch(src)
+      // Security check: validate domain
+      if (!isAllowedUrl(src)) {
+        console.warn(`Loading image from non-whitelisted domain: ${new URL(src).hostname}`)
+      }
+
+      // Fetch with timeout
+      let response: Response
+      try {
+        response = await fetchWithTimeout(src, FETCH_TIMEOUT)
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          return {
+            data: null,
+            error: { key, src, error: `Timeout after ${FETCH_TIMEOUT / 1000}s` },
+          }
+        }
+        throw error
+      }
+
       if (!response.ok) {
         console.warn(`Failed to fetch image from ${src}: ${response.status}`)
         return null
@@ -23,11 +240,10 @@ async function loadImage(src: string): Promise<ImageData | null> {
       const arrayBuffer = await response.arrayBuffer()
       buffer = Buffer.from(arrayBuffer)
     } else if (src.startsWith('/')) {
-      // Relative URL - try to fetch from origin
-      // In server context, we can't easily resolve relative URLs
-      // Return null and let the caller handle it
-      console.warn(`Relative URL not supported in server context: ${src}`)
-      return null
+      return {
+        data: null,
+        error: { key, src, error: 'Relative URLs not supported in server context' },
+      }
     } else {
       console.warn(`Unknown image source format: ${src.substring(0, 50)}...`)
       return null
@@ -47,151 +263,271 @@ async function loadImage(src: string): Promise<ImageData | null> {
 }
 
 /**
- * Load all images from ReportData and return as a map
+ * Process tasks with concurrency limit
  */
-async function loadAllImages(data: ReportData): Promise<ImageMap> {
+async function processWithConcurrencyLimit<T, R>(
+  items: T[],
+  processor: (item: T) => Promise<R>,
+  limit: number
+): Promise<R[]> {
+  const results: R[] = []
+  const executing: Promise<void>[] = []
+
+  for (const item of items) {
+    const promise = processor(item).then(result => {
+      results.push(result)
+    })
+
+    executing.push(promise)
+
+    if (executing.length >= limit) {
+      await Promise.race(executing)
+      // Remove completed promises
+      for (let i = executing.length - 1; i >= 0; i--) {
+        // Check if promise is settled by racing with resolved promise
+        const settled = await Promise.race([
+          executing[i].then(() => true).catch(() => true),
+          Promise.resolve(false)
+        ])
+        if (settled) {
+          executing.splice(i, 1)
+        }
+      }
+    }
+  }
+
+  await Promise.all(executing)
+  return results
+}
+
+/**
+ * Load all images from ReportData with retry, concurrency limit, and placeholders
+ */
+async function loadAllImages(
+  data: ReportData,
+  usePlaceholders: boolean = true,
+  onProgress?: ProgressCallback
+): Promise<ImageLoadResult> {
   const images: ImageMap = new Map()
-  const loadPromises: Promise<void>[] = []
+  const errors: ImageLoadError[] = []
+  let placeholdersUsed = 0
+
+  // Collect all image load tasks
+  const imageLoadTasks: Array<{ key: string; src: string }> = []
+
+  const addTask = (key: string, src: string | undefined) => {
+    if (src) {
+      imageLoadTasks.push({ key, src })
+    }
+  }
 
   // Cover image
-  if (data.cover.coverImage?.src) {
-    loadPromises.push(
-      loadImage(data.cover.coverImage.src).then((img) => {
-        if (img) images.set('coverImage', img)
-      })
-    )
-  }
+  addTask('coverImage', data.cover.coverImage?.src)
 
   // Company logo
-  if (data.cover.companyLogo) {
-    loadPromises.push(
-      loadImage(data.cover.companyLogo).then((img) => {
-        if (img) images.set('companyLogo', img)
-      })
-    )
-  }
+  addTask('companyLogo', data.cover.companyLogo)
 
   // Footer logo
-  if (data.cover.footerLogo) {
-    loadPromises.push(
-      loadImage(data.cover.footerLogo).then((img) => {
-        if (img) images.set('footerLogo', img)
-      })
-    )
-  }
+  addTask('footerLogo', data.cover.footerLogo)
 
   // Environment map
-  if (data.section1.environmentMap?.src) {
-    loadPromises.push(
-      loadImage(data.section1.environmentMap.src).then((img) => {
-        if (img) images.set('environmentMap', img)
-      })
-    )
-  }
+  addTask('environmentMap', data.section1.environmentMap?.src)
 
   // Parcel sketch
-  if (data.section1.parcel.parcelSketch?.src) {
-    loadPromises.push(
-      loadImage(data.section1.parcel.parcelSketch.src).then((img) => {
-        if (img) images.set('parcelSketch', img)
-      })
-    )
-  }
+  addTask('parcelSketch', data.section1.parcel.parcelSketch?.src)
 
   // Parcel sketch without tazea
-  if (data.section1.parcel.parcelSketchNoTazea?.src) {
-    loadPromises.push(
-      loadImage(data.section1.parcel.parcelSketchNoTazea.src).then((img) => {
-        if (img) images.set('parcelSketchNoTazea', img)
-      })
-    )
-  }
+  addTask('parcelSketchNoTazea', data.section1.parcel.parcelSketchNoTazea?.src)
 
   // Property photos
   if (data.section1.property.photos) {
     data.section1.property.photos.forEach((photo, idx) => {
-      if (photo.src) {
-        loadPromises.push(
-          loadImage(photo.src).then((img) => {
-            if (img) images.set(`propertyPhoto${idx}`, img)
-          })
-        )
-      }
+      addTask(`propertyPhoto${idx}`, photo.src)
     })
   }
 
   // Condo sketches
   if (data.section2.condoOrder?.sketches) {
     data.section2.condoOrder.sketches.forEach((sketch, idx) => {
-      if (sketch.src) {
-        loadPromises.push(
-          loadImage(sketch.src).then((img) => {
-            if (img) images.set(`condoSketch${idx}`, img)
-          })
-        )
-      }
+      addTask(`condoSketch${idx}`, sketch.src)
     })
   }
 
   // Plan image
-  if (data.section3.planImage?.src) {
-    loadPromises.push(
-      loadImage(data.section3.planImage.src).then((img) => {
-        if (img) images.set('planImage', img)
-      })
-    )
-  }
+  addTask('planImage', data.section3.planImage?.src)
 
   // Apartment plan
-  if (data.section3.apartmentPlan?.src) {
-    loadPromises.push(
-      loadImage(data.section3.apartmentPlan.src).then((img) => {
-        if (img) images.set('apartmentPlan', img)
-      })
-    )
-  }
+  addTask('apartmentPlan', data.section3.apartmentPlan?.src)
 
   // Signature
-  if (data.cover.signatureImage) {
-    loadPromises.push(
-      loadImage(data.cover.signatureImage).then((img) => {
-        if (img) images.set('signature', img)
-      })
-    )
+  addTask('signature', data.cover.signatureImage)
+
+  const totalTasks = imageLoadTasks.length
+  let completedTasks = 0
+
+  // Process with concurrency limit
+  const processor = async (task: { key: string; src: string }) => {
+    const result = await loadImageWithRetry(task.src, task.key)
+
+    completedTasks++
+    if (onProgress) {
+      onProgress(completedTasks, totalTasks, task.key)
+    }
+
+    if (result.data) {
+      images.set(task.key, result.data)
+    } else if (result.error) {
+      errors.push(result.error)
+
+      // Use placeholder if enabled
+      if (usePlaceholders) {
+        try {
+          const placeholder = await createPlaceholderImage(200, 150)
+          images.set(task.key, {
+            buffer: placeholder,
+            width: 200,
+            height: 150,
+            isPlaceholder: true,
+          })
+          placeholdersUsed++
+        } catch (e) {
+          console.error(`Failed to create placeholder for ${task.key}:`, e)
+        }
+      }
+    }
+
+    return { key: task.key, result }
   }
 
-  await Promise.all(loadPromises)
-  return images
+  await processWithConcurrencyLimit(imageLoadTasks, processor, MAX_CONCURRENT_LOADS)
+
+  return {
+    images,
+    errors,
+    totalAttempted: totalTasks,
+    totalLoaded: images.size - placeholdersUsed,
+    placeholdersUsed,
+  }
 }
 
 /**
- * Render ReportData to DOCX buffer
+ * Create document metadata from report data
  */
-export async function renderDocxToBuffer(data: ReportData): Promise<Buffer> {
-  // Load all images
-  const images = await loadAllImages(data)
+function createDocumentMetadata(data: ReportData): DocumentMetadata {
+  const now = new Date()
+  const propertyAddress = data.address?.fullAddressLine ||
+    `${data.address?.street || ''} ${data.address?.buildingNumber || ''}, ${data.address?.city || ''}`.trim()
 
-  // Build the document
-  const doc = buildDocxDocument(data, images)
+  return {
+    title: `שומת מקרקעין - ${propertyAddress || 'נכס'}`,
+    subject: 'שומת מקרקעין',
+    creator: data.meta?.appraiserName || 'שמאי מקרקעין',
+    company: data.cover?.companyName || '',
+    description: `שומת מקרקעין עבור ${data.meta?.clientName || 'לקוח'}`,
+    lastModifiedBy: data.meta?.appraiserName || 'שמאי מקרקעין',
+    created: now,
+    modified: now,
+    keywords: ['שומה', 'מקרקעין', 'הערכת שווי', propertyAddress || ''].filter(Boolean) as string[],
+  }
+}
+
+/**
+ * Render ReportData to DOCX buffer with all improvements
+ */
+export async function renderDocxToBuffer(
+  data: ReportData,
+  options: {
+    usePlaceholders?: boolean
+    onProgress?: ProgressCallback
+  } = {}
+): Promise<{
+  buffer: Buffer
+  imageErrors: ImageLoadError[]
+  stats: { attempted: number; loaded: number; placeholders: number }
+}> {
+  const { usePlaceholders = true, onProgress } = options
+
+  // Load all images with retry and concurrency limit
+  const { images, errors, totalAttempted, totalLoaded, placeholdersUsed } =
+    await loadAllImages(data, usePlaceholders, onProgress)
+
+  // Log summary
+  console.log(`DOCX Export: Loaded ${totalLoaded}/${totalAttempted} images` +
+    (placeholdersUsed > 0 ? ` (${placeholdersUsed} placeholders)` : ''))
+  if (errors.length > 0) {
+    console.warn(
+      `Failed images:`,
+      errors.map((e) => `${e.key}: ${e.error}`).join(', ')
+    )
+  }
+
+  // Create document metadata
+  const metadata = createDocumentMetadata(data)
+
+  // Build the document with metadata
+  const doc = buildDocxDocument(data, images, metadata)
 
   // Pack to buffer
   const buffer = await Packer.toBuffer(doc)
 
-  return Buffer.from(buffer)
+  return {
+    buffer: Buffer.from(buffer),
+    imageErrors: errors,
+    stats: {
+      attempted: totalAttempted,
+      loaded: totalLoaded,
+      placeholders: placeholdersUsed,
+    },
+  }
 }
 
 /**
  * Render ReportData to DOCX Blob (for browser use)
  */
-export async function renderDocxToBlob(data: ReportData): Promise<Blob> {
-  // Load all images
-  const images = await loadAllImages(data)
+export async function renderDocxToBlob(
+  data: ReportData,
+  options: {
+    usePlaceholders?: boolean
+    onProgress?: ProgressCallback
+  } = {}
+): Promise<{
+  blob: Blob
+  imageErrors: ImageLoadError[]
+  stats: { attempted: number; loaded: number; placeholders: number }
+}> {
+  const { usePlaceholders = true, onProgress } = options
 
-  // Build the document
-  const doc = buildDocxDocument(data, images)
+  // Load all images with retry and concurrency limit
+  const { images, errors, totalAttempted, totalLoaded, placeholdersUsed } =
+    await loadAllImages(data, usePlaceholders, onProgress)
+
+  // Create document metadata
+  const metadata = createDocumentMetadata(data)
+
+  // Build the document with metadata
+  const doc = buildDocxDocument(data, images, metadata)
 
   // Pack to blob
   const blob = await Packer.toBlob(doc)
 
-  return blob
+  return {
+    blob,
+    imageErrors: errors,
+    stats: {
+      attempted: totalAttempted,
+      loaded: totalLoaded,
+      placeholders: placeholdersUsed,
+    },
+  }
+}
+
+// Legacy exports for backwards compatibility
+export async function renderDocxToBufferSimple(data: ReportData): Promise<Buffer> {
+  const result = await renderDocxToBuffer(data)
+  return result.buffer
+}
+
+export async function renderDocxToBlobSimple(data: ReportData): Promise<Blob> {
+  const result = await renderDocxToBlob(data)
+  return result.blob
 }

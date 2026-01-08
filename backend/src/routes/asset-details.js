@@ -103,13 +103,13 @@ router.get('/search', async (req, res) => {
     // properties table is the source of truth, LEFT JOIN asset_details for address
     // Try to join on block_of_land or id - we'll test which works
     let query = `
-      SELECT 
+      SELECT
         p.id,
         p.sale_day as sale_day,
         COALESCE(
           NULLIF(
             TRIM(
-              COALESCE(ad.street, '') || 
+              COALESCE(ad.street, '') ||
               CASE WHEN ad.street IS NOT NULL AND ad.house_number IS NOT NULL THEN ' ' ELSE '' END ||
               COALESCE(ad.house_number::text, '') ||
               CASE WHEN (ad.street IS NOT NULL OR ad.house_number IS NOT NULL) AND ad.city IS NOT NULL THEN ', ' ELSE '' END ||
@@ -130,12 +130,36 @@ router.get('/search', async (req, res) => {
         p.surface,
         p.year_of_construction as year_of_constru,
         p.sale_value_nis,
-        CASE 
-          WHEN p.surface > 0 AND CAST(p.sale_value_nis AS NUMERIC) > 0 
+        CASE
+          WHEN p.surface > 0 AND CAST(p.sale_value_nis AS NUMERIC) > 0
           THEN ROUND(CAST(p.sale_value_nis AS NUMERIC) / p.surface)
           ELSE NULL
         END as price_per_sqm,
-        p.asset_type
+        p.asset_type,
+        -- NEW FIELDS FROM ASSET_DETAILS (25 additional fields)
+        ad.entrance,
+        ad.apartment_number,
+        ad.arnona_area_sqm,
+        ad.registered_area_sqm,
+        ad.shares,
+        ad.plot,
+        ad.roof,
+        ad.storage,
+        ad.yard,
+        ad.gallery,
+        ad.parking_spaces,
+        ad.elevator,
+        ad.total_floors,
+        ad.apartments_in_building,
+        ad.building_function,
+        ad.unit_function,
+        ad.transaction_type,
+        ad.declared_price_ils,
+        ad.declared_price_usd,
+        ad.estimated_price_usd,
+        ad.price_per_room,
+        ad.rights,
+        ad.zoning_plan
       FROM properties p
       LEFT JOIN asset_details ad ON p.block_of_land = ad.parcel_id
       WHERE 1=1
@@ -575,13 +599,13 @@ router.post('/analyze', async (req, res) => {
     // Fetch selected comparables
     const placeholders = selectedIds.map((_, i) => `$${i + 1}`).join(',');
     const query = `
-      SELECT 
+      SELECT
         p.id,
         p.sale_day as sale_day,
         COALESCE(
           NULLIF(
             TRIM(
-              COALESCE(ad.street, '') || 
+              COALESCE(ad.street, '') ||
               CASE WHEN ad.street IS NOT NULL AND ad.house_number IS NOT NULL THEN ' ' ELSE '' END ||
               COALESCE(ad.house_number::text, '') ||
               CASE WHEN (ad.street IS NOT NULL OR ad.house_number IS NOT NULL) AND ad.city IS NOT NULL THEN ', ' ELSE '' END ||
@@ -602,12 +626,36 @@ router.post('/analyze', async (req, res) => {
         p.surface,
         p.year_of_construction as year_of_constru,
         p.sale_value_nis,
-        CASE 
-          WHEN p.surface > 0 AND CAST(p.sale_value_nis AS NUMERIC) > 0 
+        CASE
+          WHEN p.surface > 0 AND CAST(p.sale_value_nis AS NUMERIC) > 0
           THEN ROUND(CAST(p.sale_value_nis AS NUMERIC) / p.surface)
           ELSE NULL
         END as price_per_sqm,
-        p.asset_type
+        p.asset_type,
+        -- NEW FIELDS FROM ASSET_DETAILS (25 additional fields)
+        ad.entrance,
+        ad.apartment_number,
+        ad.arnona_area_sqm,
+        ad.registered_area_sqm,
+        ad.shares,
+        ad.plot,
+        ad.roof,
+        ad.storage,
+        ad.yard,
+        ad.gallery,
+        ad.parking_spaces,
+        ad.elevator,
+        ad.total_floors,
+        ad.apartments_in_building,
+        ad.building_function,
+        ad.unit_function,
+        ad.transaction_type,
+        ad.declared_price_ils,
+        ad.declared_price_usd,
+        ad.estimated_price_usd,
+        ad.price_per_room,
+        ad.rights,
+        ad.zoning_plan
       FROM properties p
       LEFT JOIN asset_details ad ON p.id = ad.property_id
       WHERE p.id IN (${placeholders})
@@ -809,13 +857,13 @@ router.post('/save-selection', async (req, res) => {
     // Fetch full details of selected comparables
     const placeholders = selectedIds.map((_, i) => `$${i + 1}`).join(',');
     const query = `
-      SELECT 
+      SELECT
         p.id,
         p.sale_day as sale_day,
         COALESCE(
           NULLIF(
             TRIM(
-              COALESCE(ad.street, '') || 
+              COALESCE(ad.street, '') ||
               CASE WHEN ad.street IS NOT NULL AND ad.house_number IS NOT NULL THEN ' ' ELSE '' END ||
               COALESCE(ad.house_number::text, '') ||
               CASE WHEN (ad.street IS NOT NULL OR ad.house_number IS NOT NULL) AND ad.city IS NOT NULL THEN ', ' ELSE '' END ||
@@ -836,12 +884,36 @@ router.post('/save-selection', async (req, res) => {
         p.surface,
         p.year_of_construction as year_of_constru,
         p.sale_value_nis,
-        CASE 
-          WHEN p.surface > 0 AND CAST(p.sale_value_nis AS NUMERIC) > 0 
+        CASE
+          WHEN p.surface > 0 AND CAST(p.sale_value_nis AS NUMERIC) > 0
           THEN ROUND(CAST(p.sale_value_nis AS NUMERIC) / p.surface)
           ELSE NULL
         END as price_per_sqm,
-        p.asset_type
+        p.asset_type,
+        -- NEW FIELDS FROM ASSET_DETAILS (25 additional fields)
+        ad.entrance,
+        ad.apartment_number,
+        ad.arnona_area_sqm,
+        ad.registered_area_sqm,
+        ad.shares,
+        ad.plot,
+        ad.roof,
+        ad.storage,
+        ad.yard,
+        ad.gallery,
+        ad.parking_spaces,
+        ad.elevator,
+        ad.total_floors,
+        ad.apartments_in_building,
+        ad.building_function,
+        ad.unit_function,
+        ad.transaction_type,
+        ad.declared_price_ils,
+        ad.declared_price_usd,
+        ad.estimated_price_usd,
+        ad.price_per_room,
+        ad.rights,
+        ad.zoning_plan
       FROM properties p
       LEFT JOIN asset_details ad ON p.id = ad.property_id
       WHERE p.id IN (${placeholders})

@@ -15,8 +15,35 @@ import {
   convertMillimetersToTwip,
   ISectionOptions,
   UnderlineType,
+  Header,
+  Footer,
+  PageNumber,
+  NumberFormat,
 } from 'docx'
 import { ReportData } from '../pdf/types'
+
+// Document metadata interface
+export interface DocumentMetadata {
+  title: string
+  subject: string
+  creator: string
+  company: string
+  description: string
+  lastModifiedBy: string
+  created: Date
+  modified: Date
+  keywords: string[]
+}
+
+// Image data with optional placeholder flag
+export interface ImageData {
+  buffer: Buffer
+  width: number
+  height: number
+  isPlaceholder?: boolean
+}
+
+export type ImageMap = Map<string, ImageData>
 import {
   COLORS,
   FONTS,
@@ -159,15 +186,6 @@ function tableCell(
     ],
   })
 }
-
-// Images storage for async loading
-export interface ImageData {
-  buffer: Buffer
-  width: number
-  height: number
-}
-
-export type ImageMap = Map<string, ImageData>
 
 // Build Cover Page
 function buildCoverPage(data: ReportData, images: ImageMap): (Paragraph | Table)[] {
@@ -1017,9 +1035,60 @@ function buildCustomTablesSection(data: ReportData): (Paragraph | Table)[] {
   return content
 }
 
+// Create footer with page numbers
+function createPageNumberFooter(companyName?: string): Footer {
+  return new Footer({
+    children: [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        children: [
+          new TextRun({
+            text: companyName ? `${companyName} | ` : '',
+            font: FONTS.HEBREW,
+            size: FONT_SIZES.FOOTNOTE,
+            color: COLORS.MUTED,
+            rightToLeft: true,
+          }),
+          new TextRun({
+            text: 'עמוד ',
+            font: FONTS.HEBREW,
+            size: FONT_SIZES.FOOTNOTE,
+            color: COLORS.MUTED,
+            rightToLeft: true,
+          }),
+          new TextRun({
+            children: [PageNumber.CURRENT],
+            font: FONTS.HEBREW,
+            size: FONT_SIZES.FOOTNOTE,
+            color: COLORS.MUTED,
+          }),
+          new TextRun({
+            text: ' מתוך ',
+            font: FONTS.HEBREW,
+            size: FONT_SIZES.FOOTNOTE,
+            color: COLORS.MUTED,
+            rightToLeft: true,
+          }),
+          new TextRun({
+            children: [PageNumber.TOTAL_PAGES],
+            font: FONTS.HEBREW,
+            size: FONT_SIZES.FOOTNOTE,
+            color: COLORS.MUTED,
+          }),
+        ],
+      }),
+    ],
+  })
+}
+
 // Main document builder
-export function buildDocxDocument(data: ReportData, images: ImageMap): Document {
-  const pageProperties = {
+export function buildDocxDocument(
+  data: ReportData,
+  images: ImageMap,
+  metadata?: DocumentMetadata
+): Document {
+  // Page properties without footer (for cover page)
+  const coverPageProperties = {
     page: {
       size: {
         width: PAGE.WIDTH,
@@ -1034,44 +1103,85 @@ export function buildDocxDocument(data: ReportData, images: ImageMap): Document 
     },
   }
 
+  // Page properties with footer (for content pages)
+  const contentPageProperties = {
+    page: {
+      size: {
+        width: PAGE.WIDTH,
+        height: PAGE.HEIGHT,
+      },
+      margin: {
+        top: PAGE.MARGIN_TOP,
+        bottom: PAGE.MARGIN_BOTTOM,
+        left: PAGE.MARGIN_LEFT,
+        right: PAGE.MARGIN_RIGHT,
+      },
+    },
+    footers: {
+      default: createPageNumberFooter(data.cover.companyName),
+    },
+  }
+
+  // Get property address for metadata fallback
+  const propertyAddress = data.address?.fullAddressLine ||
+    `${data.address?.street || ''} ${data.address?.buildingNumber || ''}, ${data.address?.city || ''}`.trim()
+
+  // Build document with metadata
   return new Document({
+    // Document metadata
+    title: metadata?.title || `שומת מקרקעין - ${propertyAddress || 'נכס'}`,
+    subject: metadata?.subject || 'שומת מקרקעין',
+    creator: metadata?.creator || data.meta?.appraiserName || 'שמאי מקרקעין',
+    keywords: metadata?.keywords?.join(', ') || 'שומה, מקרקעין, הערכת שווי',
+    description: metadata?.description || `שומת מקרקעין עבור ${data.meta?.clientName || 'לקוח'}`,
+    lastModifiedBy: metadata?.lastModifiedBy || data.meta?.appraiserName || 'שמאי מקרקעין',
+
+    // Document sections
     sections: [
+      // Cover page (no page number)
       {
-        properties: pageProperties,
+        properties: coverPageProperties,
         children: buildCoverPage(data, images),
       },
+      // Client details page
       {
-        properties: pageProperties,
+        properties: contentPageProperties,
         children: buildClientDetailsPage(data),
       },
+      // Section 1 - Property Description
       {
-        properties: pageProperties,
+        properties: contentPageProperties,
         children: buildSection1(data, images),
       },
+      // Section 2 - Legal Status
       {
-        properties: pageProperties,
+        properties: contentPageProperties,
         children: buildSection2(data, images),
       },
+      // Section 3 - Planning/Zoning
       {
-        properties: pageProperties,
+        properties: contentPageProperties,
         children: buildSection3(data, images),
       },
+      // Section 4 - Valuation Factors
       {
-        properties: pageProperties,
+        properties: contentPageProperties,
         children: buildSection4(data),
       },
+      // Section 5 - Calculations
       {
-        properties: pageProperties,
+        properties: contentPageProperties,
         children: buildSection5(data),
       },
+      // Section 6 - Final Valuation
       {
-        properties: pageProperties,
+        properties: contentPageProperties,
         children: buildSection6(data),
       },
       // Custom tables section (only if there are custom tables)
       ...(data.customTables && data.customTables.length > 0
         ? [{
-            properties: pageProperties,
+            properties: contentPageProperties,
             children: buildCustomTablesSection(data),
           }]
         : []),

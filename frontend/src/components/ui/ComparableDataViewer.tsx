@@ -28,6 +28,30 @@ interface ComparableTransaction {
   estimated_price_ils?: number // Alias for sale_value_nis
   price_per_sqm?: number // Calculated as sale_value_nis / surface
   asset_type?: string // From properties table
+  // NEW FIELDS from asset_details (25 additional fields)
+  entrance?: number // כניסה
+  apartment_number?: number // דירה
+  arnona_area_sqm?: number // שטח ברוטו (ארנונה)
+  registered_area_sqm?: number // שטח נטו (רשום)
+  shares?: string // חלק מהמקרקעין
+  plot?: number // מגרש (1/0)
+  roof?: number // גג (1/0)
+  storage?: number // מחסן (1/0)
+  yard?: number // חצר (1/0)
+  gallery?: number // גלריה (1/0)
+  parking_spaces?: number // חניות
+  elevator?: string // מעליות
+  total_floors?: number // מספר קומות
+  apartments_in_building?: number // דירות בבנין
+  building_function?: string // תפקוד בנין
+  unit_function?: string // תפקוד יחידה
+  transaction_type?: string // סוג עסקה
+  declared_price_ils?: number // מחיר מוצהר
+  declared_price_usd?: number // מחיר מוצהר בדולר
+  estimated_price_usd?: number // מחיר מוערך בדולר
+  price_per_room?: number // מחיר לחדר
+  rights?: string // מהות הזכות
+  zoning_plan?: string // תב"ע
 }
 
 interface FilterState {
@@ -659,23 +683,62 @@ export default function ComparableDataViewer({
   // Format parcel ID (block_of_land) from "006770-0049-014-00" to "6770/49"
   const formatParcelId = (parcelId: string | null | undefined): string => {
     if (!parcelId) return 'N/A'
-    
+
     try {
       // Split by "-" to get parts: [006770, 0049, 014, 00]
       const parts = parcelId.split('-')
       if (parts.length < 2) return parcelId // Return original if format is unexpected
-      
+
       // First part is block (gush): remove leading zeros
       const block = parseInt(parts[0], 10)
       // Second part is parcel (helka): remove leading zeros
       const parcel = parseInt(parts[1], 10)
-      
+
       // Return formatted as "6770/49"
       if (isNaN(block) || isNaN(parcel)) return parcelId
       return `${block}/${parcel}`
     } catch {
       return parcelId
     }
+  }
+
+  // Format sub-chelka from block_of_land "006770-0049-014-00" -> "14"
+  const formatSubChelka = (parcelId: string | null | undefined): string => {
+    if (!parcelId) return '-'
+    try {
+      const parts = parcelId.split('-')
+      if (parts.length < 3) return '-'
+      const subChelka = parseInt(parts[2], 10)
+      return isNaN(subChelka) || subChelka === 0 ? '-' : String(subChelka)
+    } catch {
+      return '-'
+    }
+  }
+
+  // Format boolean fields (1/0 or true/false) to כן/לא
+  const formatBoolean = (value: number | boolean | null | undefined): string => {
+    if (value === null || value === undefined) return '-'
+    return value === 1 || value === true ? 'כן' : 'לא'
+  }
+
+  // Format USD price
+  const formatPriceUSD = (price: number | string | null | undefined): string => {
+    if (price === null || price === undefined || price === '') return '-'
+    let numPrice: number
+    if (typeof price === 'string') {
+      const trimmed = price.trim()
+      if (trimmed === '' || trimmed.toLowerCase() === 'null') return '-'
+      numPrice = parseFloat(trimmed)
+    } else {
+      numPrice = price
+    }
+    if (!Number.isFinite(numPrice) || numPrice <= 0 || isNaN(numPrice)) return '-'
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(numPrice)
   }
 
   // Handle column sorting
@@ -1205,92 +1268,80 @@ export default function ComparableDataViewer({
           </div>
           
           <div className="border rounded-lg overflow-hidden">
-            <div className="max-h-96 overflow-y-auto">
-              <table className="w-full text-sm" dir="rtl">
+            <div className="max-h-96 overflow-auto">
+              <table className="min-w-max text-sm" dir="rtl">
                 <thead className="bg-gray-100 sticky top-0 z-10">
-                  <tr className="text-right">
-                    <th className="p-2 w-12">בחירה</th>
-                    <th 
-                      className="p-2 cursor-pointer hover:bg-gray-200 select-none"
-                      onClick={() => handleSort('sale_day')}
-                    >
-                      <div className="flex items-center justify-end gap-1">
-                        יום מכירה
-                        {renderSortIcon('sale_day')}
-                      </div>
+                  <tr className="text-right whitespace-nowrap">
+                    <th className="p-2 w-12 sticky right-0 bg-gray-100 z-20">בחירה</th>
+                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('sale_day')}>
+                      <div className="flex items-center justify-end gap-1">יום מכירה{renderSortIcon('sale_day')}</div>
                     </th>
-                    <th 
-                      className="p-2 cursor-pointer hover:bg-gray-200 select-none"
-                      onClick={() => handleSort('address')}
-                    >
-                      <div className="flex items-center justify-end gap-1">
-                        כתובת
-                        {renderSortIcon('address')}
-                      </div>
+                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('address')}>
+                      <div className="flex items-center justify-end gap-1">כתובת{renderSortIcon('address')}</div>
                     </th>
-                    <th 
-                      className="p-2 cursor-pointer hover:bg-gray-200 select-none"
-                      onClick={() => handleSort('block_of_land')}
-                    >
-                      <div className="flex items-center justify-end gap-1">
-                        גוש/חלקה
-                        {renderSortIcon('block_of_land')}
-                      </div>
+                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('entrance')}>
+                      <div className="flex items-center justify-end gap-1">כניסה{renderSortIcon('entrance')}</div>
                     </th>
-                    <th 
-                      className="p-2 cursor-pointer hover:bg-gray-200 select-none"
-                      onClick={() => handleSort('rooms')}
-                    >
-                      <div className="flex items-center justify-end gap-1">
-                        חדרים
-                        {renderSortIcon('rooms')}
-                      </div>
+                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('apartment_number')}>
+                      <div className="flex items-center justify-end gap-1">דירה{renderSortIcon('apartment_number')}</div>
                     </th>
-                    <th 
-                      className="p-2 cursor-pointer hover:bg-gray-200 select-none"
-                      onClick={() => handleSort('floor')}
-                    >
-                      <div className="flex items-center justify-end gap-1">
-                        קומה
-                        {renderSortIcon('floor')}
-                      </div>
+                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('block_of_land')}>
+                      <div className="flex items-center justify-end gap-1">גוש/חלקה{renderSortIcon('block_of_land')}</div>
                     </th>
-                    <th 
-                      className="p-2 cursor-pointer hover:bg-gray-200 select-none"
-                      onClick={() => handleSort('surface')}
-                    >
-                      <div className="flex items-center justify-end gap-1">
-                        שטח (מ"ר)
-                        {renderSortIcon('surface')}
-                      </div>
+                    <th className="p-2">תת חלקה</th>
+                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('rooms')}>
+                      <div className="flex items-center justify-end gap-1">חדרים{renderSortIcon('rooms')}</div>
                     </th>
-                    <th 
-                      className="p-2 cursor-pointer hover:bg-gray-200 select-none"
-                      onClick={() => handleSort('year_of_constru')}
-                    >
-                      <div className="flex items-center justify-end gap-1">
-                        שנת בנייה
-                        {renderSortIcon('year_of_constru')}
-                      </div>
+                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('floor')}>
+                      <div className="flex items-center justify-end gap-1">קומה{renderSortIcon('floor')}</div>
                     </th>
-                    <th 
-                      className="p-2 cursor-pointer hover:bg-gray-200 select-none"
-                      onClick={() => handleSort('sale_value_nis')}
-                    >
-                      <div className="flex items-center justify-end gap-1">
-                        מחיר (₪)
-                        {renderSortIcon('sale_value_nis')}
-                      </div>
+                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('total_floors')}>
+                      <div className="flex items-center justify-end gap-1">קומות בבניין{renderSortIcon('total_floors')}</div>
                     </th>
-                    <th 
-                      className="p-2 cursor-pointer hover:bg-gray-200 select-none"
-                      onClick={() => handleSort('price_per_sqm')}
-                    >
-                      <div className="flex items-center justify-end gap-1">
-                        מחיר למ"ר
-                        {renderSortIcon('price_per_sqm')}
-                      </div>
+                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('arnona_area_sqm')}>
+                      <div className="flex items-center justify-end gap-1">שטח ברוטו{renderSortIcon('arnona_area_sqm')}</div>
                     </th>
+                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('registered_area_sqm')}>
+                      <div className="flex items-center justify-end gap-1">שטח נטו{renderSortIcon('registered_area_sqm')}</div>
+                    </th>
+                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('surface')}>
+                      <div className="flex items-center justify-end gap-1">שטח (מ"ר){renderSortIcon('surface')}</div>
+                    </th>
+                    <th className="p-2">חלק מקרקעין</th>
+                    <th className="p-2">מגרש</th>
+                    <th className="p-2">גג</th>
+                    <th className="p-2">מחסן</th>
+                    <th className="p-2">חצר</th>
+                    <th className="p-2">גלריה</th>
+                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('parking_spaces')}>
+                      <div className="flex items-center justify-end gap-1">חניות{renderSortIcon('parking_spaces')}</div>
+                    </th>
+                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('apartments_in_building')}>
+                      <div className="flex items-center justify-end gap-1">דירות בבניין{renderSortIcon('apartments_in_building')}</div>
+                    </th>
+                    <th className="p-2">מעלית</th>
+                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('year_of_constru')}>
+                      <div className="flex items-center justify-end gap-1">שנת בנייה{renderSortIcon('year_of_constru')}</div>
+                    </th>
+                    <th className="p-2">תפקוד בניין</th>
+                    <th className="p-2">תפקוד יחידה</th>
+                    <th className="p-2">סוג עסקה</th>
+                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('sale_value_nis')}>
+                      <div className="flex items-center justify-end gap-1">מחיר מכירה{renderSortIcon('sale_value_nis')}</div>
+                    </th>
+                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('declared_price_ils')}>
+                      <div className="flex items-center justify-end gap-1">מחיר מוצהר{renderSortIcon('declared_price_ils')}</div>
+                    </th>
+                    <th className="p-2">מחיר מוצהר $</th>
+                    <th className="p-2">מחיר מוערך $</th>
+                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('price_per_room')}>
+                      <div className="flex items-center justify-end gap-1">מחיר לחדר{renderSortIcon('price_per_room')}</div>
+                    </th>
+                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none bg-green-100" onClick={() => handleSort('price_per_sqm')}>
+                      <div className="flex items-center justify-end gap-1">מחיר למ"ר{renderSortIcon('price_per_sqm')}</div>
+                    </th>
+                    <th className="p-2">מהות זכות</th>
+                    <th className="p-2">תב"ע</th>
                   </tr>
                 </thead>
                 <tbody>
