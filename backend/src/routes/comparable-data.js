@@ -124,6 +124,81 @@ router.post('/import', upload.single('csvFile'), async (req, res) => {
 });
 
 /**
+ * POST /api/comparable-data/import-update
+ * Upload and import CSV file with upsert logic (updates existing, inserts new)
+ */
+router.post('/import-update', upload.single('csvFile'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: 'No CSV file provided'
+      });
+    }
+
+    const module = await loadModule();
+    let userId = req.body.userId || 'system';
+    let organizationId = req.body.organizationId || 'default-org';
+
+    if (Array.isArray(userId)) userId = userId[0] || 'system';
+    if (Array.isArray(organizationId)) organizationId = organizationId[0] || 'default-org';
+
+    userId = String(userId).trim();
+    organizationId = String(organizationId).trim();
+    const csvFilePath = req.file.path;
+
+    console.log(`📊 Importing CSV with upsert: ${req.file.originalname}`);
+    console.log(`📊 Organization/User:`, { organizationId, userId });
+
+    // Parse CSV first
+    const csvData = await module.parseCSVFile(csvFilePath);
+    console.log(`✅ Parsed ${csvData.length} rows from CSV`);
+
+    // Create database client with organization and user IDs
+    const { ComparableDataDatabaseClient } = await import('../../comparable-data-management/database-client.js');
+    const db = new ComparableDataDatabaseClient(organizationId, userId);
+    await db.connect();
+
+    // Import with upsert logic
+    const results = await db.bulkUpsertComparableData(csvData, req.file.originalname, userId, organizationId);
+    await db.disconnect();
+
+    const result = {
+      success: true,
+      filename: req.file.originalname,
+      totalRows: csvData.length,
+      updated: results.updated.length,
+      inserted: results.inserted.length,
+      failed: results.failed.length,
+      results: results
+    };
+
+    // Clean up uploaded file after import
+    try {
+      await fs.unlink(csvFilePath);
+    } catch (error) {
+      console.warn('⚠️ Failed to delete uploaded file:', error.message);
+    }
+
+    return res.json(result);
+
+  } catch (error) {
+    console.error('❌ CSV import-update failed:', error);
+
+    if (req.file?.path) {
+      try {
+        await fs.unlink(req.file.path);
+      } catch (e) {}
+    }
+
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to import CSV file with updates'
+    });
+  }
+});
+
+/**
  * POST /api/comparable-data/analyze
  * Analyze comparable data for a property
  */

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Search, Loader2, AlertCircle, CheckCircle, X, SlidersHorizontal } from 'lucide-react'
 import { ValuationData } from '../ValuationWizard'
 import FinalAssetValuation from '../valuation/FinalAssetValuation'
@@ -94,6 +94,61 @@ interface FilterState {
   dateTo: string // Sale date to (YYYY-MM-DD format)
 }
 
+// Column group definitions for toggling visibility
+type ColumnGroupKey = 'basic' | 'address' | 'areas' | 'building' | 'amenities' | 'prices' | 'legal'
+
+interface ColumnGroup {
+  key: ColumnGroupKey
+  label: string
+  icon: string
+  columns: string[]
+}
+
+const COLUMN_GROUPS: ColumnGroup[] = [
+  {
+    key: 'basic',
+    label: 'בסיסי',
+    icon: '🏠',
+    columns: ['sale_day', 'address', 'block_of_land', 'rooms', 'floor', 'surface', 'year_of_constru', 'sale_value_nis', 'price_per_sqm']
+  },
+  {
+    key: 'address',
+    label: 'כתובת',
+    icon: '📍',
+    columns: ['entrance', 'apartment_number', 'sub_chelka']
+  },
+  {
+    key: 'areas',
+    label: 'שטחים',
+    icon: '📐',
+    columns: ['arnona_area_sqm', 'registered_area_sqm', 'shares']
+  },
+  {
+    key: 'building',
+    label: 'בניין',
+    icon: '🏗️',
+    columns: ['total_floors', 'apartments_in_building', 'elevator', 'parking_spaces']
+  },
+  {
+    key: 'amenities',
+    label: 'הצמדות',
+    icon: '🏷️',
+    columns: ['plot', 'roof', 'storage', 'yard', 'gallery']
+  },
+  {
+    key: 'prices',
+    label: 'מחירים',
+    icon: '💰',
+    columns: ['declared_price_ils', 'declared_price_usd', 'estimated_price_usd', 'price_per_room']
+  },
+  {
+    key: 'legal',
+    label: 'משפטי',
+    icon: '📋',
+    columns: ['transaction_type', 'building_function', 'unit_function', 'rights', 'zoning_plan']
+  }
+]
+
 export default function ComparableDataViewer({ 
   data, 
   sessionId,
@@ -139,7 +194,44 @@ export default function ComparableDataViewer({
   // Sorting state
   const [sortColumn, setSortColumn] = useState<string | null>(persistedState?.sortColumn || null)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(persistedState?.sortDirection || 'desc')
-  
+
+  // Column visibility state - 'basic' is always visible
+  const [visibleGroups, setVisibleGroups] = useState<Set<ColumnGroupKey>>(
+    new Set(persistedState?.visibleGroups || ['basic'])
+  )
+
+  // Memoized Set of visible columns for O(1) lookups (avoids O(n*m) iteration in render)
+  const visibleColumns = useMemo(() => {
+    const columns = new Set<string>()
+    for (const group of COLUMN_GROUPS) {
+      if (visibleGroups.has(group.key)) {
+        for (const col of group.columns) {
+          columns.add(col)
+        }
+      }
+    }
+    return columns
+  }, [visibleGroups])
+
+  // Helper to check if a column should be visible (O(1) lookup)
+  const isColumnVisible = useCallback((columnName: string): boolean => {
+    return visibleColumns.has(columnName)
+  }, [visibleColumns])
+
+  // Toggle a column group
+  const toggleColumnGroup = (groupKey: ColumnGroupKey) => {
+    if (groupKey === 'basic') return // Basic is always visible
+    setVisibleGroups(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(groupKey)) {
+        newSet.delete(groupKey)
+      } else {
+        newSet.add(groupKey)
+      }
+      return newSet
+    })
+  }
+
   // Pagination
   const [page, setPage] = useState(persistedState?.page || 0)
   const [pageSize] = useState(50)
@@ -285,29 +377,46 @@ export default function ComparableDataViewer({
     loadPropertyTypes()
   }, [])
 
-  // Persist state to localStorage whenever it changes
+  // Ref for debouncing localStorage writes
+  const persistTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Persist state to localStorage with debounce (avoids blocking main thread on rapid changes)
   useEffect(() => {
     if (typeof window === 'undefined') return
 
-    const stateToSave = {
-      transactions,
-      selectedIds: Array.from(selectedIds),
-      analysisResult,
-      showSection52,
-      finalPricePerSqm,
-      page,
-      hasMore,
-      filters,
-      sortColumn,
-      sortDirection,
-      timestamp: new Date().toISOString()
+    // Cancel any pending persist operation
+    if (persistTimerRef.current) {
+      clearTimeout(persistTimerRef.current)
     }
 
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(stateToSave))
-      console.log('💾 State persisted to localStorage')
-    } catch (err) {
-      console.error('Failed to persist state:', err)
+    // Debounce localStorage writes by 1000ms to avoid blocking on rapid interactions
+    persistTimerRef.current = setTimeout(() => {
+      const stateToSave = {
+        transactions,
+        selectedIds: Array.from(selectedIds),
+        analysisResult,
+        showSection52,
+        finalPricePerSqm,
+        page,
+        hasMore,
+        filters,
+        sortColumn,
+        sortDirection,
+        visibleGroups: Array.from(visibleGroups),
+        timestamp: new Date().toISOString()
+      }
+
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(stateToSave))
+      } catch (err) {
+        console.error('Failed to persist state:', err)
+      }
+    }, 1000)
+
+    return () => {
+      if (persistTimerRef.current) {
+        clearTimeout(persistTimerRef.current)
+      }
     }
   }, [
     transactions,
@@ -320,6 +429,7 @@ export default function ComparableDataViewer({
     filters,
     sortColumn,
     sortDirection,
+    visibleGroups,
     storageKey
   ])
 
@@ -349,8 +459,11 @@ export default function ComparableDataViewer({
     }
   }
 
-  // Debounced search function
-  const searchTransactions = useCallback(async () => {
+  // Ref for AbortController to cancel in-flight requests
+  const abortControllerRef = useRef<AbortController | null>(null)
+
+  // Debounced search function with request cancellation
+  const searchTransactions = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true)
     setError(null)
 
@@ -588,6 +701,109 @@ export default function ComparableDataViewer({
     setShowSection52(true)
   }
 
+  // Export transactions to CSV
+  const exportToCSV = () => {
+    if (transactions.length === 0) {
+      setError('אין נתונים לייצוא')
+      return
+    }
+
+    // Define all columns for export (Hebrew headers for Excel compatibility)
+    const headers = [
+      'id',
+      'יום מכירה',
+      'כתובת',
+      'גוש/חלקה',
+      'חדרים',
+      'קומה',
+      'שטח (מ"ר)',
+      'שנת בנייה',
+      'מחיר מכירה',
+      'מחיר למ"ר',
+      'כניסה',
+      'דירה',
+      'תת חלקה',
+      'שטח ברוטו',
+      'שטח נטו',
+      'חלק מקרקעין',
+      'קומות בבניין',
+      'דירות בבניין',
+      'מעלית',
+      'חניות',
+      'מגרש',
+      'גג',
+      'מחסן',
+      'חצר',
+      'גלריה',
+      'מחיר מוצהר',
+      'מחיר מוצהר $',
+      'מחיר מוערך $',
+      'מחיר לחדר',
+      'סוג עסקה',
+      'תפקוד בניין',
+      'תפקוד יחידה',
+      'מהות זכות',
+      'תב"ע'
+    ]
+
+    // Map transactions to CSV rows
+    const rows = sortedTransactions.map(t => [
+      t.id,
+      t.sale_day || '',
+      t.address || '',
+      t.block_of_land || '',
+      t.rooms ?? '',
+      t.floor ?? '',
+      t.surface ?? '',
+      t.year_of_constru || '',
+      t.sale_value_nis ?? t.estimated_price_ils ?? '',
+      t.price_per_sqm ?? '',
+      t.entrance ?? '',
+      t.apartment_number ?? '',
+      formatSubChelka(t.block_of_land),
+      t.arnona_area_sqm ?? '',
+      t.registered_area_sqm ?? '',
+      t.shares || '',
+      t.total_floors ?? '',
+      t.apartments_in_building ?? '',
+      t.elevator || '',
+      t.parking_spaces ?? '',
+      t.plot ?? '',
+      t.roof ?? '',
+      t.storage ?? '',
+      t.yard ?? '',
+      t.gallery ?? '',
+      t.declared_price_ils ?? '',
+      t.declared_price_usd ?? '',
+      t.estimated_price_usd ?? '',
+      t.price_per_room ?? '',
+      t.transaction_type || '',
+      t.building_function || '',
+      t.unit_function || '',
+      t.rights || '',
+      t.zoning_plan || ''
+    ].map(cell => {
+      // Escape quotes and wrap in quotes for CSV
+      const cellStr = String(cell ?? '')
+      return `"${cellStr.replace(/"/g, '""')}"`
+    }))
+
+    // Create CSV content with BOM for Hebrew support in Excel
+    const csvContent = [
+      headers.map(h => `"${h}"`).join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n')
+
+    // Add BOM for UTF-8 encoding (Excel Hebrew support)
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `comparable-data-${new Date().toISOString().split('T')[0]}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   // Clear persisted state and reset
   const clearPersistedData = () => {
     if (typeof window === 'undefined') return
@@ -780,6 +996,22 @@ export default function ComparableDataViewer({
         case 'rooms':
         case 'floor':
         case 'year_of_constru':
+        case 'entrance':
+        case 'apartment_number':
+        case 'arnona_area_sqm':
+        case 'registered_area_sqm':
+        case 'parking_spaces':
+        case 'total_floors':
+        case 'apartments_in_building':
+        case 'declared_price_ils':
+        case 'declared_price_usd':
+        case 'estimated_price_usd':
+        case 'price_per_room':
+        case 'plot':
+        case 'roof':
+        case 'storage':
+        case 'yard':
+        case 'gallery':
           // Sort by number
           const aNum = typeof aValue === 'string' ? parseFloat(aValue) || 0 : (aValue || 0)
           const bNum = typeof bValue === 'string' ? parseFloat(bValue) || 0 : (bValue || 0)
@@ -791,6 +1023,13 @@ export default function ComparableDataViewer({
         case 'street':
         case 'asset_type':
         case 'block_of_land':
+        case 'shares':
+        case 'elevator':
+        case 'building_function':
+        case 'unit_function':
+        case 'transaction_type':
+        case 'rights':
+        case 'zoning_plan':
           // Sort by string (case-insensitive)
           const aStr = String(aValue || '').toLowerCase()
           const bStr = String(bValue || '').toLowerCase()
@@ -1253,6 +1492,13 @@ export default function ComparableDataViewer({
             </h4>
             <div className="flex gap-2">
               <button
+                onClick={exportToCSV}
+                className="text-xs px-3 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200"
+                title="ייצא לקובץ CSV לעריכה באקסל"
+              >
+                ייצא CSV
+              </button>
+              <button
                 onClick={selectAll}
                 className="text-xs px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
               >
@@ -1266,82 +1512,161 @@ export default function ComparableDataViewer({
               </button>
             </div>
           </div>
-          
+
+          {/* Column Group Toggles */}
+          <div className="flex flex-wrap gap-2 mb-3 p-2 bg-gray-50 rounded-lg border border-gray-200">
+            <span className="text-xs text-gray-500 self-center ml-2">עמודות:</span>
+            {COLUMN_GROUPS.map((group) => {
+              const isActive = visibleGroups.has(group.key)
+              const isBasic = group.key === 'basic'
+              return (
+                <button
+                  key={group.key}
+                  onClick={() => toggleColumnGroup(group.key)}
+                  disabled={isBasic}
+                  aria-label={`${isActive ? 'הסתר' : 'הצג'} עמודות ${group.label}`}
+                  aria-pressed={isActive}
+                  className={`
+                    text-xs px-3 py-1.5 rounded-full flex items-center gap-1 transition-all
+                    ${isBasic
+                      ? 'bg-blue-600 text-white cursor-default'
+                      : isActive
+                        ? 'bg-blue-500 text-white hover:bg-blue-600'
+                        : 'bg-white text-gray-600 border border-gray-300 hover:border-blue-400 hover:text-blue-600'
+                    }
+                  `}
+                  title={isBasic ? 'עמודות בסיסיות (תמיד מוצגות)' : `לחץ להצגת/הסתרת ${group.label}`}
+                >
+                  <span aria-hidden="true">{group.icon}</span>
+                  <span>{group.label}</span>
+                  {!isBasic && (
+                    <span className={`text-[10px] ${isActive ? 'text-blue-200' : 'text-gray-400'}`} aria-hidden="true">
+                      {isActive ? '✓' : '+'}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+
           <div className="border rounded-lg overflow-hidden">
             <div className="max-h-96 overflow-auto">
               <table className="min-w-max text-sm" dir="rtl">
                 <thead className="bg-gray-100 sticky top-0 z-10">
                   <tr className="text-right whitespace-nowrap">
+                    {/* Checkbox - always visible */}
                     <th className="p-2 w-12 sticky right-0 bg-gray-100 z-20">בחירה</th>
-                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('sale_day')}>
-                      <div className="flex items-center justify-end gap-1">יום מכירה{renderSortIcon('sale_day')}</div>
-                    </th>
-                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('address')}>
-                      <div className="flex items-center justify-end gap-1">כתובת{renderSortIcon('address')}</div>
-                    </th>
-                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('entrance')}>
-                      <div className="flex items-center justify-end gap-1">כניסה{renderSortIcon('entrance')}</div>
-                    </th>
-                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('apartment_number')}>
-                      <div className="flex items-center justify-end gap-1">דירה{renderSortIcon('apartment_number')}</div>
-                    </th>
-                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('block_of_land')}>
-                      <div className="flex items-center justify-end gap-1">גוש/חלקה{renderSortIcon('block_of_land')}</div>
-                    </th>
-                    <th className="p-2">תת חלקה</th>
-                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('rooms')}>
-                      <div className="flex items-center justify-end gap-1">חדרים{renderSortIcon('rooms')}</div>
-                    </th>
-                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('floor')}>
-                      <div className="flex items-center justify-end gap-1">קומה{renderSortIcon('floor')}</div>
-                    </th>
-                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('total_floors')}>
-                      <div className="flex items-center justify-end gap-1">קומות בבניין{renderSortIcon('total_floors')}</div>
-                    </th>
-                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('arnona_area_sqm')}>
-                      <div className="flex items-center justify-end gap-1">שטח ברוטו{renderSortIcon('arnona_area_sqm')}</div>
-                    </th>
-                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('registered_area_sqm')}>
-                      <div className="flex items-center justify-end gap-1">שטח נטו{renderSortIcon('registered_area_sqm')}</div>
-                    </th>
-                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('surface')}>
-                      <div className="flex items-center justify-end gap-1">שטח (מ"ר){renderSortIcon('surface')}</div>
-                    </th>
-                    <th className="p-2">חלק מקרקעין</th>
-                    <th className="p-2">מגרש</th>
-                    <th className="p-2">גג</th>
-                    <th className="p-2">מחסן</th>
-                    <th className="p-2">חצר</th>
-                    <th className="p-2">גלריה</th>
-                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('parking_spaces')}>
-                      <div className="flex items-center justify-end gap-1">חניות{renderSortIcon('parking_spaces')}</div>
-                    </th>
-                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('apartments_in_building')}>
-                      <div className="flex items-center justify-end gap-1">דירות בבניין{renderSortIcon('apartments_in_building')}</div>
-                    </th>
-                    <th className="p-2">מעלית</th>
-                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('year_of_constru')}>
-                      <div className="flex items-center justify-end gap-1">שנת בנייה{renderSortIcon('year_of_constru')}</div>
-                    </th>
-                    <th className="p-2">תפקוד בניין</th>
-                    <th className="p-2">תפקוד יחידה</th>
-                    <th className="p-2">סוג עסקה</th>
-                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('sale_value_nis')}>
-                      <div className="flex items-center justify-end gap-1">מחיר מכירה{renderSortIcon('sale_value_nis')}</div>
-                    </th>
-                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('declared_price_ils')}>
-                      <div className="flex items-center justify-end gap-1">מחיר מוצהר{renderSortIcon('declared_price_ils')}</div>
-                    </th>
-                    <th className="p-2">מחיר מוצהר $</th>
-                    <th className="p-2">מחיר מוערך $</th>
-                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('price_per_room')}>
-                      <div className="flex items-center justify-end gap-1">מחיר לחדר{renderSortIcon('price_per_room')}</div>
-                    </th>
-                    <th className="p-2 cursor-pointer hover:bg-gray-200 select-none bg-green-100" onClick={() => handleSort('price_per_sqm')}>
-                      <div className="flex items-center justify-end gap-1">מחיר למ"ר{renderSortIcon('price_per_sqm')}</div>
-                    </th>
-                    <th className="p-2">מהות זכות</th>
-                    <th className="p-2">תב"ע</th>
+
+                    {/* BASIC GROUP */}
+                    {isColumnVisible('sale_day') && (
+                      <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('sale_day')}>
+                        <div className="flex items-center justify-end gap-1">יום מכירה{renderSortIcon('sale_day')}</div>
+                      </th>
+                    )}
+                    {isColumnVisible('address') && (
+                      <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('address')}>
+                        <div className="flex items-center justify-end gap-1">כתובת{renderSortIcon('address')}</div>
+                      </th>
+                    )}
+                    {isColumnVisible('block_of_land') && (
+                      <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('block_of_land')}>
+                        <div className="flex items-center justify-end gap-1">גוש/חלקה{renderSortIcon('block_of_land')}</div>
+                      </th>
+                    )}
+                    {isColumnVisible('rooms') && (
+                      <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('rooms')}>
+                        <div className="flex items-center justify-end gap-1">חדרים{renderSortIcon('rooms')}</div>
+                      </th>
+                    )}
+                    {isColumnVisible('floor') && (
+                      <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('floor')}>
+                        <div className="flex items-center justify-end gap-1">קומה{renderSortIcon('floor')}</div>
+                      </th>
+                    )}
+                    {isColumnVisible('surface') && (
+                      <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('surface')}>
+                        <div className="flex items-center justify-end gap-1">שטח (מ"ר){renderSortIcon('surface')}</div>
+                      </th>
+                    )}
+                    {isColumnVisible('year_of_constru') && (
+                      <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('year_of_constru')}>
+                        <div className="flex items-center justify-end gap-1">שנת בנייה{renderSortIcon('year_of_constru')}</div>
+                      </th>
+                    )}
+                    {isColumnVisible('sale_value_nis') && (
+                      <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('sale_value_nis')}>
+                        <div className="flex items-center justify-end gap-1">מחיר מכירה{renderSortIcon('sale_value_nis')}</div>
+                      </th>
+                    )}
+                    {isColumnVisible('price_per_sqm') && (
+                      <th className="p-2 cursor-pointer hover:bg-gray-200 select-none bg-green-100" onClick={() => handleSort('price_per_sqm')}>
+                        <div className="flex items-center justify-end gap-1">מחיר למ"ר{renderSortIcon('price_per_sqm')}</div>
+                      </th>
+                    )}
+
+                    {/* ADDRESS GROUP */}
+                    {isColumnVisible('entrance') && <th className="p-2">כניסה</th>}
+                    {isColumnVisible('apartment_number') && <th className="p-2">דירה</th>}
+                    {isColumnVisible('sub_chelka') && <th className="p-2">תת חלקה</th>}
+
+                    {/* AREAS GROUP */}
+                    {isColumnVisible('arnona_area_sqm') && (
+                      <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('arnona_area_sqm')}>
+                        <div className="flex items-center justify-end gap-1">שטח ברוטו{renderSortIcon('arnona_area_sqm')}</div>
+                      </th>
+                    )}
+                    {isColumnVisible('registered_area_sqm') && (
+                      <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('registered_area_sqm')}>
+                        <div className="flex items-center justify-end gap-1">שטח נטו{renderSortIcon('registered_area_sqm')}</div>
+                      </th>
+                    )}
+                    {isColumnVisible('shares') && <th className="p-2">חלק מקרקעין</th>}
+
+                    {/* BUILDING GROUP */}
+                    {isColumnVisible('total_floors') && (
+                      <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('total_floors')}>
+                        <div className="flex items-center justify-end gap-1">קומות בבניין{renderSortIcon('total_floors')}</div>
+                      </th>
+                    )}
+                    {isColumnVisible('apartments_in_building') && (
+                      <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('apartments_in_building')}>
+                        <div className="flex items-center justify-end gap-1">דירות בבניין{renderSortIcon('apartments_in_building')}</div>
+                      </th>
+                    )}
+                    {isColumnVisible('elevator') && <th className="p-2">מעלית</th>}
+                    {isColumnVisible('parking_spaces') && (
+                      <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('parking_spaces')}>
+                        <div className="flex items-center justify-end gap-1">חניות{renderSortIcon('parking_spaces')}</div>
+                      </th>
+                    )}
+
+                    {/* AMENITIES GROUP */}
+                    {isColumnVisible('plot') && <th className="p-2">מגרש</th>}
+                    {isColumnVisible('roof') && <th className="p-2">גג</th>}
+                    {isColumnVisible('storage') && <th className="p-2">מחסן</th>}
+                    {isColumnVisible('yard') && <th className="p-2">חצר</th>}
+                    {isColumnVisible('gallery') && <th className="p-2">גלריה</th>}
+
+                    {/* PRICES GROUP */}
+                    {isColumnVisible('declared_price_ils') && (
+                      <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('declared_price_ils')}>
+                        <div className="flex items-center justify-end gap-1">מחיר מוצהר{renderSortIcon('declared_price_ils')}</div>
+                      </th>
+                    )}
+                    {isColumnVisible('declared_price_usd') && <th className="p-2">מחיר מוצהר $</th>}
+                    {isColumnVisible('estimated_price_usd') && <th className="p-2">מחיר מוערך $</th>}
+                    {isColumnVisible('price_per_room') && (
+                      <th className="p-2 cursor-pointer hover:bg-gray-200 select-none" onClick={() => handleSort('price_per_room')}>
+                        <div className="flex items-center justify-end gap-1">מחיר לחדר{renderSortIcon('price_per_room')}</div>
+                      </th>
+                    )}
+
+                    {/* LEGAL GROUP */}
+                    {isColumnVisible('transaction_type') && <th className="p-2">סוג עסקה</th>}
+                    {isColumnVisible('building_function') && <th className="p-2">תפקוד בניין</th>}
+                    {isColumnVisible('unit_function') && <th className="p-2">תפקוד יחידה</th>}
+                    {isColumnVisible('rights') && <th className="p-2">מהות זכות</th>}
+                    {isColumnVisible('zoning_plan') && <th className="p-2">תב"ע</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -1350,44 +1675,78 @@ export default function ComparableDataViewer({
                     return (
                       <tr
                         key={transaction.id}
-                        className={`border-t cursor-pointer hover:bg-gray-50 ${
+                        className={`border-t cursor-pointer hover:bg-gray-50 whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset ${
                           isSelected ? 'bg-blue-50' : ''
                         }`}
                         onClick={() => toggleSelection(transaction.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            toggleSelection(transaction.id)
+                          }
+                        }}
+                        tabIndex={0}
+                        role="row"
+                        aria-selected={isSelected}
                       >
-                        <td className="p-2 text-center">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
+                        {/* Checkbox - always visible */}
+                        <td className={`p-2 text-center sticky right-0 z-10 ${isSelected ? 'bg-blue-50' : 'bg-white'}`}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
                             onChange={() => toggleSelection(transaction.id)}
-                              onClick={(e) => e.stopPropagation()}
-                              className="w-4 h-4 cursor-pointer"
-                            />
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-4 h-4 cursor-pointer"
+                            aria-label={`בחר עסקה ${transaction.address || formatParcelId(transaction.block_of_land)}`}
+                          />
                         </td>
-                        <td className="p-2">{formatDate(transaction.sale_day)}</td>
-                        <td className="p-2">{transaction.address || 'N/A'}</td>
-                        <td className="p-2">{formatParcelId(transaction.block_of_land)}</td>
-                        <td className="p-2">{transaction.rooms || 'N/A'}</td>
-                        <td className="p-2">{transaction.floor ?? 'N/A'}</td>
-                        <td className="p-2">{transaction.surface ? Math.round(transaction.surface) : 'N/A'}</td>
-                        <td className="p-2">{transaction.year_of_constru || 'N/A'}</td>
-                        <td className="p-2 font-semibold">
-                          {(() => {
-                            const price = transaction.estimated_price_ils ?? transaction.sale_value_nis
-                            // Debug: Log price value for troubleshooting
-                            if (price !== null && price !== undefined && typeof price !== 'number') {
-                              console.warn('⚠️ Price is not a number:', { 
-                                id: transaction.id, 
-                                price, 
-                                type: typeof price,
-                                estimated_price_ils: transaction.estimated_price_ils,
-                                sale_value_nis: transaction.sale_value_nis
-                              })
-                            }
-                            return formatPrice(price)
-                          })()}
-                                  </td>
-                        <td className="p-2 text-green-700 font-medium">{formatPrice(transaction.price_per_sqm)}</td>
+
+                        {/* BASIC GROUP */}
+                        {isColumnVisible('sale_day') && <td className="p-2">{formatDate(transaction.sale_day)}</td>}
+                        {isColumnVisible('address') && <td className="p-2 max-w-xs truncate" title={transaction.address}>{transaction.address || '-'}</td>}
+                        {isColumnVisible('block_of_land') && <td className="p-2">{formatParcelId(transaction.block_of_land)}</td>}
+                        {isColumnVisible('rooms') && <td className="p-2">{transaction.rooms ?? '-'}</td>}
+                        {isColumnVisible('floor') && <td className="p-2">{transaction.floor ?? '-'}</td>}
+                        {isColumnVisible('surface') && <td className="p-2">{transaction.surface ? Math.round(transaction.surface) : '-'}</td>}
+                        {isColumnVisible('year_of_constru') && <td className="p-2">{transaction.year_of_constru || '-'}</td>}
+                        {isColumnVisible('sale_value_nis') && <td className="p-2 font-semibold">{formatPrice(transaction.estimated_price_ils ?? transaction.sale_value_nis)}</td>}
+                        {isColumnVisible('price_per_sqm') && <td className="p-2 text-green-700 font-medium bg-green-50">{formatPrice(transaction.price_per_sqm)}</td>}
+
+                        {/* ADDRESS GROUP */}
+                        {isColumnVisible('entrance') && <td className="p-2">{transaction.entrance ?? '-'}</td>}
+                        {isColumnVisible('apartment_number') && <td className="p-2">{transaction.apartment_number ?? '-'}</td>}
+                        {isColumnVisible('sub_chelka') && <td className="p-2">{formatSubChelka(transaction.block_of_land)}</td>}
+
+                        {/* AREAS GROUP */}
+                        {isColumnVisible('arnona_area_sqm') && <td className="p-2">{transaction.arnona_area_sqm ? Math.round(transaction.arnona_area_sqm) : '-'}</td>}
+                        {isColumnVisible('registered_area_sqm') && <td className="p-2">{transaction.registered_area_sqm ? Math.round(transaction.registered_area_sqm) : '-'}</td>}
+                        {isColumnVisible('shares') && <td className="p-2 text-xs">{transaction.shares || '-'}</td>}
+
+                        {/* BUILDING GROUP */}
+                        {isColumnVisible('total_floors') && <td className="p-2">{transaction.total_floors ?? '-'}</td>}
+                        {isColumnVisible('apartments_in_building') && <td className="p-2">{transaction.apartments_in_building ?? '-'}</td>}
+                        {isColumnVisible('elevator') && <td className="p-2">{transaction.elevator || '-'}</td>}
+                        {isColumnVisible('parking_spaces') && <td className="p-2">{transaction.parking_spaces ?? '-'}</td>}
+
+                        {/* AMENITIES GROUP */}
+                        {isColumnVisible('plot') && <td className="p-2">{formatBoolean(transaction.plot)}</td>}
+                        {isColumnVisible('roof') && <td className="p-2">{formatBoolean(transaction.roof)}</td>}
+                        {isColumnVisible('storage') && <td className="p-2">{formatBoolean(transaction.storage)}</td>}
+                        {isColumnVisible('yard') && <td className="p-2">{formatBoolean(transaction.yard)}</td>}
+                        {isColumnVisible('gallery') && <td className="p-2">{formatBoolean(transaction.gallery)}</td>}
+
+                        {/* PRICES GROUP */}
+                        {isColumnVisible('declared_price_ils') && <td className="p-2">{formatPrice(transaction.declared_price_ils)}</td>}
+                        {isColumnVisible('declared_price_usd') && <td className="p-2">{formatPriceUSD(transaction.declared_price_usd)}</td>}
+                        {isColumnVisible('estimated_price_usd') && <td className="p-2">{formatPriceUSD(transaction.estimated_price_usd)}</td>}
+                        {isColumnVisible('price_per_room') && <td className="p-2">{formatPrice(transaction.price_per_room)}</td>}
+
+                        {/* LEGAL GROUP */}
+                        {isColumnVisible('transaction_type') && <td className="p-2 text-xs">{transaction.transaction_type || '-'}</td>}
+                        {isColumnVisible('building_function') && <td className="p-2 text-xs max-w-[100px] truncate" title={transaction.building_function}>{transaction.building_function || '-'}</td>}
+                        {isColumnVisible('unit_function') && <td className="p-2 text-xs max-w-[100px] truncate" title={transaction.unit_function}>{transaction.unit_function || '-'}</td>}
+                        {isColumnVisible('rights') && <td className="p-2 text-xs max-w-[100px] truncate" title={transaction.rights}>{transaction.rights || '-'}</td>}
+                        {isColumnVisible('zoning_plan') && <td className="p-2 text-xs max-w-[100px] truncate" title={transaction.zoning_plan}>{transaction.zoning_plan || '-'}</td>}
                       </tr>
                     )
                   })}

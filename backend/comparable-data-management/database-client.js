@@ -544,6 +544,248 @@ class ComparableDataDatabaseClient {
   }
 
   /**
+   * Bulk upsert CSV data - updates existing records or inserts new ones
+   * @param {Array} csvRows - Array of CSV row objects
+   * @param {string} csvFilename - Source CSV filename
+   * @param {string} userId - User importing the data
+   * @param {string} organizationId - Organization/Company ID
+   * @returns {Object} - Import results with updated/inserted/failed counts
+   */
+  async bulkUpsertComparableData(csvRows, csvFilename, userId = 'system', organizationId = null) {
+    this.organizationId = String(organizationId || this.organizationId || 'default-org');
+    this.userId = String(userId || this.userId || 'system');
+
+    if (Array.isArray(this.userId)) this.userId = this.userId[0] || 'system';
+    if (Array.isArray(this.organizationId)) this.organizationId = this.organizationId[0] || 'default-org';
+
+    await this.connect();
+
+    const results = {
+      updated: [],
+      inserted: [],
+      failed: []
+    };
+
+    // Parse date format helper
+    const parseHebrewDate = (dateStr) => {
+      if (!dateStr) return null;
+      try {
+        const trimmed = dateStr.trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+        if (trimmed.includes('/')) {
+          const parts = trimmed.split('/');
+          if (parts.length === 3) {
+            const [day, month, year] = parts.map(p => p.trim());
+            if (year.length === 4 && parseInt(year) > 1900) {
+              return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+            }
+          }
+        }
+        return trimmed;
+      } catch {
+        return null;
+      }
+    };
+
+    // Parse address helper
+    const parseAddress = (addressStr) => {
+      if (!addressStr) return { city: null, street_name: null, house_number: null };
+      const parts = addressStr.split(',').map(p => p.trim());
+      const city = parts.length > 1 ? parts[parts.length - 1] : null;
+      const streetPart = parts[0] || '';
+      const houseNumberMatch = streetPart.match(/(\d+)\s*$/);
+      const house_number = houseNumberMatch ? houseNumberMatch[1] : null;
+      const street_name = houseNumberMatch
+        ? streetPart.substring(0, houseNumberMatch.index).trim()
+        : streetPart.trim();
+      return { city: city || null, street_name: street_name || null, house_number: house_number || null };
+    };
+
+    // Parse gush/chelka helper
+    const parseGushChelka = (gushStr) => {
+      if (!gushStr) return { gush: null, chelka: null, sub_chelka: null };
+      try {
+        const trimmed = gushStr.trim();
+        if (trimmed.includes('-')) {
+          const parts = trimmed.split('-').map(p => {
+            const num = parseInt(p.trim());
+            return isNaN(num) ? null : num;
+          }).filter(p => p !== null);
+          return { gush: parts[0] || null, chelka: parts[1] || null, sub_chelka: parts[2] || null };
+        }
+        if (trimmed.includes('/')) {
+          const parts = trimmed.split('/').map(p => {
+            const num = parseInt(p.trim());
+            return isNaN(num) ? null : num;
+          }).filter(p => p !== null);
+          return { gush: parts[0] || null, chelka: parts[1] || null, sub_chelka: parts[2] || null };
+        }
+        const singleNum = parseInt(trimmed);
+        if (!isNaN(singleNum)) return { gush: singleNum, chelka: null, sub_chelka: null };
+        return { gush: null, chelka: null, sub_chelka: null };
+      } catch {
+        return { gush: null, chelka: null, sub_chelka: null };
+      }
+    };
+
+    try {
+      for (let i = 0; i < csvRows.length; i++) {
+        try {
+          const csvData = csvRows[i];
+
+          // Helper to get value from Hebrew or English headers
+          const getValue = (headerOptions) => {
+            for (const header of headerOptions) {
+              const value = headerMapping.getValueFromRow(csvData, header);
+              if (value !== null && value !== undefined && value !== '') return value;
+            }
+            return null;
+          };
+
+          // Extract fields
+          const recordId = getValue(['id', 'ID']);
+          const streetValue = getValue(['רחוב', 'שם רחוב', 'street_name', 'street']);
+          const houseNumberValue = getValue(['מספר בית', 'house_number']);
+          const cityValue = getValue(['עיר', 'city', 'locality_name', 'settlement']);
+
+          let address = getValue(['כתובת', 'address']);
+          if (!address && streetValue) {
+            const parts = [];
+            if (streetValue) parts.push(streetValue);
+            if (houseNumberValue) parts.push(houseNumberValue);
+            if (cityValue) parts.push(cityValue);
+            address = parts.join(', ') || null;
+          }
+
+          const parsedAddress = parseAddress(address || '');
+          if (cityValue) parsedAddress.city = cityValue;
+          if (streetValue) parsedAddress.street_name = streetValue;
+          if (houseNumberValue) parsedAddress.house_number = houseNumberValue;
+
+          const gushChelkaValue = getValue(['גו"ח', 'גוח', 'block_of_land', 'gush_chelka', 'גוש/חלקה']);
+          const parsedGush = parseGushChelka(gushChelkaValue);
+
+          const saleDateStr = getValue(['יום מכירה', 'sale_date', 'sale_day']);
+          const saleDate = parseHebrewDate(saleDateStr);
+
+          const declaredPriceStr = getValue(['מחיר מוצהר', 'מחיר מכירה', 'sale_value_nis', 'declared_value_nis', 'price', 'declared_price']);
+          const declaredPrice = declaredPriceStr ? parseFloat(declaredPriceStr) : null;
+
+          const roomsValue = getValue(['חדרים', 'rooms']);
+          const rooms = roomsValue ? parseFloat(roomsValue) : null;
+
+          const floorNumberValue = getValue(['קומה', 'floor_number', 'floor']);
+          const areaValue = getValue(['שטח דירה במ"ר', 'שטח דירה במר', 'שטח (מ"ר)', 'apartment_area_sqm', 'surface', 'area']);
+          const apartmentAreaSqm = areaValue ? parseFloat(areaValue) : null;
+
+          const parkingValue = getValue(['חניות', 'parking_spaces', 'parking']);
+          const parkingSpaces = parkingValue ? parseInt(parkingValue) : null;
+
+          const constructionYearValue = getValue(['שנת בניה', 'שנת בנייה', 'construction_year', 'year_of_construction']);
+          const constructionYear = constructionYearValue ? parseInt(constructionYearValue) : null;
+
+          const pricePerSqmValue = getValue(['מחיר למ"ר, במעוגל', 'מחיר למר במעוגל', 'מחיר למ"ר', 'price_per_sqm_rounded', 'price_per_sqm']);
+          let pricePerSqmRounded = pricePerSqmValue ? parseFloat(pricePerSqmValue) : null;
+
+          if (!pricePerSqmRounded && declaredPrice && apartmentAreaSqm && apartmentAreaSqm > 0) {
+            pricePerSqmRounded = Math.round(declaredPrice / apartmentAreaSqm);
+          }
+
+          // Check if we should UPDATE (by ID) or check for existing record
+          let existingId = null;
+
+          if (recordId) {
+            // Check if record with this ID exists
+            const idCheckQuery = `SELECT id FROM comparable_data WHERE id = $1`;
+            const idCheck = await this.client.query(idCheckQuery, [recordId]);
+            if (idCheck.rows.length > 0) {
+              existingId = recordId;
+            }
+          }
+
+          // If no ID match, check by unique key (address + sale_date + declared_price)
+          if (!existingId && address && saleDate && declaredPrice) {
+            const duplicateCheckQuery = `
+              SELECT id FROM comparable_data
+              WHERE address = $1
+                AND sale_date = $2
+                AND declared_price = $3
+                AND (organization_id = $4 OR (organization_id IS NULL AND $4 IS NULL))
+              LIMIT 1
+            `;
+            const duplicateCheck = await this.client.query(duplicateCheckQuery, [
+              address, saleDate, declaredPrice, this.organizationId
+            ]);
+            if (duplicateCheck.rows.length > 0) {
+              existingId = duplicateCheck.rows[0].id;
+            }
+          }
+
+          if (existingId) {
+            // UPDATE existing record
+            const updateQuery = `
+              UPDATE comparable_data SET
+                csv_filename = $1, row_number = $2, sale_date = $3, address = $4,
+                gush_chelka_sub = $5, rooms = $6, floor_number = $7, apartment_area_sqm = $8,
+                parking_spaces = $9, construction_year = $10, declared_price = $11,
+                price_per_sqm_rounded = $12, city = $13, street_name = $14, house_number = $15,
+                gush = $16, chelka = $17, sub_chelka = $18, updated_at = CURRENT_TIMESTAMP
+              WHERE id = $19
+              RETURNING id;
+            `;
+
+            const updateValues = [
+              csvFilename, i + 1, saleDate, address, gushChelkaValue,
+              rooms, floorNumberValue, apartmentAreaSqm, parkingSpaces,
+              constructionYear, declaredPrice, pricePerSqmRounded,
+              parsedAddress.city, parsedAddress.street_name, parsedAddress.house_number,
+              parsedGush.gush, parsedGush.chelka, parsedGush.sub_chelka, existingId
+            ];
+
+            await this.client.query(updateQuery, updateValues);
+            results.updated.push({ rowNumber: i + 1, id: existingId, address: address || 'Unknown' });
+
+          } else {
+            // INSERT new record
+            const insertQuery = `
+              INSERT INTO comparable_data (
+                csv_filename, row_number, sale_date, address, gush_chelka_sub,
+                rooms, floor_number, apartment_area_sqm, parking_spaces,
+                construction_year, declared_price, price_per_sqm_rounded,
+                city, street_name, house_number, gush, chelka, sub_chelka,
+                organization_id, user_id, imported_by
+              ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
+              )
+              RETURNING id;
+            `;
+
+            const insertValues = [
+              csvFilename, i + 1, saleDate, address, gushChelkaValue,
+              rooms, floorNumberValue, apartmentAreaSqm, parkingSpaces,
+              constructionYear, declaredPrice, pricePerSqmRounded,
+              parsedAddress.city, parsedAddress.street_name, parsedAddress.house_number,
+              parsedGush.gush, parsedGush.chelka, parsedGush.sub_chelka,
+              this.organizationId, this.userId, this.userId
+            ];
+
+            const result = await this.client.query(insertQuery, insertValues);
+            results.inserted.push({ rowNumber: i + 1, id: result.rows[0].id, address: address || 'Unknown' });
+          }
+
+        } catch (error) {
+          const errorAddress = csvRows[i]['כתובת'] || csvRows[i]['address'] || 'Unknown';
+          results.failed.push({ rowNumber: i + 1, address: errorAddress, error: error.message });
+        }
+      }
+    } finally {
+      await this.disconnect();
+    }
+
+    return results;
+  }
+
+  /**
    * Get comparable data by ID
    * @param {number} id - Record ID
    * @returns {Object} - Comparable data record
