@@ -960,16 +960,29 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
 
     // Get or create footnotes container for this page
     let footnotesContainer = currentPage.querySelector('.page-footnotes')
-    let footnoteNumber = 1
+
+    // Count ALL existing footnote references on the page (both built-in and user-added)
+    // Look for: <sup> with footnote-ref class, or any <sup> containing just a number
+    const existingFootnoteRefs = currentPage.querySelectorAll('sup.footnote-ref, sup[class*="footnote"]')
+    const existingFootnoteNumbers = Array.from(existingFootnoteRefs)
+      .map(el => parseInt(el.textContent || '0', 10))
+      .filter(n => !isNaN(n) && n > 0)
+
+    // Also count footnotes in the container if it exists
+    let containerFootnoteCount = 0
+    if (footnotesContainer) {
+      containerFootnoteCount = footnotesContainer.querySelectorAll('p, .footnote-item').length
+    }
+
+    // Get the highest existing footnote number
+    const maxExistingNumber = Math.max(0, ...existingFootnoteNumbers, containerFootnoteCount)
+    let footnoteNumber = maxExistingNumber + 1
 
     if (!footnotesContainer) {
       footnotesContainer = doc.createElement('div')
       footnotesContainer.className = 'page-footnotes'
       footnotesContainer.setAttribute('data-edit-selector', `#${currentPage.id} .page-footnotes`)
       currentPage.appendChild(footnotesContainer)
-    } else {
-      // Count existing footnotes
-      footnoteNumber = footnotesContainer.querySelectorAll('p').length + 1
     }
 
     // Insert superscript reference at cursor position
