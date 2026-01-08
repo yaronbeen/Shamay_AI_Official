@@ -445,10 +445,10 @@ export function Step3Validation({ data, updateData, onValidationChange, sessionI
               </div>
             </CollapsibleDrawer>
 
-            {/* Right Panel - PDF (50% when drawer open, full when closed) */}
+            {/* Right Panel - PDF (50% when drawer open, fills rest when closed) */}
             <div className={cn(
               'relative transition-all duration-300',
-              isDrawerOpen ? 'w-1/2' : 'w-full'
+              isDrawerOpen ? 'w-1/2' : 'flex-1'
             )}>
               <Step3PDFPanel
                 files={pdfFiles}
