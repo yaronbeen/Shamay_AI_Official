@@ -9,9 +9,6 @@ const MAX_IMAGE_SIZE = 5 * 1024 * 1024 // 5MB max per image
 const FETCH_TIMEOUT = 10000 // 10 seconds timeout
 const MAX_IMAGE_DIMENSION = 1600 // Max width/height after compression
 const JPEG_QUALITY = 85 // Compression quality
-const MAX_RETRIES = 3 // Number of retry attempts for failed image loads
-const RETRY_DELAY_BASE = 1000 // Base delay for exponential backoff (ms)
-const MAX_CONCURRENT_LOADS = 5 // Maximum parallel image fetches
 
 // Allowed domains for external image fetching (security whitelist)
 // Only allow localhost in development to prevent SSRF attacks in production
@@ -35,48 +32,10 @@ export interface ImageLoadResult {
   errors: ImageLoadError[]
   totalAttempted: number
   totalLoaded: number
-  placeholdersUsed: number
 }
 
 // Progress callback type
 export type ProgressCallback = (loaded: number, total: number, currentKey: string) => void
-
-// Placeholder image - a simple gray rectangle with "Image not available" text
-// This is a minimal 100x75 gray PNG
-const PLACEHOLDER_IMAGE_BASE64 =
-  'iVBORw0KGgoAAAANSUhEUgAAAGQAAABLCAYAAACGGCK3AAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAALEwAACxMBAJqcGAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAF5SURBVHic7doxDoJAEEDR/9z/0liZeALXxsJCK2MlCQmVrYUJlYn3MOZP8dKB3dnZnQkAAAAAAAAAAPgXx9YHsKaqqmOSY5JTkkPr81hRrSTnJOck59baZfqBfyDkluSW5Nb6RFa07yCPJI8kt9YnspLZkFvrg1jJbMi19YGsZDbk0vpAVjIb8mh9ICuZDXm2PpCVnFofwNpmQy6tD2QlsyG31geyktmQa+sDWclsyKP1gaxkOmTyL3/rc1nDdMjr33/ux9UPsoa8h3ylOd/xqGb4+yeSNeSV5n7Hwxr/n0fV52+a9x2PavyzHlWfv2k+cTysMe8/j2rMv+o+cTysuZ9H1d9vmk8cD2vu51H195vm/edhzf3+qPr6TfOJ42Et/fyoxv9N84njYc35/FFNfD+q8R9XH78f1cT3oxr/XHO/46G88xEO9OOFFL9LAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgC/0AQ7TJFHQwY6CAAAAAElFTkSuQmCC'
-
-// Cached placeholder image (lazy initialized)
-let cachedPlaceholder: Buffer | null = null
-
-// Configuration constants
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024 // 5MB max per image
-const FETCH_TIMEOUT = 10000 // 10 seconds timeout
-const MAX_IMAGE_DIMENSION = 1600 // Max width/height after compression
-const JPEG_QUALITY = 85 // Compression quality
-
-// Allowed domains for external image fetching (security whitelist)
-const ALLOWED_DOMAINS = [
-  'vercel-blob.com',
-  'blob.vercel-storage.com',
-  'public.blob.vercel-storage.com',
-  'localhost',
-  '127.0.0.1',
-]
-
-// Error tracking for failed image loads
-export interface ImageLoadError {
-  key: string
-  src: string
-  error: string
-}
-
-export interface ImageLoadResult {
-  images: ImageMap
-  errors: ImageLoadError[]
-  totalAttempted: number
-  totalLoaded: number
-}
 
 /**
  * Check if a URL is from an allowed domain
@@ -162,8 +121,7 @@ async function fetchWithTimeout(
 }
 
 /**
- * Get or create cached placeholder image buffer
- * Using cache avoids repeated sharp processing for each failed image
+ * Load a single image from URL or base64
  */
 async function loadImage(
   src: string,
@@ -377,21 +335,11 @@ async function loadAllImages(data: ReportData): Promise<ImageLoadResult> {
 }
 
 /**
- * Render ReportData to DOCX buffer with error tracking
+ * Create document metadata from report data
  */
-export async function renderDocxToBuffer(
-  data: ReportData
-): Promise<{ buffer: Buffer; imageErrors: ImageLoadError[]; stats: { attempted: number; loaded: number } }> {
-  // Load all images with error tracking
-  const { images, errors, totalAttempted, totalLoaded } = await loadAllImages(data)
-
-  // Log summary
-  if (errors.length > 0) {
-    console.warn(
-      `DOCX Export: Loaded ${totalLoaded}/${totalAttempted} images. ${errors.length} failed:`,
-      errors.map((e) => `${e.key}: ${e.error}`).join(', ')
-    )
-  }
+function createDocumentMetadata(data: ReportData): DocumentMetadata {
+  const propertyAddress = (data.section1?.property as any)?.address || ''
+  const now = new Date()
 
   return {
     title: `שומת מקרקעין - ${propertyAddress || 'נכס'}`,
@@ -407,28 +355,23 @@ export async function renderDocxToBuffer(
 }
 
 /**
- * Render ReportData to DOCX buffer with all improvements
+ * Render ReportData to DOCX buffer with error tracking
  */
 export async function renderDocxToBuffer(
   data: ReportData,
   options: {
-    usePlaceholders?: boolean
     onProgress?: ProgressCallback
   } = {}
 ): Promise<{
   buffer: Buffer
   imageErrors: ImageLoadError[]
-  stats: { attempted: number; loaded: number; placeholders: number }
+  stats: { attempted: number; loaded: number }
 }> {
-  const { usePlaceholders = true, onProgress } = options
-
-  // Load all images with retry and concurrency limit
-  const { images, errors, totalAttempted, totalLoaded, placeholdersUsed } =
-    await loadAllImages(data, usePlaceholders, onProgress)
+  // Load all images with error tracking
+  const { images, errors, totalAttempted, totalLoaded } = await loadAllImages(data)
 
   // Log summary
-  console.log(`DOCX Export: Loaded ${totalLoaded}/${totalAttempted} images` +
-    (placeholdersUsed > 0 ? ` (${placeholdersUsed} placeholders)` : ''))
+  console.log(`DOCX Export: Loaded ${totalLoaded}/${totalAttempted} images`)
   if (errors.length > 0) {
     console.warn(
       `Failed images:`,
@@ -460,10 +403,6 @@ export async function renderDocxToBlob(
 ): Promise<{ blob: Blob; imageErrors: ImageLoadError[]; stats: { attempted: number; loaded: number } }> {
   // Load all images with error tracking
   const { images, errors, totalAttempted, totalLoaded } = await loadAllImages(data)
-
-  // Load all images with retry and concurrency limit
-  const { images, errors, totalAttempted, totalLoaded, placeholdersUsed } =
-    await loadAllImages(data, usePlaceholders, onProgress)
 
   // Create document metadata
   const metadata = createDocumentMetadata(data)
