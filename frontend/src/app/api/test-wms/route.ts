@@ -15,13 +15,34 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
 
-    // Get center coordinates (ITM - Israeli Transverse Mercator)
-    const easting = parseFloat(searchParams.get('easting') || '178500')  // Default: Tel Aviv area
-    const northing = parseFloat(searchParams.get('northing') || '662500')
-    const size = parseInt(searchParams.get('size') || '500')  // Size in meters
-    const width = parseInt(searchParams.get('width') || '800')  // Image width in pixels
-    const height = parseInt(searchParams.get('height') || '800')  // Image height in pixels
-    const layer = searchParams.get('layer') || 'PARCEL_ALL'  // Layer to show
+    // Get center coordinates (ITM - Israeli Transverse Mercator) with validation
+    const rawEasting = searchParams.get('easting')
+    const rawNorthing = searchParams.get('northing')
+    const rawSize = searchParams.get('size')
+    const rawWidth = searchParams.get('width')
+    const rawHeight = searchParams.get('height')
+    const layer = searchParams.get('layer') || 'PARCEL_ALL'
+
+    const easting = rawEasting ? parseFloat(rawEasting) : 178500
+    const northing = rawNorthing ? parseFloat(rawNorthing) : 662500
+    const size = rawSize ? parseInt(rawSize) : 500
+    const width = rawWidth ? parseInt(rawWidth) : 800
+    const height = rawHeight ? parseInt(rawHeight) : 800
+
+    // Validate parsed values to prevent NaN propagation
+    if (isNaN(easting) || isNaN(northing) || isNaN(size) || isNaN(width) || isNaN(height)) {
+      return NextResponse.json({
+        success: false,
+        error: 'Invalid parameters: easting, northing, size, width, height must be valid numbers'
+      }, { status: 400 })
+    }
+
+    if (size <= 0 || width <= 0 || height <= 0) {
+      return NextResponse.json({
+        success: false,
+        error: 'Invalid parameters: size, width, height must be positive numbers'
+      }, { status: 400 })
+    }
 
     // Calculate bounding box (center ± size/2)
     const halfSize = size / 2

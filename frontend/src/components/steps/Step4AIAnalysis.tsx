@@ -336,8 +336,12 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
               const totalPolygonArea = measurementTable
                 .filter((m: any) => m && m.type === 'polygon' && m.measurement)
                 .reduce((sum: number, m: any) => {
+                  // Ensure measurement is a string before using regex
+                  const measurementStr = typeof m.measurement === 'string'
+                    ? m.measurement
+                    : String(m.measurement)
                   // Parse measurement string like "123.45 m²" or "123,45 m2"
-                  const match = m.measurement.match(/([\d.,]+)\s*m[²2]?/i)
+                  const match = measurementStr.match(/([\d.,]+)\s*m[²2]?/i)
                   if (match) {
                     const numStr = match[1].replace(',', '.')
                     const parsed = parseFloat(numStr)

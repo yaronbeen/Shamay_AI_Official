@@ -153,11 +153,21 @@ async function loadImage(
         }
       }
     } else if (src.startsWith('http://') || src.startsWith('https://')) {
-      // Security check: validate domain
+      // Security check: validate domain - block in production to prevent SSRF
       if (!isAllowedUrl(src)) {
-        // For now, allow all URLs but log a warning
-        // In production, you might want to be stricter
-        console.warn(`Loading image from non-whitelisted domain: ${new URL(src).hostname}`)
+        const hostname = new URL(src).hostname
+        if (process.env.NODE_ENV === 'production') {
+          return {
+            data: null,
+            error: {
+              key,
+              src,
+              error: `Security: Image domain not whitelisted: ${hostname}`
+            },
+          }
+        }
+        // Only allow in development with warning
+        console.warn(`[DEV ONLY] Loading image from non-whitelisted domain: ${hostname}`)
       }
 
       // Fetch with timeout
