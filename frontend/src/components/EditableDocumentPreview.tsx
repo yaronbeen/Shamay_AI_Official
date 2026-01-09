@@ -1012,12 +1012,7 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
       return
     }
 
-    // Ensure page has an ID for CSS selector
-    if (!currentPage.id) {
-      currentPage.id = `page-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-    }
-
-    // Get the page number from the page ID or index
+    // Get the page number (1-indexed) for nth-of-type selector
     const allPages = doc.querySelectorAll('.page')
     let pageNumber = 1
     allPages.forEach((page, idx) => {
@@ -1054,10 +1049,14 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
       footnoteNumber++
     }
 
+    // Build page selector using nth-of-type for export compatibility
+    // This matches the structure in document-template.ts export mode
+    const pageSelector = `section:nth-of-type(${pageNumber})`
+
     if (!footnotesContainer) {
       footnotesContainer = doc.createElement('div')
       footnotesContainer.className = 'page-footnotes'
-      footnotesContainer.setAttribute('data-edit-selector', `#${currentPage.id} .page-footnotes`)
+      footnotesContainer.setAttribute('data-edit-selector', `${pageSelector} .page-footnotes`)
       currentPage.appendChild(footnotesContainer)
     }
 
@@ -1082,8 +1081,7 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
     footnoteP.appendChild(textNode)
     footnotesContainer.appendChild(footnoteP)
 
-    // Save the changes to customHtmlOverrides
-    const pageSelector = `#${currentPage.id}`
+    // Save the changes to customHtmlOverrides - use nth-of-type selector for export
 
     // Find the parent element containing the superscript to persist it
     const editableParent = supElement.closest('[data-edit-selector]') as Element | null
