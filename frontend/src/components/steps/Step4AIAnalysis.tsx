@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { 
   Brain, 
   MapPin, 
@@ -47,6 +47,7 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
   const [analysisResults, setAnalysisResults] = useState<any>({})
   const [gisMapFile, setGisMapFile] = useState<File | null>(null)
   const [gisMapPreview, setGisMapPreview] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
   
   // Step 4 is optional - always allow proceeding
   // CRITICAL: Use ref to prevent infinite loops - only call once on mount
@@ -112,25 +113,44 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
     }
   ]
 
-  // Load analysis results from session
+  // Load analysis results from session with proper cleanup
   useEffect(() => {
+    let isMounted = true
+    const controller = new AbortController()
+
     const loadAnalysisResults = async () => {
-      if (sessionId) {
-        try {
-          const response = await fetch(`/api/session/${sessionId}`)
-          if (response.ok) {
-            const sessionData = await response.json()
-            if (sessionData.analysisResults) {
-              setAnalysisResults(sessionData.analysisResults)
-            }
+      if (!sessionId) return
+
+      try {
+        setError(null)
+        const response = await fetch(`/api/session/${sessionId}`, {
+          signal: controller.signal
+        })
+        if (!response.ok) {
+          throw new Error(`שגיאה בטעינת נתונים: ${response.status}`)
+        }
+        if (isMounted) {
+          const sessionData = await response.json()
+          if (sessionData.analysisResults) {
+            setAnalysisResults(sessionData.analysisResults)
           }
-        } catch (error) {
-          console.error('Error loading analysis results:', error)
+        }
+      } catch (err) {
+        if (err instanceof Error && err.name !== 'AbortError') {
+          console.error('Error loading analysis results:', err)
+          if (isMounted) {
+            setError(err.message || 'שגיאה בטעינת נתוני הניתוח')
+          }
         }
       }
     }
-    
+
     loadAnalysisResults()
+
+    return () => {
+      isMounted = false
+      controller.abort()
+    }
   }, [sessionId])
 
   const handleSectionToggle = (sectionId: string) => {
@@ -391,9 +411,6 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
       <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
           <h4 className="font-semibold text-gray-900">מגמות שוק</h4>
-          <button className="p-1 text-gray-400 hover:text-gray-600">
-            <Edit3 className="w-4 h-4" />
-          </button>
         </div>
         <div className="text-gray-600">
           {analysisResults.marketAnalysis?.trends || 
@@ -405,9 +422,6 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
       <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
           <h4 className="font-semibold text-gray-900">נכסים להשוואה</h4>
-          <button className="p-1 text-gray-400 hover:text-gray-600">
-            <Edit3 className="w-4 h-4" />
-          </button>
         </div>
         <div className="text-gray-600">
           {analysisResults.marketAnalysis?.comparableAssets?.length > 0 ? 
@@ -420,9 +434,6 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
       <div className="bg-white border border-gray-200 rounded-lg p-6">
         <div className="flex items-center justify-between mb-4">
           <h4 className="font-semibold text-gray-900">סיכום הערכת שווי</h4>
-          <button className="p-1 text-gray-400 hover:text-gray-600">
-            <Edit3 className="w-4 h-4" />
-          </button>
         </div>
         <div className="grid grid-cols-3 gap-4 text-sm">
           <div>
@@ -460,17 +471,36 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
         </div> */}
 
         {/* Right Panel - AI Analysis Controls */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-6 overflow-hidden">
+        <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-6 overflow-hidden relative">
           <h3 className="text-lg font-semibold text-gray-900 mb-4 text-right truncate">ניתוח AI</h3>
+
+          {/* Error Banner */}
+          {error && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3" role="alert">
+              <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0" />
+              <p className="text-sm text-red-700 flex-1">{error}</p>
+              <button
+                onClick={() => setError(null)}
+                className="text-red-600 hover:text-red-800 text-xl leading-none"
+                aria-label="סגור הודעת שגיאה"
+              >
+                ×
+              </button>
+            </div>
+          )}
           
           {/* Section Toggles - Display as columns (horizontal) */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6" role="tablist" aria-label="בחר סוג ניתוח">
             {sections.map((section) => {
               const Icon = section.icon
               return (
                 <button
                   key={section.id}
                   onClick={() => handleSectionToggle(section.id)}
+                  role="tab"
+                  aria-selected={activeSection === section.id}
+                  aria-controls={`panel-${section.id}`}
+                  id={`tab-${section.id}`}
                   className={`p-3 sm:p-4 rounded-lg border-2 transition-all overflow-hidden ${
                     activeSection === section.id
                       ? 'border-blue-500 bg-blue-50'
@@ -499,10 +529,30 @@ export function Step4AIAnalysis({ data, updateData, onValidationChange, sessionI
           </div>
 
           {/* Active Section Content */}
-          <div className="border-t border-gray-200 pt-6">
-            {activeSection === 'market_analysis' && renderMarketAnalysisSection()}
-            {activeSection === 'gis_mapping' && renderGisMappingSection()}
-            {activeSection === 'garmushka_measurements' && renderGarmushkaMeasurementsSection()}
+          <div className="border-t border-gray-200 pt-6 relative">
+            {/* Loading Overlay */}
+            {isProcessing && (
+              <div className="absolute inset-0 bg-white/80 flex flex-col items-center justify-center z-10 rounded-lg">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-2" />
+                <p className="text-sm text-gray-600">מעבד נתונים...</p>
+              </div>
+            )}
+
+            {activeSection === 'market_analysis' && (
+              <div role="tabpanel" id="panel-market_analysis" aria-labelledby="tab-market_analysis">
+                {renderMarketAnalysisSection()}
+              </div>
+            )}
+            {activeSection === 'gis_mapping' && (
+              <div role="tabpanel" id="panel-gis_mapping" aria-labelledby="tab-gis_mapping">
+                {renderGisMappingSection()}
+              </div>
+            )}
+            {activeSection === 'garmushka_measurements' && (
+              <div role="tabpanel" id="panel-garmushka_measurements" aria-labelledby="tab-garmushka_measurements">
+                {renderGarmushkaMeasurementsSection()}
+              </div>
+            )}
           </div>
 
           {/* Navigation Buttons */}
