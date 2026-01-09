@@ -3279,10 +3279,10 @@ export function generateDocumentHTML(
 
   const css = buildBaseCss(companySettings)
   
-  // Runtime scripts for preview mode
+  // Runtime scripts - auto pagination runs in both preview and export for consistent page breaks
   const previewScripts = isPreview
     ? [pageNumberScript, autoPaginateScript].join('\n')
-    : ''
+    : autoPaginateScript
 
   // Generate custom tables section if any custom tables exist
   const customTablesSection = generateAllCustomTablesHTML((data as any).customTables)
