@@ -5,6 +5,20 @@ const nextConfig = {
     // Use timestamp + random string to guarantee unique build
     return `build-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
   },
+  // Exclude problematic directories from build trace to prevent micromatch stack overflow
+  experimental: {
+    outputFileTracingExcludes: {
+      '*': [
+        'node_modules/@swc/core-linux-x64-gnu',
+        'node_modules/@swc/core-linux-x64-musl',
+        'node_modules/@esbuild/linux-x64',
+        'node_modules/sharp',
+        'node_modules/pdfjs-dist',
+        'traces/**',
+        'uploads/**',
+      ],
+    },
+  },
   async rewrites() {
     // Use environment variable for backend URL, fallback to localhost for dev
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
