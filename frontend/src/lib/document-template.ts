@@ -2325,8 +2325,8 @@ export function generateDocumentHTML(
         
         <!-- Footnotes -->
         <div class="page-note">
-          <sup>1</sup> בהתאם לנסח רישום מקרקעין מיום ${formatDateNumeric((data as any).land_registry?.extractDate || data.extractDate)}.<br/>
-          ${data.buildingPermitNumber ? `<sup>2</sup> עפ"י מדידה מתוך תכנית היתר בניה מס' ${data.buildingPermitNumber} מיום ${formatDateNumeric(data.buildingPermitDate || undefined)}.` : ''}
+          <sup class="footnote-ref">1</sup> בהתאם לנסח רישום מקרקעין מיום ${formatDateNumeric((data as any).land_registry?.extractDate || data.extractDate)}.<br/>
+          ${data.buildingPermitNumber ? `<sup class="footnote-ref">2</sup> עפ"י מדידה מתוך תכנית היתר בניה מס' ${data.buildingPermitNumber} מיום ${formatDateNumeric(data.buildingPermitDate || undefined)}.` : ''}
       </div>
       </div>
       

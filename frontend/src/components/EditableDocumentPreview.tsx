@@ -1030,7 +1030,8 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
     let footnotesContainer = currentPage.querySelector('.page-footnotes')
 
     // Count ALL existing footnote references on the page (both built-in and user-added)
-    const existingFootnoteRefs = currentPage.querySelectorAll('sup.footnote-ref')
+    // Include both .footnote-ref class and plain <sup> inside .page-note (built-in footnotes)
+    const existingFootnoteRefs = currentPage.querySelectorAll('sup.footnote-ref, .page-note sup')
     const existingFootnoteNumbers = new Set(
       Array.from(existingFootnoteRefs)
         .map(el => parseInt(el.textContent || '0', 10))
@@ -1397,174 +1398,135 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
             </p>
           )}
         </div>
-        <div className="flex items-center space-x-2 space-x-reverse gap-2">
+        <div className="flex items-center gap-3">
           {(data as any).sessionId && (
             <>
-              <div className="flex gap-2">
+              {/* Export buttons group */}
+              <div className="flex items-center gap-1.5 border-l border-gray-300 pl-3">
                 <button
                   onClick={() => handleExportPDF(false)}
                   disabled={isExporting}
-                  className={`px-3 py-2 text-sm rounded-lg font-medium transition-all duration-200 ${
-                    isExporting 
-                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                      : 'bg-red-500 text-white hover:bg-red-600 shadow-md'
+                  className={`h-8 px-3 text-xs font-medium rounded-md transition-all ${
+                    isExporting
+                      ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      : 'bg-slate-700 text-white hover:bg-slate-800'
                   }`}
-                  title="ייצא PDF של הדוח הערוך (Puppeteer - HTML template)"
+                  title="ייצא PDF (Puppeteer)"
                 >
-                  {isExporting ? (
-                    <>
-                      <span className="inline-block animate-spin mr-1">⟳</span>
-                      מייצא...
-                    </>
-                  ) : (
-                    <>📄 ייצא PDF (HTML)</>
-                  )}
+                  {isExporting ? 'מייצא...' : 'PDF'}
                 </button>
                 <button
                   onClick={() => handleExportPDF(true)}
                   disabled={isExporting}
-                  className={`px-3 py-2 text-sm rounded-lg font-medium transition-all duration-200 ${
+                  className={`h-8 px-3 text-xs font-medium rounded-md transition-all ${
                     isExporting
-                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                      : 'bg-blue-500 text-white hover:bg-blue-600 shadow-md'
+                      ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      : 'bg-slate-600 text-white hover:bg-slate-700'
                   }`}
-                  title="ייצא PDF של הדוח הערוך (React-PDF - חדש)"
+                  title="ייצא PDF (React-PDF)"
                 >
-                  {isExporting ? (
-                    <>
-                      <span className="inline-block animate-spin mr-1">⟳</span>
-                      מייצא...
-                    </>
-                  ) : (
-                    <>⚡ ייצא PDF (React-PDF)</>
-                  )}
+                  {isExporting ? 'מייצא...' : 'PDF+'}
                 </button>
                 <button
                   onClick={handleExportDOCX}
                   disabled={isExporting}
-                  className={`px-3 py-2 text-sm rounded-lg font-medium transition-all duration-200 ${
+                  className={`h-8 px-3 text-xs font-medium rounded-md transition-all ${
                     isExporting
-                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                      : 'bg-purple-500 text-white hover:bg-purple-600 shadow-md'
+                      ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      : 'bg-slate-500 text-white hover:bg-slate-600'
                   }`}
-                  title="ייצא קובץ Word (DOCX)"
+                  title="ייצא Word"
                 >
-                  {isExporting ? (
-                    <>
-                      <span className="inline-block animate-spin mr-1">⟳</span>
-                      מייצא...
-                    </>
-                  ) : (
-                    <>📝 ייצא Word</>
-                  )}
+                  {isExporting ? 'מייצא...' : 'Word'}
                 </button>
               </div>
-              
-            <button
-              onClick={handleManualRefresh}
-              disabled={isRefreshing}
-              className={`px-3 py-2 text-sm rounded-lg font-medium transition-all duration-200 ${
-                isRefreshing 
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                  : 'bg-green-500 text-white hover:bg-green-600 shadow-md'
-              }`}
-              title="רענן נתונים מהשרת"
-            >
-              {isRefreshing ? (
-                <>
-                  <span className="inline-block animate-spin mr-1">⟳</span>
-                  מרענן...
-                </>
-              ) : (
-                <>🔄 רענן נתונים</>
-              )}
-            </button>
+
+              {/* Refresh button */}
+              <button
+                onClick={handleManualRefresh}
+                disabled={isRefreshing}
+                className={`h-8 px-3 text-xs font-medium rounded-md transition-all ${
+                  isRefreshing
+                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+                title="רענן נתונים"
+              >
+                {isRefreshing ? 'מרענן...' : 'רענן'}
+              </button>
             </>
           )}
         </div>
       </div>
-          
-      <div className="px-4 py-2 border-b bg-white flex items-center justify-between">
+
+      {/* Edit toolbar */}
+      <div className="px-4 py-2 border-b bg-gray-50 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <button
             onClick={toggleEditMode}
-            className={`px-4 py-2 text-sm font-semibold rounded-md shadow transition-colors ${
-              isEditMode 
-                ? 'bg-slate-900 text-white hover:bg-slate-800 border border-slate-950'
-                : 'bg-amber-500 text-white hover:bg-amber-600 border border-amber-600'
+            className={`h-8 px-4 text-xs font-semibold rounded-md transition-all ${
+              isEditMode
+                ? 'bg-teal-600 text-white hover:bg-teal-700'
+                : 'bg-amber-500 text-white hover:bg-amber-600'
             }`}
-            title={isEditMode ? 'סגור את מצב העריכה' : 'פתח את מצב העריכה'}
+            title={isEditMode ? 'סגור מצב עריכה' : 'כניסה למצב עריכה'}
           >
-            {isEditMode ? '🚪 סגור מצב עריכה' : '✏️ כניסה למצב עריכה'}
+            {isEditMode ? 'סגור עריכה' : 'עריכה'}
           </button>
-          
+
           {isEditMode && (
             <>
+              <div className="w-px h-6 bg-gray-300" />
+
               <button
                 onClick={handleSave}
                 disabled={isSaving || Object.keys(customHtmlOverrides).length === 0}
-                className={`px-3 py-1 text-xs rounded border transition-colors ${
+                className={`h-8 px-3 text-xs font-medium rounded-md transition-all ${
                   isSaving || Object.keys(customHtmlOverrides).length === 0
-                    ? 'bg-gray-300 text-gray-500 border-gray-400 cursor-not-allowed'
-                    : 'bg-green-500 text-white border-green-600 hover:bg-green-600'
+                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    : 'bg-green-600 text-white hover:bg-green-700'
                 }`}
-                title={Object.keys(customHtmlOverrides).length === 0 ? 'אין שינויים לשמירה' : 'שמור שינויים'}
+                title={Object.keys(customHtmlOverrides).length === 0 ? 'אין שינויים' : 'שמור שינויים'}
               >
-                {isSaving ? (
-                  <>
-                    <span className="inline-block animate-spin mr-1">⟳</span>
-                    שומר...
-                  </>
-                ) : (
-                  <>💾 שמור ({Object.keys(customHtmlOverrides).length})</>
-                )}
-              </button>
-              
-              <button
-                onClick={handleRevert}
-                disabled={isSaving || (Object.keys(customHtmlOverrides).length === 0 && !(data as any).customDocumentEdits && !(data as any).propertyAnalysis?.__customDocumentEdits)}
-                className={`px-3 py-1 text-xs rounded border transition-colors ${
-                  isSaving || (Object.keys(customHtmlOverrides).length === 0 && !(data as any).customDocumentEdits && !(data as any).propertyAnalysis?.__customDocumentEdits)
-                    ? 'bg-gray-300 text-gray-500 border-gray-400 cursor-not-allowed'
-                    : 'bg-red-500 text-white border-red-600 hover:bg-red-600'
-                }`}
-                title={
-                  isSaving
-                    ? 'מבטל...'
-                    : (Object.keys(customHtmlOverrides).length === 0 && !(data as any).customDocumentEdits && !(data as any).propertyAnalysis?.__customDocumentEdits)
-                      ? 'אין שינויים לביטול'
-                      : 'בטל את כל השינויים'
-                }
-              >
-                {isSaving ? (
-                  <>
-                    <span className="inline-block animate-spin mr-1">⟳</span>
-                    מבטל...
-                  </>
-                ) : (
-                  <>↶ בטל שינויים</>
-                )}
+                {isSaving ? 'שומר...' : `שמור (${Object.keys(customHtmlOverrides).length})`}
               </button>
 
               <button
-                onClick={handleAddFootnote}
-                className="px-3 py-1 text-xs rounded border transition-colors bg-purple-500 text-white border-purple-600 hover:bg-purple-600"
-                title="הוסף הערת שוליים במיקום הסמן"
+                onClick={handleRevert}
+                disabled={isSaving || (Object.keys(customHtmlOverrides).length === 0 && !(data as any).customDocumentEdits && !(data as any).propertyAnalysis?.__customDocumentEdits)}
+                className={`h-8 px-3 text-xs font-medium rounded-md transition-all ${
+                  isSaving || (Object.keys(customHtmlOverrides).length === 0 && !(data as any).customDocumentEdits && !(data as any).propertyAnalysis?.__customDocumentEdits)
+                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    : 'bg-white text-red-600 border border-red-300 hover:bg-red-50'
+                }`}
+                title="בטל שינויים"
               >
-                📝 הוספת הערת שוליים
+                {isSaving ? 'מבטל...' : 'בטל'}
+              </button>
+
+              <div className="w-px h-6 bg-gray-300" />
+
+              <button
+                onClick={handleAddFootnote}
+                className="h-8 px-3 text-xs font-medium rounded-md bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 transition-all"
+                title="הוסף הערת שוליים"
+              >
+                הערת שוליים
               </button>
 
               <button
                 onClick={() => setShowCSVUploadDialog(true)}
-                className="px-3 py-1 text-xs rounded border transition-colors bg-blue-500 text-white border-blue-600 hover:bg-blue-600"
-                title="העלה קובץ CSV כטבלה"
+                className="h-8 px-3 text-xs font-medium rounded-md bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 transition-all"
+                title="הוסף טבלה מ-CSV"
               >
-                📊 הוסף טבלה מ-CSV
+                טבלה מ-CSV
               </button>
 
-              <div className="text-xs text-blue-600 bg-blue-50 px-3 py-1 rounded">
-                💡 לחץ על טקסט או תמונה כדי לערוך
-            </div>
+              <div className="w-px h-6 bg-gray-300" />
+
+              <span className="text-xs text-gray-500">
+                לחץ על טקסט או תמונה לעריכה
+              </span>
             </>
           )}
         </div>
