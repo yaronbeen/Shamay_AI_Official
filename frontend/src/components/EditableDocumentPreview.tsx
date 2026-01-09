@@ -1017,6 +1017,15 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
       currentPage.id = `page-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
     }
 
+    // Get the page number from the page ID or index
+    const allPages = doc.querySelectorAll('.page')
+    let pageNumber = 1
+    allPages.forEach((page, idx) => {
+      if (page === currentPage) {
+        pageNumber = idx + 1
+      }
+    })
+
     // Get or create footnotes container for this page
     let footnotesContainer = currentPage.querySelector('.page-footnotes')
 
@@ -1094,11 +1103,24 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
       ...updates
     }))
 
+    // Store structured footnote data for DOCX export
+    // This allows DOCX to render footnotes properly without parsing HTML
+    const existingFootnotes = (data as any).structuredFootnotes || []
+    const newFootnote = {
+      id: `fn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      pageNumber,
+      footnoteNumber,
+      text: footnoteText.trim()
+    }
+    onDataChange({
+      structuredFootnotes: [...existingFootnotes, newFootnote]
+    } as any)
+
     // Clear selection
     selection.removeAllRanges()
 
     alert(`✅ הערת שוליים מספר ${footnoteNumber} נוספה בהצלחה`)
-  }, [])
+  }, [data, onDataChange])
 
   // Handle inserting a custom table from CSV
   const handleInsertCustomTable = useCallback((table: CustomTable) => {
@@ -1362,7 +1384,7 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
   }, [applyOverridesToDocument, applyEditableBindings, isEditMode, updateIframeHeight])
 
   return (
-    <div className="bg-white shadow-lg rounded-lg overflow-hidden max-w-[1400px] mx-auto">
+    <div className="bg-white shadow-lg rounded-lg overflow-hidden max-w-[1400px] mx-auto flex flex-col h-full">
       <div className="bg-gray-100 px-4 py-3 border-b flex justify-between items-center sticky top-0 z-50">
         <div>
           <h3 className="text-sm font-medium text-gray-700">תצוגה מקדימה של הדוח</h3>
@@ -1548,7 +1570,7 @@ export function EditableDocumentPreview({ data, onDataChange }: EditableDocument
         </div>
       </div>
       
-      <div className="p-4 overflow-x-auto">
+      <div className="p-4 overflow-auto flex-1 min-h-0">
         {!htmlContent ? (
           <div
             className="w-full border border-gray-200 rounded shadow-sm bg-gray-50 mx-auto flex flex-col items-center justify-center"

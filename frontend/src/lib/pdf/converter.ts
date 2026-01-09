@@ -457,7 +457,9 @@ export function convertValuationDataToReportData(
       freeFromDebtsText: 'הכול במצבו הנוכחי, כריק, פנוי וחופשי מכל מחזיק, חוב ושיעבוד, נכון לתאריך חוות-דעת זו.',
       declarationText: 'הננו מצהירים, כי אין לנו כל עניין אישי בנכס נשוא השומה, בבעלי הזכויות בו במזמין השומה.',
       standardsText: 'הדו"ח הוכן על פי תקנות שמאי המקרקעין (אתיקה מקצועית), התשכ"ו – 1966 ועל פי התקנים המקצועיים של הועדה לתקינה שמאית.'
-    }
+    },
+    // Pass structured footnotes for DOCX export
+    structuredFootnotes: (valuationData as any).structuredFootnotes || []
   }
 }
 

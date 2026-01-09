@@ -793,7 +793,7 @@ export default function WizardPage() {
 
           {/* Document Preview - Takes 5/12 of the width (42%) - Hidden on Step 3 which has its own layout */}
           {currentStep !== 3 && (
-            <div className="xl:col-span-5">
+            <div className="xl:col-span-5 sticky top-24 self-start h-[calc(100vh-8rem)]">
               <DocumentPreview data={data} onDataChange={updateData} />
             </div>
           )}

@@ -881,7 +881,44 @@ const buildBaseCss = (settings?: CompanySettings) => `
     flex-direction: column;
     overflow: hidden;
   }
-  
+
+  /* Visual page separator for preview (dashed line between pages) */
+  .page:not(.cover):not(:last-of-type)::after {
+    content: '';
+    display: block;
+    position: absolute;
+    bottom: -10px;
+    left: 10%;
+    right: 10%;
+    border-bottom: 2px dashed #94a3b8;
+    pointer-events: none;
+  }
+
+  /* Auto page break visual marker */
+  .auto-page-break-marker {
+    position: relative;
+    margin: 12px 0;
+  }
+  .auto-page-break-marker::before {
+    content: '--- עמוד חדש ---';
+    display: block;
+    text-align: center;
+    color: #94a3b8;
+    font-size: 9pt;
+    border-top: 1px dashed #94a3b8;
+    padding-top: 4px;
+  }
+
+  /* Hide visual separators in print/PDF */
+  @media print {
+    .page::after {
+      display: none !important;
+    }
+    .auto-page-break-marker::before {
+      display: none !important;
+    }
+  }
+
   /* ===== HEADER - MMBL Style - Compact ===== */
   .page-header {
     text-align: center;
@@ -1617,6 +1654,65 @@ const pageNumberScript = `
 
 const autoPaginateScript = `
   <script>
+    // Helper functions
+    const mmToPx = (mm) => (mm * 96) / 25.4
+    const MAX_CONTENT_HEIGHT = Math.round(mmToPx(297 - 30)) // A4 height minus ~15mm top/bottom
+    const HALF_PAGE_HEIGHT = MAX_CONTENT_HEIGHT * 0.5
+
+    // ===== CHAPTER TITLE PAGE BREAK LOGIC =====
+    // If a chapter title is in the bottom 50% of page, move it to next page
+    const handleChapterTitlePageBreaks = () => {
+      // Remove any previously inserted auto page breaks
+      const existingBreaks = Array.from(document.querySelectorAll('.auto-page-break-marker'))
+      existingBreaks.forEach((el) => el.remove())
+
+      const chapterTitles = Array.from(document.querySelectorAll('.chapter-title'))
+
+      chapterTitles.forEach((title) => {
+        const page = title.closest('.page')
+        if (!page || page.classList.contains('cover')) return
+
+        const pageBody = page.querySelector('.page-body')
+        if (!pageBody) return
+
+        const pageRect = pageBody.getBoundingClientRect()
+        const titleRect = title.getBoundingClientRect()
+
+        // Calculate position relative to page body
+        const titlePositionInPage = titleRect.top - pageRect.top
+
+        // If title is in bottom 50% of page, we need a page break
+        if (titlePositionInPage > HALF_PAGE_HEIGHT) {
+          // Find all siblings before this title (content that stays on current page)
+          const allChildren = Array.from(pageBody.children)
+          const titleIndex = allChildren.indexOf(title.closest('.section-block') || title)
+
+          if (titleIndex > 0 && title.parentElement) {
+            // Create a page break marker before the chapter title with visual indicator
+            const pageBreak = document.createElement('div')
+            pageBreak.className = 'chapter-page-break auto-page-break-marker'
+            pageBreak.style.cssText = 'break-before: page; page-break-before: always;'
+            pageBreak.setAttribute('data-page-break', 'auto')
+            title.parentElement.insertBefore(pageBreak, title)
+          }
+        }
+      })
+    }
+
+    // Expose global function for re-triggering pagination
+    window.__applyAutoPagination = function(force = false) {
+      if (!force && document.body.dataset.paginated === 'true') {
+        return;
+      }
+
+      // Run chapter title check
+      handleChapterTitlePageBreaks()
+
+      if (!force) {
+        document.body.dataset.paginated = 'true';
+      }
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
       if (document.body.dataset.paginated === 'true') {
         return;
@@ -1625,45 +1721,6 @@ const autoPaginateScript = `
 
       const previouslyGenerated = Array.from(document.querySelectorAll('section.page[data-generated-page=\"true\"]'));
       previouslyGenerated.forEach((page) => page.remove());
-
-      const mmToPx = (mm) => (mm * 96) / 25.4
-      const MAX_CONTENT_HEIGHT = Math.round(mmToPx(297 - 30)) // A4 height minus ~15mm top/bottom
-      const HALF_PAGE_HEIGHT = MAX_CONTENT_HEIGHT * 0.5
-
-      // ===== CHAPTER TITLE PAGE BREAK LOGIC =====
-      // If a chapter title is in the bottom 50% of page, move it to next page
-      const handleChapterTitlePageBreaks = () => {
-        const chapterTitles = Array.from(document.querySelectorAll('.chapter-title'))
-
-        chapterTitles.forEach((title) => {
-          const page = title.closest('.page')
-          if (!page || page.classList.contains('cover')) return
-
-          const pageBody = page.querySelector('.page-body')
-          if (!pageBody) return
-
-          const pageRect = pageBody.getBoundingClientRect()
-          const titleRect = title.getBoundingClientRect()
-
-          // Calculate position relative to page body
-          const titlePositionInPage = titleRect.top - pageRect.top
-
-          // If title is in bottom 50% of page, we need a page break
-          if (titlePositionInPage > HALF_PAGE_HEIGHT) {
-            // Find all siblings before this title (content that stays on current page)
-            const allChildren = Array.from(pageBody.children)
-            const titleIndex = allChildren.indexOf(title.closest('.section-block') || title)
-
-            if (titleIndex > 0 && title.parentElement) {
-              // Create a page break marker before the chapter title
-              const pageBreak = document.createElement('div')
-              pageBreak.className = 'chapter-page-break'
-              pageBreak.style.cssText = 'break-before: page; page-break-before: always; height: 0;'
-              title.parentElement.insertBefore(pageBreak, title)
-            }
-          }
-        })
-      }
 
       // Run chapter title check before pagination
       handleChapterTitlePageBreaks()

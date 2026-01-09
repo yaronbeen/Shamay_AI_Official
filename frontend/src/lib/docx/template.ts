@@ -12,6 +12,7 @@ import {
   UnderlineType,
   Footer,
   PageNumber,
+  FootnoteReferenceRun,
 } from 'docx'
 import { ReportData } from '../pdf/types'
 
@@ -1173,6 +1174,110 @@ export function buildDocxDocument(
   const propertyAddress = data.address?.fullAddressLine ||
     `${data.address?.street || ''} ${data.address?.buildingNumber || ''}, ${data.address?.city || ''}`.trim()
 
+  // Build footnotes object for Word's native footnote support
+  const footnotes = data.structuredFootnotes?.reduce((acc, footnote, index) => {
+    // Use index + 1 as the footnote ID (Word footnotes are 1-indexed)
+    acc[index + 1] = {
+      children: [
+        new Paragraph({
+          ...RTL_PARAGRAPH,
+          children: [
+            new TextRun({
+              ...RTL_RUN,
+              text: footnote.text,
+              size: FONT_SIZES.FOOTNOTE,
+            }),
+          ],
+        }),
+      ],
+    }
+    return acc
+  }, {} as Record<number, { children: Paragraph[] }>) || {}
+
+  // Build footnotes section content (for appendix display)
+  const buildFootnotesSection = (): (Paragraph | Table)[] => {
+    if (!data.structuredFootnotes || data.structuredFootnotes.length === 0) {
+      return []
+    }
+
+    // Group footnotes by page number
+    const footnotesByPage = data.structuredFootnotes.reduce((acc, fn) => {
+      const pageNum = fn.pageNumber
+      if (!acc[pageNum]) {
+        acc[pageNum] = []
+      }
+      acc[pageNum].push(fn)
+      return acc
+    }, {} as Record<number, typeof data.structuredFootnotes>)
+
+    const elements: (Paragraph | Table)[] = [
+      // Section title
+      new Paragraph({
+        ...RTL_PARAGRAPH,
+        spacing: { before: 400, after: 200 },
+        children: [
+          new TextRun({
+            ...RTL_RUN,
+            text: 'הערות שוליים',
+            bold: true,
+            size: FONT_SIZES.SECTION_TITLE,
+            color: COLORS.PRIMARY,
+          }),
+        ],
+      }),
+    ]
+
+    // Add footnotes grouped by page
+    Object.entries(footnotesByPage)
+      .sort(([a], [b]) => parseInt(a) - parseInt(b))
+      .forEach(([pageNum, footnotes]) => {
+        // Page header
+        elements.push(
+          new Paragraph({
+            ...RTL_PARAGRAPH,
+            spacing: { before: 200, after: 100 },
+            children: [
+              new TextRun({
+                ...RTL_RUN,
+                text: `עמוד ${pageNum}:`,
+                bold: true,
+                size: FONT_SIZES.BODY,
+                color: COLORS.MUTED,
+              }),
+            ],
+          })
+        )
+
+        // Each footnote
+        footnotes
+          .sort((a, b) => a.footnoteNumber - b.footnoteNumber)
+          .forEach((fn) => {
+            elements.push(
+              new Paragraph({
+                ...RTL_PARAGRAPH,
+                spacing: { before: 50, after: 50 },
+                indent: { right: 400 },
+                children: [
+                  new TextRun({
+                    ...RTL_RUN,
+                    text: `${fn.footnoteNumber}. `,
+                    bold: true,
+                    size: FONT_SIZES.BODY,
+                  }),
+                  new TextRun({
+                    ...RTL_RUN,
+                    text: fn.text,
+                    size: FONT_SIZES.BODY,
+                  }),
+                ],
+              })
+            )
+          })
+      })
+
+    return elements
+  }
+
   // Build document with metadata
   return new Document({
     // Document metadata
@@ -1182,6 +1287,9 @@ export function buildDocxDocument(
     keywords: metadata?.keywords?.join(', ') || 'שומה, מקרקעין, הערכת שווי',
     description: metadata?.description || `שומת מקרקעין עבור ${data.meta?.clientName || 'לקוח'}`,
     lastModifiedBy: metadata?.lastModifiedBy || data.meta?.appraiserName || 'שמאי מקרקעין',
+
+    // Word native footnotes (for proper footnote rendering)
+    footnotes: Object.keys(footnotes).length > 0 ? footnotes : undefined,
 
     // Document sections
     sections: [
@@ -1230,6 +1338,13 @@ export function buildDocxDocument(
         ? [{
             properties: contentPageProperties,
             children: buildCustomTablesSection(data),
+          }]
+        : []),
+      // Footnotes section (only if there are footnotes)
+      ...(data.structuredFootnotes && data.structuredFootnotes.length > 0
+        ? [{
+            properties: contentPageProperties,
+            children: buildFootnotesSection(),
           }]
         : []),
     ],

@@ -187,5 +187,12 @@ export type ReportData = {
     headers: string[];
     rows: string[][];
   }>;
+  // Structured footnotes for DOCX export
+  structuredFootnotes?: Array<{
+    id: string;
+    pageNumber: number;
+    footnoteNumber: number;
+    text: string;
+  }>;
 };
 
