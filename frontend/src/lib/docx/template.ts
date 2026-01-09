@@ -11,8 +11,10 @@ import {
   WidthType,
   UnderlineType,
   Footer,
+  Header,
   PageNumber,
   FootnoteReferenceRun,
+  TextDirection,
 } from 'docx'
 import { ReportData } from '../pdf/types'
 
@@ -94,7 +96,7 @@ function scaleImageToFit(
   return { width: Math.round(newWidth), height: Math.round(newHeight) }
 }
 
-// Helper to create RTL paragraph
+// Helper to create RTL paragraph with 1.7 line spacing (matching HTML)
 function rtlParagraph(
   text: string,
   options: {
@@ -102,14 +104,18 @@ function rtlParagraph(
     size?: number
     color?: string
     alignment?: (typeof AlignmentType)[keyof typeof AlignmentType]
-    spacing?: { before?: number; after?: number }
+    spacing?: { before?: number; after?: number; line?: number }
     underline?: boolean
   } = {}
 ): Paragraph {
   return new Paragraph({
     bidirectional: true,
     alignment: options.alignment || AlignmentType.RIGHT,
-    spacing: options.spacing || { after: 100 },
+    spacing: {
+      after: options.spacing?.after ?? 100,
+      before: options.spacing?.before,
+      line: options.spacing?.line ?? 408, // 1.7 line spacing (matching HTML line-height: 1.7)
+    },
     children: [
       new TextRun({
         text,
@@ -251,23 +257,24 @@ function buildCoverPage(data: ReportData, images: ImageMap): (Paragraph | Table)
     })
   )
 
-  // Title box
+  // Title box (matching HTML .cover-title-box)
   content.push(
     new Paragraph({
       alignment: AlignmentType.CENTER,
+      bidirectional: true,
       spacing: { before: 200, after: 100 },
       shading: { fill: COLORS.LIGHT_GRAY },
       border: {
-        top: { style: BorderStyle.SINGLE, size: 1, color: COLORS.TEXT },
-        bottom: { style: BorderStyle.SINGLE, size: 1, color: COLORS.TEXT },
-        left: { style: BorderStyle.SINGLE, size: 1, color: COLORS.TEXT },
-        right: { style: BorderStyle.SINGLE, size: 1, color: COLORS.TEXT },
+        top: { style: BorderStyle.SINGLE, size: 12, color: COLORS.TEXT },
+        bottom: { style: BorderStyle.SINGLE, size: 12, color: COLORS.TEXT },
+        left: { style: BorderStyle.SINGLE, size: 12, color: COLORS.TEXT },
+        right: { style: BorderStyle.SINGLE, size: 12, color: COLORS.TEXT },
       },
       children: [
         new TextRun({
           text: 'חוות דעת בעניין',
           font: FONTS.HEBREW,
-          size: FONT_SIZES.TITLE,
+          size: FONT_SIZES.COVER_TITLE_MAIN, // 13pt matching HTML
           bold: true,
           rightToLeft: true,
         }),
@@ -275,31 +282,43 @@ function buildCoverPage(data: ReportData, images: ImageMap): (Paragraph | Table)
     })
   )
 
+  // "אומדן שווי זכויות במקרקעין" - matching HTML .cover-title-sub (15pt)
   content.push(
     rtlParagraph('אומדן שווי זכויות במקרקעין', {
       bold: true,
-      size: 32,
+      size: FONT_SIZES.COVER_TITLE_SUB, // 15pt
       color: COLORS.PRIMARY,
       alignment: AlignmentType.CENTER,
     })
   )
 
+  // "דירת מגורים" - matching HTML .cover-title-type (12pt)
   content.push(
     rtlParagraph('דירת מגורים', {
       bold: true,
-      size: FONT_SIZES.SECTION_TITLE,
+      size: FONT_SIZES.COVER_TITLE_TYPE, // 12pt
       color: COLORS.PRIMARY,
       alignment: AlignmentType.CENTER,
     })
   )
 
+  // Address with underline - matching HTML .cover-address
   content.push(
-    rtlParagraph(fullAddress, {
-      bold: true,
-      size: FONT_SIZES.SECTION_TITLE,
-      color: COLORS.PRIMARY,
+    new Paragraph({
       alignment: AlignmentType.CENTER,
+      bidirectional: true,
       spacing: { after: 300 },
+      children: [
+        new TextRun({
+          text: fullAddress,
+          font: FONTS.HEBREW,
+          size: FONT_SIZES.COVER_ADDRESS, // 12pt
+          bold: true,
+          color: COLORS.TEXT,
+          rightToLeft: true,
+          underline: { type: UnderlineType.SINGLE },
+        }),
+      ],
     })
   )
 
@@ -1083,12 +1102,76 @@ function buildCustomTablesSection(data: ReportData): (Paragraph | Table)[] {
   return content
 }
 
+// Create header with company branding (matching HTML preview)
+function createCompanyHeader(companyName?: string, tagline?: string): Header {
+  const children: Paragraph[] = []
+
+  // MMBL logo text
+  children.push(
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 0 },
+      children: [
+        new TextRun({
+          text: 'MMBL.',
+          font: FONTS.HEBREW,
+          size: 44, // 22pt
+          bold: true,
+          color: COLORS.PRIMARY,
+        }),
+      ],
+    })
+  )
+
+  // Company name
+  if (companyName) {
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 0 },
+        children: [
+          new TextRun({
+            text: companyName,
+            font: FONTS.HEBREW,
+            size: 18, // 9pt
+            bold: true,
+            color: COLORS.PRIMARY,
+            rightToLeft: true,
+          }),
+        ],
+      })
+    )
+  }
+
+  // Tagline
+  if (tagline) {
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 100 },
+        children: [
+          new TextRun({
+            text: tagline,
+            font: FONTS.HEBREW,
+            size: 16, // 8pt
+            color: COLORS.PRIMARY,
+            rightToLeft: true,
+          }),
+        ],
+      })
+    )
+  }
+
+  return new Header({ children })
+}
+
 // Create footer with page numbers
 function createPageNumberFooter(companyName?: string): Footer {
   return new Footer({
     children: [
       new Paragraph({
         alignment: AlignmentType.CENTER,
+        bidirectional: true,
         children: [
           new TextRun({
             text: companyName ? `${companyName} | ` : '',
@@ -1135,7 +1218,7 @@ export function buildDocxDocument(
   images: ImageMap,
   metadata?: DocumentMetadata
 ): Document {
-  // Page properties without footer (for cover page)
+  // Page properties without header/footer (for cover page)
   const coverPageProperties = {
     page: {
       size: {
@@ -1148,10 +1231,11 @@ export function buildDocxDocument(
         left: PAGE.MARGIN_LEFT,
         right: PAGE.MARGIN_RIGHT,
       },
+      textDirection: TextDirection.TOP_TO_BOTTOM_RIGHT_TO_LEFT,
     },
   }
 
-  // Page properties with footer (for content pages)
+  // Page properties with header and footer (for content pages)
   const contentPageProperties = {
     page: {
       size: {
@@ -1164,6 +1248,10 @@ export function buildDocxDocument(
         left: PAGE.MARGIN_LEFT,
         right: PAGE.MARGIN_RIGHT,
       },
+      textDirection: TextDirection.TOP_TO_BOTTOM_RIGHT_TO_LEFT,
+    },
+    headers: {
+      default: createCompanyHeader(data.cover.companyName, data.cover.companyTagline),
     },
     footers: {
       default: createPageNumberFooter(data.cover.companyName),

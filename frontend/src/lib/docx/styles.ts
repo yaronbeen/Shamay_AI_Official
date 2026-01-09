@@ -25,15 +25,21 @@ export const FONTS = {
   FALLBACK: 'Arial',
 }
 
-// Font sizes in half-points (Word uses half-points)
+// Font sizes in half-points (Word uses half-points: pt * 2)
+// Matching HTML template: body 12pt, chapter 14pt, section 12pt
 export const FONT_SIZES = {
-  TITLE_LARGE: 36, // 18pt
-  TITLE: 28, // 14pt
-  SECTION_TITLE: 26, // 13pt
-  BODY: 24, // 12pt
+  TITLE_LARGE: 36, // 18pt - Main cover title
+  TITLE: 28, // 14pt - Chapter titles (matches HTML .chapter-title 14pt)
+  SECTION_TITLE: 24, // 12pt - Section titles (matches HTML .section-title 12pt)
+  BODY: 24, // 12pt - Body text (matches HTML body font-size)
   SMALL: 22, // 11pt
   TABLE: 20, // 10pt
   FOOTNOTE: 18, // 9pt
+  // Cover page specific sizes (matching HTML)
+  COVER_TITLE_MAIN: 26, // 13pt - "חוות דעת בעניין"
+  COVER_TITLE_SUB: 30, // 15pt - "אומדן שווי זכויות במקרקעין"
+  COVER_TITLE_TYPE: 24, // 12pt - "דירת מגורים"
+  COVER_ADDRESS: 24, // 12pt - Address line
 }
 
 // Page dimensions in twips (1 inch = 1440 twips)
@@ -73,7 +79,7 @@ export const PARAGRAPH_STYLES = {
 
   body: {
     ...RTL_PARAGRAPH,
-    spacing: { after: 100, line: 276 }, // 1.15 line spacing
+    spacing: { after: 100, line: 408 }, // 1.7 line spacing (matching HTML line-height: 1.7)
   } as Partial<IParagraphOptions>,
 
   bullet: {
