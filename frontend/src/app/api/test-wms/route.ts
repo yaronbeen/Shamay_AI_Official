@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic'
+
 /**
  * Test WMS endpoint for GovMap static map images
  *
@@ -10,7 +13,7 @@ import { NextRequest, NextResponse } from 'next/server'
  */
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
+    const searchParams = request.nextUrl.searchParams
 
     // Get center coordinates (ITM - Israeli Transverse Mercator)
     const easting = parseFloat(searchParams.get('easting') || '178500')  // Default: Tel Aviv area
