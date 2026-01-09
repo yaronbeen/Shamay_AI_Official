@@ -3,6 +3,14 @@ import { NextRequest, NextResponse } from 'next/server'
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic'
 
+// ITM coordinate bounds for Israel
+const ITM_BOUNDS = {
+  easting: { min: 100000, max: 300000 },
+  northing: { min: 350000, max: 800000 },
+}
+const MAX_SIZE = 10000 // Max 10km area
+const MAX_DIMENSION = 4096 // Max image dimension
+
 /**
  * Test WMS endpoint for GovMap static map images
  *
@@ -41,6 +49,35 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         success: false,
         error: 'Invalid parameters: size, width, height must be positive numbers'
+      }, { status: 400 })
+    }
+
+    // Validate coordinate bounds (Israeli ITM projection)
+    if (easting < ITM_BOUNDS.easting.min || easting > ITM_BOUNDS.easting.max) {
+      return NextResponse.json({
+        success: false,
+        error: `Invalid easting: must be between ${ITM_BOUNDS.easting.min} and ${ITM_BOUNDS.easting.max}`
+      }, { status: 400 })
+    }
+
+    if (northing < ITM_BOUNDS.northing.min || northing > ITM_BOUNDS.northing.max) {
+      return NextResponse.json({
+        success: false,
+        error: `Invalid northing: must be between ${ITM_BOUNDS.northing.min} and ${ITM_BOUNDS.northing.max}`
+      }, { status: 400 })
+    }
+
+    if (size > MAX_SIZE) {
+      return NextResponse.json({
+        success: false,
+        error: `Invalid size: maximum allowed is ${MAX_SIZE} meters`
+      }, { status: 400 })
+    }
+
+    if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+      return NextResponse.json({
+        success: false,
+        error: `Invalid dimensions: maximum allowed is ${MAX_DIMENSION}x${MAX_DIMENSION} pixels`
       }, { status: 400 })
     }
 

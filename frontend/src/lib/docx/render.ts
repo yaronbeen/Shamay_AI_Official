@@ -38,6 +38,24 @@ export interface ImageLoadResult {
 export type ProgressCallback = (loaded: number, total: number, currentKey: string) => void
 
 /**
+ * Helper to create consistent "image too large" error responses
+ */
+function createImageTooLargeError(
+  key: string,
+  src: string,
+  sizeBytes: number
+): { data: null; error: ImageLoadError } {
+  return {
+    data: null,
+    error: {
+      key,
+      src: src.length > 100 ? src.substring(0, 100) : src,
+      error: `Image too large: ${(sizeBytes / 1024 / 1024).toFixed(1)}MB (max ${MAX_IMAGE_SIZE / 1024 / 1024}MB)`,
+    },
+  }
+}
+
+/**
  * Check if a URL is from an allowed domain
  */
 function isAllowedUrl(url: string): boolean {
@@ -143,14 +161,7 @@ async function loadImage(
 
       // Check size for base64 images too
       if (buffer.length > MAX_IMAGE_SIZE) {
-        return {
-          data: null,
-          error: {
-            key,
-            src: src.substring(0, 50),
-            error: `Image too large: ${(buffer.length / 1024 / 1024).toFixed(1)}MB (max ${MAX_IMAGE_SIZE / 1024 / 1024}MB)`,
-          },
-        }
+        return createImageTooLargeError(key, src, buffer.length)
       }
     } else if (src.startsWith('http://') || src.startsWith('https://')) {
       // Security check: validate domain - block in production to prevent SSRF
@@ -194,14 +205,7 @@ async function loadImage(
       // Check content-length before downloading
       const contentLength = response.headers.get('content-length')
       if (contentLength && parseInt(contentLength) > MAX_IMAGE_SIZE) {
-        return {
-          data: null,
-          error: {
-            key,
-            src,
-            error: `Image too large: ${(parseInt(contentLength) / 1024 / 1024).toFixed(1)}MB (max ${MAX_IMAGE_SIZE / 1024 / 1024}MB)`,
-          },
-        }
+        return createImageTooLargeError(key, src, parseInt(contentLength))
       }
 
       // Validate content type
@@ -217,14 +221,7 @@ async function loadImage(
 
       // Double-check size after download
       if (arrayBuffer.byteLength > MAX_IMAGE_SIZE) {
-        return {
-          data: null,
-          error: {
-            key,
-            src,
-            error: `Image too large: ${(arrayBuffer.byteLength / 1024 / 1024).toFixed(1)}MB`,
-          },
-        }
+        return createImageTooLargeError(key, src, arrayBuffer.byteLength)
       }
 
       buffer = Buffer.from(arrayBuffer)
