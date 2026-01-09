@@ -1003,7 +1003,7 @@ function buildSection5(data: ReportData): (Paragraph | Table)[] {
 }
 
 // Build Section 6 - Final Valuation
-function buildSection6(data: ReportData): (Paragraph | Table)[] {
+function buildSection6(data: ReportData, images: ImageMap): (Paragraph | Table)[] {
   const content: (Paragraph | Table)[] = []
 
   // Company header
@@ -1031,6 +1031,38 @@ function buildSection6(data: ReportData): (Paragraph | Table)[] {
   content.push(sectionTitle('הצהרה:'))
   content.push(rtlParagraph(data.section6.declarationText || SECTION6_DECLARATION_TEXT))
   content.push(rtlParagraph(data.section6.standardsText || SECTION6_STANDARDS_TEXT))
+
+  // Signature image
+  if (data.cover.signatureImage && images.has('signature')) {
+    const imgData = images.get('signature')!
+    const scaledSize = scaleImageToFit(imgData.width, imgData.height, 200, 100)
+    content.push(
+      new Paragraph({
+        alignment: AlignmentType.RIGHT,
+        bidirectional: true,
+        spacing: { before: 300, after: 100 },
+        children: [
+          new ImageRun({
+            data: imgData.buffer,
+            transformation: scaledSize,
+            type: 'png',
+          }),
+        ],
+      })
+    )
+  }
+
+  // Appraiser name and date
+  if (data.meta.appraiserName) {
+    content.push(
+      rtlParagraph(data.meta.appraiserName, { bold: true, spacing: { after: 50 } })
+    )
+    if (data.meta.appraiserLicenseNumber) {
+      content.push(
+        rtlParagraph(`שמאי מקרקעין מס' ${data.meta.appraiserLicenseNumber}`, { size: FONT_SIZES.SMALL })
+      )
+    }
+  }
 
   // Company footer
   if (data.cover.companyServices) {
@@ -1419,7 +1451,7 @@ export function buildDocxDocument(
       // Section 6 - Final Valuation
       {
         properties: contentPageProperties,
-        children: buildSection6(data),
+        children: buildSection6(data, images),
       },
       // Custom tables section (only if there are custom tables)
       ...(data.customTables && data.customTables.length > 0
