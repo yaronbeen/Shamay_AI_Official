@@ -3,298 +3,336 @@
  * Saves data to BOTH:
  * 1. shuma table (for the valuation snapshot)
  * 2. Individual extraction tables (normalized with references)
- * 
+ *
  * Uses Neon serverless driver for Vercel deployment
  */
 
-const crypto = require('crypto')
+const crypto = require("crypto");
 
 // Import based on environment
-let Pool, neonConfig
-const isDev = process.env.NODE_ENV !== 'production'
-const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV === 'production'
-const hasDatabaseURL = !!(process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_URL_NON_POOLING)
-const useLocalDB = isDev && !isVercel && (!hasDatabaseURL || process.env.USE_LOCAL_DB === 'true')
+let Pool, neonConfig;
+const isDev = process.env.NODE_ENV !== "production";
+const isVercel =
+  process.env.VERCEL === "1" || process.env.VERCEL_ENV === "production";
+const hasDatabaseURL = !!(
+  process.env.DATABASE_URL ||
+  process.env.POSTGRES_URL ||
+  process.env.POSTGRES_URL_NON_POOLING
+);
+const useLocalDB =
+  isDev &&
+  !isVercel &&
+  (!hasDatabaseURL || process.env.USE_LOCAL_DB === "true");
 
 if (useLocalDB) {
   // Local development: Use pg (standard PostgreSQL driver)
   try {
-    const pg = require('pg')
-    Pool = pg.Pool
-    console.log('✅ Using pg (local PostgreSQL)')
+    const pg = require("pg");
+    Pool = pg.Pool;
+    console.log("✅ Using pg (local PostgreSQL)");
   } catch (e) {
-    console.error('❌ Failed to import pg:', e.message)
-    throw new Error('pg module is required for local development')
+    console.error("❌ Failed to import pg:", e.message);
+    throw new Error("pg module is required for local development");
   }
 } else {
   // Production/Vercel or when DATABASE_URL is set: Use Neon serverless
   try {
-    const neonModule = require('@neondatabase/serverless')
-    neonConfig = neonModule.neonConfig
-    Pool = neonModule.Pool
-    console.log('✅ Using @neondatabase/serverless')
+    const neonModule = require("@neondatabase/serverless");
+    neonConfig = neonModule.neonConfig;
+    Pool = neonModule.Pool;
+    console.log("✅ Using @neondatabase/serverless");
   } catch (e) {
     // Fallback to pg if Neon is not available
     try {
-      const pg = require('pg')
-      Pool = pg.Pool
-      console.log('⚠️ Neon not available, falling back to pg')
+      const pg = require("pg");
+      Pool = pg.Pool;
+      console.log("⚠️ Neon not available, falling back to pg");
     } catch (pgError) {
-      console.error('❌ Failed to import both Neon and pg:', pgError.message)
-      throw new Error('Database driver is not available')
+      console.error("❌ Failed to import both Neon and pg:", pgError.message);
+      throw new Error("Database driver is not available");
     }
   }
 }
 
 // Lazy pool initialization - only create when first used
-let pool = null
+let pool = null;
 
 // In-memory cache for loadShumaForWizard to reduce repeated queries
 // Cache TTL: 5 seconds (balances freshness with performance)
-const shumaCache = new Map()
-const CACHE_TTL_MS = 5000 // 5 seconds
+const shumaCache = new Map();
+const CACHE_TTL_MS = 5000; // 5 seconds
 
 // Helper to safely parse JSON (handles both string and already-parsed objects)
 function safeParseJSON(value, defaultValue) {
-  if (!value) return defaultValue
-  if (typeof value === 'string') {
+  if (!value) return defaultValue;
+  if (typeof value === "string") {
     try {
-      return JSON.parse(value)
+      return JSON.parse(value);
     } catch (e) {
-      return defaultValue
+      return defaultValue;
     }
   }
-  return value
+  return value;
 }
 
 function getDatabaseConfig() {
-  const DATABASE_URL = process.env.DATABASE_URL
-  const POSTGRES_URL = process.env.POSTGRES_URL
-  const POSTGRES_URL_NON_POOLING = process.env.POSTGRES_URL_NON_POOLING
-  
-  const isDev = process.env.NODE_ENV !== 'production'
-  const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV === 'production'
-  const debugConfig = process.env.DEBUG_DB_CONFIG === 'true'
-  
+  const DATABASE_URL = process.env.DATABASE_URL;
+  const POSTGRES_URL = process.env.POSTGRES_URL;
+  const POSTGRES_URL_NON_POOLING = process.env.POSTGRES_URL_NON_POOLING;
+
+  const isDev = process.env.NODE_ENV !== "production";
+  const isVercel =
+    process.env.VERCEL === "1" || process.env.VERCEL_ENV === "production";
+  const debugConfig = process.env.DEBUG_DB_CONFIG === "true";
+
   // Check if we have a connection string
-  const connectionString = DATABASE_URL || POSTGRES_URL || POSTGRES_URL_NON_POOLING
-  
+  const connectionString =
+    DATABASE_URL || POSTGRES_URL || POSTGRES_URL_NON_POOLING;
+
   // Debug logging to understand what's happening
   if (isDev) {
-    console.log('🔍 getDatabaseConfig - DATABASE_URL:', DATABASE_URL ? 'SET (' + DATABASE_URL.substring(0, 30) + '...)' : 'NOT SET')
-    console.log('🔍 getDatabaseConfig - connectionString:', connectionString ? 'SET (' + connectionString.substring(0, 30) + '...)' : 'NOT SET')
-    console.log('🔍 getDatabaseConfig - USE_LOCAL_DB:', process.env.USE_LOCAL_DB || 'NOT SET')
+    console.log(
+      "🔍 getDatabaseConfig - DATABASE_URL:",
+      DATABASE_URL
+        ? "SET (" + DATABASE_URL.substring(0, 30) + "...)"
+        : "NOT SET",
+    );
+    console.log(
+      "🔍 getDatabaseConfig - connectionString:",
+      connectionString
+        ? "SET (" + connectionString.substring(0, 30) + "...)"
+        : "NOT SET",
+    );
+    console.log(
+      "🔍 getDatabaseConfig - USE_LOCAL_DB:",
+      process.env.USE_LOCAL_DB || "NOT SET",
+    );
   }
-  
+
   // Only log config details in dev mode with debug flag
   if (isDev && debugConfig) {
-    console.log('🔍 DB Config: Checking environment variables...')
-    console.log('🔍 DATABASE_URL:', DATABASE_URL ? 'SET ✅' : 'NOT SET ❌')
-    console.log('🔍 POSTGRES_URL:', POSTGRES_URL ? 'SET ✅' : 'NOT SET ❌')
-    console.log('🔍 POSTGRES_URL_NON_POOLING:', POSTGRES_URL_NON_POOLING ? 'SET ✅' : 'NOT SET ❌')
-    console.log('🔍 VERCEL:', isVercel ? 'YES' : 'NO')
-    console.log('🔍 NODE_ENV:', process.env.NODE_ENV)
-    console.log('🔍 DB_HOST:', process.env.DB_HOST || 'localhost')
-    console.log('🔍 USE_LOCAL_DB:', process.env.USE_LOCAL_DB || 'NOT SET')
+    console.log("🔍 DB Config: Checking environment variables...");
+    console.log("🔍 DATABASE_URL:", DATABASE_URL ? "SET ✅" : "NOT SET ❌");
+    console.log("🔍 POSTGRES_URL:", POSTGRES_URL ? "SET ✅" : "NOT SET ❌");
+    console.log(
+      "🔍 POSTGRES_URL_NON_POOLING:",
+      POSTGRES_URL_NON_POOLING ? "SET ✅" : "NOT SET ❌",
+    );
+    console.log("🔍 VERCEL:", isVercel ? "YES" : "NO");
+    console.log("🔍 NODE_ENV:", process.env.NODE_ENV);
+    console.log("🔍 DB_HOST:", process.env.DB_HOST || "localhost");
+    console.log("🔍 USE_LOCAL_DB:", process.env.USE_LOCAL_DB || "NOT SET");
   }
-  
+
   // Priority: If DATABASE_URL is set, use it (Neon) unless explicitly overridden
   // Only use local PostgreSQL if:
   // 1. USE_LOCAL_DB=true is explicitly set (override), OR
   // 2. No connection string is available at all
   if (connectionString) {
     // Check if user explicitly wants local DB despite having DATABASE_URL
-    if (isDev && !isVercel && process.env.USE_LOCAL_DB === 'true') {
+    if (isDev && !isVercel && process.env.USE_LOCAL_DB === "true") {
       if (debugConfig) {
-        console.log('⚠️ USE_LOCAL_DB=true set, overriding DATABASE_URL. Using local DB.')
+        console.log(
+          "⚠️ USE_LOCAL_DB=true set, overriding DATABASE_URL. Using local DB.",
+        );
       }
       return {
-        host: process.env.DB_HOST || 'localhost',
-        port: parseInt(process.env.DB_PORT || '5432'),
-        database: process.env.DB_NAME || 'shamay_land_registry',
-        user: process.env.DB_USER || 'postgres',
-        password: process.env.DB_PASSWORD || 'postgres123',
-      }
+        host: process.env.DB_HOST || "localhost",
+        port: parseInt(process.env.DB_PORT || "5432"),
+        database: process.env.DB_NAME || "shamay_land_registry",
+        user: process.env.DB_USER || "postgres",
+        password: process.env.DB_PASSWORD || "postgres123",
+      };
     }
-    
+
     // Use connection string (Neon) - this is the default when DATABASE_URL is set
     if (isDev && debugConfig) {
-      console.log('✅ Using connection string from env (Neon):', connectionString.substring(0, 20) + '...')
+      console.log(
+        "✅ Using connection string from env (Neon):",
+        connectionString.substring(0, 20) + "...",
+      );
     }
     return {
       connectionString,
-      ssl: { rejectUnauthorized: false }
-    }
+      ssl: { rejectUnauthorized: false },
+    };
   }
-  
+
   // No connection string available - use local PostgreSQL (only in dev)
   if (isDev && !isVercel) {
     if (debugConfig) {
-      console.log('✅ Using LOCAL PostgreSQL connection (no DATABASE_URL set)')
+      console.log("✅ Using LOCAL PostgreSQL connection (no DATABASE_URL set)");
     }
     return {
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT || '5432'),
-      database: process.env.DB_NAME || 'shamay_land_registry',
-      user: process.env.DB_USER || 'postgres',
-      password: process.env.DB_PASSWORD || 'postgres123',
-    }
+      host: process.env.DB_HOST || "localhost",
+      port: parseInt(process.env.DB_PORT || "5432"),
+      database: process.env.DB_NAME || "shamay_land_registry",
+      user: process.env.DB_USER || "postgres",
+      password: process.env.DB_PASSWORD || "postgres123",
+    };
   }
-  
+
   // Fallback to local PostgreSQL
   if (isDev && debugConfig) {
-    console.log('⚠️ No connection string found, using fallback local config')
+    console.log("⚠️ No connection string found, using fallback local config");
   }
   return {
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '5432'),
-    database: process.env.DB_NAME || 'shamay_land_registry',
-    user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'postgres123',
-  }
+    host: process.env.DB_HOST || "localhost",
+    port: parseInt(process.env.DB_PORT || "5432"),
+    database: process.env.DB_NAME || "shamay_land_registry",
+    user: process.env.DB_USER || "postgres",
+    password: process.env.DB_PASSWORD || "postgres123",
+  };
 }
 
 function getPool() {
   if (!pool) {
-    const isDev = process.env.NODE_ENV !== 'production'
+    const isDev = process.env.NODE_ENV !== "production";
     if (isDev) {
-      console.log('🔍 ShumaDB: Initializing connection pool...')
+      console.log("🔍 ShumaDB: Initializing connection pool...");
     }
-    
-    const config = getDatabaseConfig()
-    
+
+    const config = getDatabaseConfig();
+
     // CRITICAL: Neon Pool only works with connection strings, not with host/port/database config
     // If config doesn't have connectionString, we MUST use pg Pool, not Neon Pool
-    let actualPool = Pool
+    let actualPool = Pool;
     if (!config.connectionString) {
       // We're using local PostgreSQL - must use pg Pool
       // Check if current Pool is Neon's Pool (it won't work with localhost)
       try {
-        const pg = require('pg')
-        actualPool = pg.Pool
-        console.log('✅ Using pg Pool for local PostgreSQL connection')
+        const pg = require("pg");
+        actualPool = pg.Pool;
+        console.log("✅ Using pg Pool for local PostgreSQL connection");
       } catch (e) {
-        console.error('❌ Failed to import pg:', e.message)
-        throw new Error('pg module is required for local PostgreSQL connections')
+        console.error("❌ Failed to import pg:", e.message);
+        throw new Error(
+          "pg module is required for local PostgreSQL connections",
+        );
       }
     }
-    
+
     if (!actualPool) {
-      console.error('❌ Pool constructor is not available!')
-      throw new Error('Database Pool is not initialized. Make sure pg or @neondatabase/serverless is installed.')
+      console.error("❌ Pool constructor is not available!");
+      throw new Error(
+        "Database Pool is not initialized. Make sure pg or @neondatabase/serverless is installed.",
+      );
     }
-    
+
     // Add connection pool optimization settings
     if (!config.connectionString) {
       // Local development: configure pool limits
-      config.min = parseInt(process.env.DB_POOL_MIN || '2')
-      config.max = parseInt(process.env.DB_POOL_MAX || '10')
-      config.idleTimeoutMillis = parseInt(process.env.DB_POOL_IDLE_TIMEOUT || '30000')
-      config.connectionTimeoutMillis = parseInt(process.env.DB_POOL_CONNECTION_TIMEOUT || '2000')
+      config.min = parseInt(process.env.DB_POOL_MIN || "2");
+      config.max = parseInt(process.env.DB_POOL_MAX || "10");
+      config.idleTimeoutMillis = parseInt(
+        process.env.DB_POOL_IDLE_TIMEOUT || "30000",
+      );
+      config.connectionTimeoutMillis = parseInt(
+        process.env.DB_POOL_CONNECTION_TIMEOUT || "2000",
+      );
     }
-    
+
     if (isDev) {
-      console.log('🔍 ShumaDB: Creating pool with config:', {
+      console.log("🔍 ShumaDB: Creating pool with config:", {
         hasConnectionString: !!config.connectionString,
         host: config.host,
         database: config.database,
         min: config.min,
-        max: config.max
-      })
+        max: config.max,
+      });
     }
-    
+
     // Use Neon serverless in production
     if (process.env.VERCEL && neonConfig) {
       if (isDev) {
-        console.log('🚀 Configuring Neon for WebSocket (Vercel)')
+        console.log("🚀 Configuring Neon for WebSocket (Vercel)");
       }
-      neonConfig.fetchConnectionCache = true
+      neonConfig.fetchConnectionCache = true;
     }
-    
+
     try {
-      pool = new actualPool(config)
+      pool = new actualPool(config);
       if (isDev) {
-        console.log('✅ Pool created successfully')
+        console.log("✅ Pool created successfully");
       }
-      
+
       // Test the connection
-      pool.on('error', (err) => {
-        console.error('❌ Unexpected pool error:', err)
-      })
-      
+      pool.on("error", (err) => {
+        console.error("❌ Unexpected pool error:", err);
+      });
     } catch (error) {
-      console.error('❌ Failed to create pool:', error)
-      throw error
+      console.error("❌ Failed to create pool:", error);
+      throw error;
     }
   }
-  return pool
+  return pool;
 }
 
 const db = {
   query: async (text, params) => {
     // Only log queries in development mode
-    const isDev = process.env.NODE_ENV !== 'production'
-    if (isDev && process.env.DEBUG_DB_QUERIES === 'true') {
-      console.log('🔍 db.query:', text.substring(0, 50) + '...')
+    const isDev = process.env.NODE_ENV !== "production";
+    if (isDev && process.env.DEBUG_DB_QUERIES === "true") {
+      console.log("🔍 db.query:", text.substring(0, 50) + "...");
     }
-    
+
     // ALWAYS use Pool for parameterized queries (Neon sql client doesn't support $1, $2 syntax well)
     // The Neon sql client is best for tagged templates, which we're not using
-    const poolInstance = getPool()
+    const poolInstance = getPool();
     if (!poolInstance) {
-      throw new Error('Database pool is not initialized')
+      throw new Error("Database pool is not initialized");
     }
-    return poolInstance.query(text, params)
+    return poolInstance.query(text, params);
   },
   client: async () => {
-    const isDev = process.env.NODE_ENV !== 'production'
-    if (isDev && process.env.DEBUG_DB_QUERIES === 'true') {
-      console.log('🔍 db.client called')
+    const isDev = process.env.NODE_ENV !== "production";
+    if (isDev && process.env.DEBUG_DB_QUERIES === "true") {
+      console.log("🔍 db.client called");
     }
-    const poolInstance = getPool()
+    const poolInstance = getPool();
     if (!poolInstance) {
-      throw new Error('Database pool is not initialized')
+      throw new Error("Database pool is not initialized");
     }
-    if (isDev && process.env.DEBUG_DB_QUERIES === 'true') {
-      console.log('🔍 Connecting to pool...')
+    if (isDev && process.env.DEBUG_DB_QUERIES === "true") {
+      console.log("🔍 Connecting to pool...");
     }
     try {
-      const client = await poolInstance.connect()
-      if (isDev && process.env.DEBUG_DB_QUERIES === 'true') {
-        console.log('✅ Pool client connected')
+      const client = await poolInstance.connect();
+      if (isDev && process.env.DEBUG_DB_QUERIES === "true") {
+        console.log("✅ Pool client connected");
       }
-      return client
+      return client;
     } catch (error) {
-      console.error('❌ Failed to get pool client:', error)
-      throw error
+      console.error("❌ Failed to get pool client:", error);
+      throw error;
     }
   },
   end: () => {
-    const poolInstance = getPool()
+    const poolInstance = getPool();
     if (poolInstance) {
-      return poolInstance.end()
+      return poolInstance.end();
     }
-  }
-}
+  },
+};
 
 // Helper function to format dates for PostgreSQL
 function formatDateForDB(dateString) {
-  if (!dateString) return null
-  if (dateString === '') return null
-  
+  if (!dateString) return null;
+  if (dateString === "") return null;
+
   // If it's already in YYYY-MM-DD format, return as is
   if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
-    return dateString
+    return dateString;
   }
-  
+
   // Try to parse and format the date
   try {
-    const date = new Date(dateString)
-    if (isNaN(date.getTime())) return null
-    return date.toISOString().split('T')[0] // Returns YYYY-MM-DD
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return null;
+    return date.toISOString().split("T")[0]; // Returns YYYY-MM-DD
   } catch (error) {
-    console.warn('Invalid date format:', dateString)
-    return null
+    console.warn("Invalid date format:", dateString);
+    return null;
   }
 }
 
@@ -302,99 +340,138 @@ class ShumaDBEnhanced {
   /**
    * Save complete shuma data + create references in extraction tables
    */
-  static async saveShumaFromSession(sessionId, organizationId, userId, valuationData) {
-    const client = await db.client()
-    
+  static async saveShumaFromSession(
+    sessionId,
+    organizationId,
+    userId,
+    valuationData,
+  ) {
+    const client = await db.client();
+
     try {
-      console.log(`💾 Saving shuma for session ${sessionId}`)
-      console.log(`📦 Data keys:`, Object.keys(valuationData))
-      console.log(`📋 Has extractedData:`, !!valuationData.extractedData)
+      console.log(`💾 Saving shuma for session ${sessionId}`);
+      console.log(`📦 Data keys:`, Object.keys(valuationData));
+      console.log(`📋 Has extractedData:`, !!valuationData.extractedData);
       if (valuationData.extractedData) {
-        console.log(`📋 extractedData keys:`, Object.keys(valuationData.extractedData))
+        console.log(
+          `📋 extractedData keys:`,
+          Object.keys(valuationData.extractedData),
+        );
         try {
           // Validate extractedData can be serialized
-          JSON.stringify(valuationData.extractedData)
-          console.log(`✅ extractedData is serializable`)
+          JSON.stringify(valuationData.extractedData);
+          console.log(`✅ extractedData is serializable`);
         } catch (e) {
-          console.error(`❌ extractedData is NOT serializable:`, e.message)
-          throw new Error(`extractedData cannot be serialized: ${e.message}`)
+          console.error(`❌ extractedData is NOT serializable:`, e.message);
+          throw new Error(`extractedData cannot be serialized: ${e.message}`);
         }
       }
-      
-      await client.query('BEGIN')
-      
+
+      await client.query("BEGIN");
+
       // 1. Save/Update SHUMA table (main snapshot)
-      const shumaResult = await this._saveShumaTable(client, sessionId, organizationId, userId, valuationData)
-      const shumaId = shumaResult.shumaId
-      console.log(`✅ Saved to shuma table, shumaId: ${shumaId}`)
-      
+      const shumaResult = await this._saveShumaTable(
+        client,
+        sessionId,
+        organizationId,
+        userId,
+        valuationData,
+      );
+      const shumaId = shumaResult.shumaId;
+      console.log(`✅ Saved to shuma table, shumaId: ${shumaId}`);
+
       // 2. Save extracted data to individual tables WITH references
       if (valuationData.extractedData) {
         try {
-          await this._saveExtractedData(client, shumaId, sessionId, valuationData.extractedData)
-          console.log(`✅ Saved extracted data to normalized tables`)
+          await this._saveExtractedData(
+            client,
+            shumaId,
+            sessionId,
+            valuationData.extractedData,
+          );
+          console.log(`✅ Saved extracted data to normalized tables`);
         } catch (extractedDataError) {
-          console.error('❌ Error saving extracted data to normalized tables:', extractedDataError)
-          console.error('Stack:', extractedDataError.stack)
+          console.error(
+            "❌ Error saving extracted data to normalized tables:",
+            extractedDataError,
+          );
+          console.error("Stack:", extractedDataError.stack);
           // Don't fail the entire save - extracted_data JSONB column will still be saved
           // Log but continue
         }
       }
-      
+
       // 3. Save Garmushka measurements to garmushka table
       if (valuationData.garmushkaMeasurements) {
-        await this._saveGarmushkaData(client, shumaId, sessionId, valuationData.garmushkaMeasurements)
+        await this._saveGarmushkaData(
+          client,
+          shumaId,
+          sessionId,
+          valuationData.garmushkaMeasurements,
+        );
       }
-      
+
       // 4. Save GIS screenshots to images table
       if (valuationData.gisScreenshots) {
-        await this._saveGISScreenshots(client, shumaId, sessionId, valuationData.gisScreenshots)
+        await this._saveGISScreenshots(
+          client,
+          shumaId,
+          sessionId,
+          valuationData.gisScreenshots,
+        );
       }
-      
-      await client.query('COMMIT')
-      console.log(`✅ Successfully committed transaction for session ${sessionId}`)
-      
+
+      await client.query("COMMIT");
+      console.log(
+        `✅ Successfully committed transaction for session ${sessionId}`,
+      );
+
       // Clear cache for this session after saving to ensure fresh data
-      this.clearShumaCache(sessionId)
-      
-      return { success: true, shumaId }
-      
+      this.clearShumaCache(sessionId);
+
+      return { success: true, shumaId };
     } catch (error) {
-      await client.query('ROLLBACK')
-      console.error('❌ Error in saveShumaFromSession:', error)
-      console.error('Error message:', error.message)
-      console.error('Error stack:', error.stack)
+      await client.query("ROLLBACK");
+      console.error("❌ Error in saveShumaFromSession:", error);
+      console.error("Error message:", error.message);
+      console.error("Error stack:", error.stack);
       if (error.code) {
-        console.error('PostgreSQL error code:', error.code)
+        console.error("PostgreSQL error code:", error.code);
       }
       if (error.detail) {
-        console.error('PostgreSQL error detail:', error.detail)
+        console.error("PostgreSQL error detail:", error.detail);
       }
       if (error.hint) {
-        console.error('PostgreSQL error hint:', error.hint)
+        console.error("PostgreSQL error hint:", error.hint);
       }
-      return { error: error.message || 'Failed to save shuma' }
+      return { error: error.message || "Failed to save shuma" };
     } finally {
-      client.release()
+      client.release();
     }
   }
 
   /**
    * Save to main shuma table
    */
-  static async _saveShumaTable(client, sessionId, organizationId, userId, valuationData) {
-
+  static async _saveShumaTable(
+    client,
+    sessionId,
+    organizationId,
+    userId,
+    valuationData,
+  ) {
     // Check if shuma already exists for this session
     const existingShuma = await client.query(
-      'SELECT * FROM shuma WHERE session_id = $1',
-      [sessionId]
-    )
+      "SELECT * FROM shuma WHERE session_id = $1",
+      [sessionId],
+    );
 
-    let shumaId = existingShuma.rows[0]?.id
+    let shumaId = existingShuma.rows[0]?.id;
 
     if (!shumaId) {
       // Create new shuma - use defaults for missing fields
-      const result = await client.query(`
+      const result = await client.query(
+        `
         INSERT INTO shuma (
           session_id, organization_id, user_id,
           street, building_number, city, neighborhood, full_address,
@@ -413,82 +490,133 @@ class ShumaDBEnhanced {
           market_analysis, risk_assessment, recommendations,
           extracted_data, comparable_data, final_valuation,
           price_per_sqm, is_complete, uploads, gis_analysis, gis_screenshots,
-          garmushka_measurements, land_contamination, land_contamination_note
+          garmushka_measurements, land_contamination, land_contamination_note, structured_footnotes
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
           $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26,
           $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38,
           $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50,
-          $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68
+          $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69
         ) RETURNING id
-      `, [
-        sessionId, organizationId, userId,
-        valuationData.street || '', valuationData.buildingNumber || '', valuationData.city || '',
-        valuationData.neighborhood || '', valuationData.fullAddress || '', valuationData.rooms || '0.0',
-        valuationData.floor || '0', valuationData.airDirections || '', valuationData.area || 0,
-        valuationData.propertyEssence || '', valuationData.clientName || '',
-        valuationData.clientTitle ?? null, valuationData.clientNote ?? null, valuationData.clientRelation ?? null,
-        formatDateForDB(valuationData.visitDate), formatDateForDB(valuationData.valuationDate),
-        valuationData.valuationType ?? null, formatDateForDB(valuationData.valuationEffectiveDate),
-        valuationData.referenceNumber || '', valuationData.shamayName || '',
-        valuationData.shamaySerialNumber || '', valuationData.gush || '', valuationData.parcel || '',
-        this._parseNumeric(valuationData.parcelArea), valuationData.parcelShape || '', valuationData.parcelSurface || '',
-        valuationData.subParcel || '', this._parseNumeric(valuationData.registeredArea), this._parseNumeric(valuationData.builtArea),
-        this._parseNumeric(valuationData.balconyArea), valuationData.buildingPermitNumber || '', formatDateForDB(valuationData.buildingPermitDate),
-        valuationData.buildingDescription || '', this._parseNumeric(valuationData.buildingFloors), this._parseNumeric(valuationData.buildingUnits),
-        valuationData.buildingDetails || '', valuationData.constructionSource || '', valuationData.attachments || '',
-        valuationData.ownershipRights || '', valuationData.notes || '', valuationData.registryOffice || '',
-        formatDateForDB(valuationData.extractDate), valuationData.internalLayout || '', valuationData.finishStandard || '',
-        valuationData.finishDetails || '', JSON.stringify(valuationData.propertyImages || []),
-        valuationData.selectedImageIndex || 0, valuationData.selectedImagePreview || null,
-        JSON.stringify(valuationData.interiorImages || []), valuationData.signaturePreview || null,
-        JSON.stringify(valuationData.propertyAnalysis || {}), JSON.stringify(valuationData.comparableDataAnalysis || valuationData.marketAnalysis || {}),
-        JSON.stringify(valuationData.riskAssessment || {}), JSON.stringify(valuationData.recommendations || []),
-        JSON.stringify(valuationData.extractedData || {}), JSON.stringify(valuationData.comparableData || []),
-        valuationData.finalValuation || 0, valuationData.pricePerSqm || 0, valuationData.isComplete || false,
-        JSON.stringify(valuationData.uploads || []), JSON.stringify(valuationData.gisAnalysis || {}), JSON.stringify(valuationData.gisScreenshots || {}),
-        JSON.stringify(valuationData.garmushkaMeasurements || {}),
-        valuationData.landContamination ?? false, valuationData.landContaminationNote ?? null
-      ])
+      `,
+        [
+          sessionId,
+          organizationId,
+          userId,
+          valuationData.street || "",
+          valuationData.buildingNumber || "",
+          valuationData.city || "",
+          valuationData.neighborhood || "",
+          valuationData.fullAddress || "",
+          valuationData.rooms || "0.0",
+          valuationData.floor || "0",
+          valuationData.airDirections || "",
+          valuationData.area || 0,
+          valuationData.propertyEssence || "",
+          valuationData.clientName || "",
+          valuationData.clientTitle ?? null,
+          valuationData.clientNote ?? null,
+          valuationData.clientRelation ?? null,
+          formatDateForDB(valuationData.visitDate),
+          formatDateForDB(valuationData.valuationDate),
+          valuationData.valuationType ?? null,
+          formatDateForDB(valuationData.valuationEffectiveDate),
+          valuationData.referenceNumber || "",
+          valuationData.shamayName || "",
+          valuationData.shamaySerialNumber || "",
+          valuationData.gush || "",
+          valuationData.parcel || "",
+          this._parseNumeric(valuationData.parcelArea),
+          valuationData.parcelShape || "",
+          valuationData.parcelSurface || "",
+          valuationData.subParcel || "",
+          this._parseNumeric(valuationData.registeredArea),
+          this._parseNumeric(valuationData.builtArea),
+          this._parseNumeric(valuationData.balconyArea),
+          valuationData.buildingPermitNumber || "",
+          formatDateForDB(valuationData.buildingPermitDate),
+          valuationData.buildingDescription || "",
+          this._parseNumeric(valuationData.buildingFloors),
+          this._parseNumeric(valuationData.buildingUnits),
+          valuationData.buildingDetails || "",
+          valuationData.constructionSource || "",
+          valuationData.attachments || "",
+          valuationData.ownershipRights || "",
+          valuationData.notes || "",
+          valuationData.registryOffice || "",
+          formatDateForDB(valuationData.extractDate),
+          valuationData.internalLayout || "",
+          valuationData.finishStandard || "",
+          valuationData.finishDetails || "",
+          JSON.stringify(valuationData.propertyImages || []),
+          valuationData.selectedImageIndex || 0,
+          valuationData.selectedImagePreview || null,
+          JSON.stringify(valuationData.interiorImages || []),
+          valuationData.signaturePreview || null,
+          JSON.stringify(valuationData.propertyAnalysis || {}),
+          JSON.stringify(
+            valuationData.comparableDataAnalysis ||
+              valuationData.marketAnalysis ||
+              {},
+          ),
+          JSON.stringify(valuationData.riskAssessment || {}),
+          JSON.stringify(valuationData.recommendations || []),
+          JSON.stringify(valuationData.extractedData || {}),
+          JSON.stringify(valuationData.comparableData || []),
+          valuationData.finalValuation || 0,
+          valuationData.pricePerSqm || 0,
+          valuationData.isComplete || false,
+          JSON.stringify(valuationData.uploads || []),
+          JSON.stringify(valuationData.gisAnalysis || {}),
+          JSON.stringify(valuationData.gisScreenshots || {}),
+          JSON.stringify(valuationData.garmushkaMeasurements || {}),
+          valuationData.landContamination ?? false,
+          valuationData.landContaminationNote ?? null,
+          JSON.stringify(valuationData.structuredFootnotes || []),
+        ],
+      );
 
-      shumaId = result.rows[0].id
+      shumaId = result.rows[0].id;
     } else {
       // 🚨 CRITICAL: MERGE with existing data instead of overwriting!
-      const existingData = existingShuma.rows[0]
-      
+      const existingData = existingShuma.rows[0];
+
       // Helper function to safely merge values
-      const mergeValue = (newValue, existingValue, defaultValue = '') => {
+      const mergeValue = (newValue, existingValue, defaultValue = "") => {
         // If new value is explicitly provided and not empty/null/undefined, use it
-        if (newValue !== undefined && newValue !== null && newValue !== '') {
-          return newValue
+        if (newValue !== undefined && newValue !== null && newValue !== "") {
+          return newValue;
         }
         // Otherwise keep existing value
-        return existingValue !== undefined && existingValue !== null ? existingValue : defaultValue
-      }
-      
+        return existingValue !== undefined && existingValue !== null
+          ? existingValue
+          : defaultValue;
+      };
+
       // Helper for JSON fields - deep merge
       const mergeJSON = (newValue, existingValue, defaultValue = {}) => {
         if (newValue && Object.keys(newValue).length > 0) {
           // Merge new data with existing
-          return { ...existingValue, ...newValue }
+          return { ...existingValue, ...newValue };
         }
-        return existingValue || defaultValue
-      }
-      
+        return existingValue || defaultValue;
+      };
+
       // Helper for arrays - concatenate or replace
       const mergeArray = (newValue, existingValue, defaultValue = []) => {
         if (newValue && newValue.length > 0) {
-          return newValue // Replace with new array if provided
+          return newValue; // Replace with new array if provided
         }
-        return existingValue || defaultValue
-      }
-      
-      console.log('🔄 MERGING data for session:', sessionId)
-      console.log('📊 Existing data keys:', Object.keys(existingData))
-      console.log('📝 New data keys:', Object.keys(valuationData))
-      
+        return existingValue || defaultValue;
+      };
+
+      console.log("🔄 MERGING data for session:", sessionId);
+      console.log("📊 Existing data keys:", Object.keys(existingData));
+      console.log("📝 New data keys:", Object.keys(valuationData));
+
       // Update existing shuma with MERGED data
-      await client.query(`
+      await client.query(
+        `
         UPDATE shuma SET
           street = COALESCE(NULLIF($1, ''), street),
           building_number = COALESCE(NULLIF($2, ''), building_number),
@@ -555,37 +683,91 @@ class ShumaDBEnhanced {
           garmushka_measurements = CASE WHEN $58::text != '{}' THEN $58::jsonb ELSE garmushka_measurements END,
           land_contamination = COALESCE($64, land_contamination),
           land_contamination_note = CASE WHEN $65::text IS NOT NULL THEN $65::text ELSE land_contamination_note END,
+          structured_footnotes = CASE WHEN $66::text != '[]' THEN $66::jsonb ELSE structured_footnotes END,
           updated_at = NOW()
-        WHERE id = $66
-      `, [
-        valuationData.street, valuationData.buildingNumber,
-        valuationData.city, valuationData.neighborhood, valuationData.fullAddress, valuationData.rooms || '0.0',
-        valuationData.floor, valuationData.airDirections, valuationData.area || 0, valuationData.propertyEssence,
-        valuationData.clientName, formatDateForDB(valuationData.visitDate), formatDateForDB(valuationData.valuationDate), valuationData.referenceNumber,
-        valuationData.shamayName, valuationData.shamaySerialNumber, valuationData.gush, valuationData.parcel,
-        this._parseNumeric(valuationData.parcelArea), valuationData.parcelShape, valuationData.parcelSurface, valuationData.subParcel,
-        this._parseNumeric(valuationData.registeredArea), this._parseNumeric(valuationData.builtArea), this._parseNumeric(valuationData.balconyArea), valuationData.buildingPermitNumber,
-        formatDateForDB(valuationData.buildingPermitDate), valuationData.buildingDescription, this._parseNumeric(valuationData.buildingFloors),
-        this._parseNumeric(valuationData.buildingUnits), valuationData.buildingDetails, valuationData.constructionSource,
-        valuationData.attachments, valuationData.ownershipRights, valuationData.notes, valuationData.registryOffice,
-        formatDateForDB(valuationData.extractDate), valuationData.internalLayout, valuationData.finishStandard, valuationData.finishDetails,
-        JSON.stringify(valuationData.propertyImages || []), valuationData.selectedImageIndex, valuationData.selectedImagePreview,
-        JSON.stringify(valuationData.interiorImages || []), valuationData.signaturePreview, JSON.stringify(valuationData.propertyAnalysis || {}),
-        JSON.stringify(valuationData.comparableDataAnalysis || valuationData.marketAnalysis || {}), JSON.stringify(valuationData.riskAssessment || {}),
-        JSON.stringify(valuationData.recommendations || []), valuationData.extractedData ? JSON.stringify(valuationData.extractedData) : null,
-        JSON.stringify(valuationData.comparableData || []), valuationData.finalValuation, valuationData.pricePerSqm,
-        valuationData.isComplete, JSON.stringify(valuationData.uploads || []), JSON.stringify(valuationData.gisAnalysis || {}), JSON.stringify(valuationData.gisScreenshots || {}),
-        JSON.stringify(valuationData.garmushkaMeasurements || {}),
-        valuationData.clientTitle ?? null, valuationData.clientNote ?? null, valuationData.clientRelation ?? null,
-        valuationData.valuationType ?? null, formatDateForDB(valuationData.valuationEffectiveDate),
-        valuationData.landContamination ?? false, valuationData.landContaminationNote ?? null,
-        shumaId
-      ])
-      
-      console.log('✅ Data merged successfully for session:', sessionId)
+        WHERE id = $67
+      `,
+        [
+          valuationData.street,
+          valuationData.buildingNumber,
+          valuationData.city,
+          valuationData.neighborhood,
+          valuationData.fullAddress,
+          valuationData.rooms || "0.0",
+          valuationData.floor,
+          valuationData.airDirections,
+          valuationData.area || 0,
+          valuationData.propertyEssence,
+          valuationData.clientName,
+          formatDateForDB(valuationData.visitDate),
+          formatDateForDB(valuationData.valuationDate),
+          valuationData.referenceNumber,
+          valuationData.shamayName,
+          valuationData.shamaySerialNumber,
+          valuationData.gush,
+          valuationData.parcel,
+          this._parseNumeric(valuationData.parcelArea),
+          valuationData.parcelShape,
+          valuationData.parcelSurface,
+          valuationData.subParcel,
+          this._parseNumeric(valuationData.registeredArea),
+          this._parseNumeric(valuationData.builtArea),
+          this._parseNumeric(valuationData.balconyArea),
+          valuationData.buildingPermitNumber,
+          formatDateForDB(valuationData.buildingPermitDate),
+          valuationData.buildingDescription,
+          this._parseNumeric(valuationData.buildingFloors),
+          this._parseNumeric(valuationData.buildingUnits),
+          valuationData.buildingDetails,
+          valuationData.constructionSource,
+          valuationData.attachments,
+          valuationData.ownershipRights,
+          valuationData.notes,
+          valuationData.registryOffice,
+          formatDateForDB(valuationData.extractDate),
+          valuationData.internalLayout,
+          valuationData.finishStandard,
+          valuationData.finishDetails,
+          JSON.stringify(valuationData.propertyImages || []),
+          valuationData.selectedImageIndex,
+          valuationData.selectedImagePreview,
+          JSON.stringify(valuationData.interiorImages || []),
+          valuationData.signaturePreview,
+          JSON.stringify(valuationData.propertyAnalysis || {}),
+          JSON.stringify(
+            valuationData.comparableDataAnalysis ||
+              valuationData.marketAnalysis ||
+              {},
+          ),
+          JSON.stringify(valuationData.riskAssessment || {}),
+          JSON.stringify(valuationData.recommendations || []),
+          valuationData.extractedData
+            ? JSON.stringify(valuationData.extractedData)
+            : null,
+          JSON.stringify(valuationData.comparableData || []),
+          valuationData.finalValuation,
+          valuationData.pricePerSqm,
+          valuationData.isComplete,
+          JSON.stringify(valuationData.uploads || []),
+          JSON.stringify(valuationData.gisAnalysis || {}),
+          JSON.stringify(valuationData.gisScreenshots || {}),
+          JSON.stringify(valuationData.garmushkaMeasurements || {}),
+          valuationData.clientTitle ?? null,
+          valuationData.clientNote ?? null,
+          valuationData.clientRelation ?? null,
+          valuationData.valuationType ?? null,
+          formatDateForDB(valuationData.valuationEffectiveDate),
+          valuationData.landContamination ?? false,
+          valuationData.landContaminationNote ?? null,
+          JSON.stringify(valuationData.structuredFootnotes || []),
+          shumaId,
+        ],
+      );
+
+      console.log("✅ Data merged successfully for session:", sessionId);
     }
 
-    return { shumaId }
+    return { shumaId };
   }
 
   /**
@@ -596,49 +778,115 @@ class ShumaDBEnhanced {
     const getValue = (paths) => {
       for (const path of paths) {
         try {
-          const keys = path.split('.')
-          let value = extractedData
+          const keys = path.split(".");
+          let value = extractedData;
           for (const key of keys) {
-            if (value && typeof value === 'object' && key in value) {
-              value = value[key]
+            if (value && typeof value === "object" && key in value) {
+              value = value[key];
             } else {
-              value = undefined
-              break
+              value = undefined;
+              break;
             }
           }
-          if (value !== undefined && value !== null && value !== '') {
-            return value
+          if (value !== undefined && value !== null && value !== "") {
+            return value;
           }
         } catch (e) {
           // Skip invalid paths
-          continue
+          continue;
         }
       }
-      return undefined
-    }
-    
+      return undefined;
+    };
+
     // Extract flat values from nested structures
     const flatData = {
-      gush: getValue(['gush', 'land_registry.gush', 'land_registry.gush']),
-      parcel: getValue(['chelka', 'parcel', 'land_registry.chelka', 'land_registry.parcel']),
-      subParcel: getValue(['subParcel', 'sub_parcel', 'sub_chelka', 'land_registry.subParcel', 'land_registry.sub_parcel', 'land_registry.sub_chelka']),
-      registeredArea: getValue(['registeredArea', 'registered_area', 'apartment_registered_area', 'land_registry.registeredArea', 'land_registry.registered_area', 'land_registry.apartment_registered_area']),
-      registrationOffice: getValue(['registrationOffice', 'registry_office', 'registration_office', 'land_registry.registry_office', 'land_registry.registrationOffice']),
-      ownershipType: getValue(['ownershipType', 'ownership_type', 'land_registry.ownershipType', 'land_registry.ownership_type']),
-      owners: getValue(['owners', 'land_registry.owners']),
-      attachments: getValue(['attachments', 'land_registry.attachments']),
-      buildingPermitNumber: getValue(['buildingPermitNumber', 'building_permit_number', 'building_permit.permit_number']),
-      buildingPermitDate: getValue(['buildingPermitDate', 'building_permit_date', 'building_permit.permit_date']),
-      permittedUse: getValue(['permittedUse', 'permitted_use', 'building_permit.permittedUse', 'building_permit.permitted_use']),
-      buildingDescription: getValue(['buildingDescription', 'building_description', 'shared_building.buildingDescription', 'shared_building.building_description']),
-      buildingFloors: getValue(['buildingFloors', 'building_floors', 'shared_building.buildingFloors', 'shared_building.building_floors']),
-      buildingUnits: getValue(['buildingUnits', 'building_units', 'shared_building.buildingUnits', 'shared_building.building_units']),
-      commonAreas: getValue(['commonParts', 'common_parts', 'sharedAreas', 'shared_areas', 'land_registry.commonParts', 'land_registry.common_parts'])
-    }
-    
+      gush: getValue(["gush", "land_registry.gush", "land_registry.gush"]),
+      parcel: getValue([
+        "chelka",
+        "parcel",
+        "land_registry.chelka",
+        "land_registry.parcel",
+      ]),
+      subParcel: getValue([
+        "subParcel",
+        "sub_parcel",
+        "sub_chelka",
+        "land_registry.subParcel",
+        "land_registry.sub_parcel",
+        "land_registry.sub_chelka",
+      ]),
+      registeredArea: getValue([
+        "registeredArea",
+        "registered_area",
+        "apartment_registered_area",
+        "land_registry.registeredArea",
+        "land_registry.registered_area",
+        "land_registry.apartment_registered_area",
+      ]),
+      registrationOffice: getValue([
+        "registrationOffice",
+        "registry_office",
+        "registration_office",
+        "land_registry.registry_office",
+        "land_registry.registrationOffice",
+      ]),
+      ownershipType: getValue([
+        "ownershipType",
+        "ownership_type",
+        "land_registry.ownershipType",
+        "land_registry.ownership_type",
+      ]),
+      owners: getValue(["owners", "land_registry.owners"]),
+      attachments: getValue(["attachments", "land_registry.attachments"]),
+      buildingPermitNumber: getValue([
+        "buildingPermitNumber",
+        "building_permit_number",
+        "building_permit.permit_number",
+      ]),
+      buildingPermitDate: getValue([
+        "buildingPermitDate",
+        "building_permit_date",
+        "building_permit.permit_date",
+      ]),
+      permittedUse: getValue([
+        "permittedUse",
+        "permitted_use",
+        "building_permit.permittedUse",
+        "building_permit.permitted_use",
+      ]),
+      buildingDescription: getValue([
+        "buildingDescription",
+        "building_description",
+        "shared_building.buildingDescription",
+        "shared_building.building_description",
+      ]),
+      buildingFloors: getValue([
+        "buildingFloors",
+        "building_floors",
+        "shared_building.buildingFloors",
+        "shared_building.building_floors",
+      ]),
+      buildingUnits: getValue([
+        "buildingUnits",
+        "building_units",
+        "shared_building.buildingUnits",
+        "shared_building.building_units",
+      ]),
+      commonAreas: getValue([
+        "commonParts",
+        "common_parts",
+        "sharedAreas",
+        "shared_areas",
+        "land_registry.commonParts",
+        "land_registry.common_parts",
+      ]),
+    };
+
     // Save to land_registry_extracts if we have land registry data
     if (flatData.gush || flatData.parcel || flatData.owners) {
-      await client.query(`
+      await client.query(
+        `
         INSERT INTO land_registry_extracts (
           shuma_id, session_id,
           gush, gush_confidence,
@@ -650,28 +898,38 @@ class ShumaDBEnhanced {
           attachments, attachments_confidence
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         ON CONFLICT DO NOTHING
-      `, [
-        shumaId, sessionId,
-        this._truncateString(flatData.gush, 50),
-        this._validateConfidence(extractedData.gushConfidence, 0.95),
-        this._truncateString(flatData.parcel, 50),
-        this._validateConfidence(extractedData.parcelConfidence, 0.95),
-        this._truncateString(flatData.subParcel, 50),
-        this._validateConfidence(extractedData.subParcelConfidence, 0.95),
-        this._parseNumeric(flatData.registeredArea),
-        this._validateConfidence(extractedData.registeredAreaConfidence, 0.95),
-        this._truncateString(flatData.registrationOffice, 255),
-        this._validateConfidence(extractedData.registrationOfficeConfidence, 0.95),
-        this._truncateString(flatData.ownershipType, 255),
-        this._validateConfidence(extractedData.ownershipTypeConfidence, 0.95),
-        flatData.attachments || null, // TEXT field, no truncation needed
-        this._validateConfidence(extractedData.attachmentsConfidence, 0.95)
-      ])
+      `,
+        [
+          shumaId,
+          sessionId,
+          this._truncateString(flatData.gush, 50),
+          this._validateConfidence(extractedData.gushConfidence, 0.95),
+          this._truncateString(flatData.parcel, 50),
+          this._validateConfidence(extractedData.parcelConfidence, 0.95),
+          this._truncateString(flatData.subParcel, 50),
+          this._validateConfidence(extractedData.subParcelConfidence, 0.95),
+          this._parseNumeric(flatData.registeredArea),
+          this._validateConfidence(
+            extractedData.registeredAreaConfidence,
+            0.95,
+          ),
+          this._truncateString(flatData.registrationOffice, 255),
+          this._validateConfidence(
+            extractedData.registrationOfficeConfidence,
+            0.95,
+          ),
+          this._truncateString(flatData.ownershipType, 255),
+          this._validateConfidence(extractedData.ownershipTypeConfidence, 0.95),
+          flatData.attachments || null, // TEXT field, no truncation needed
+          this._validateConfidence(extractedData.attachmentsConfidence, 0.95),
+        ],
+      );
     }
 
     // Save to building_permit_extracts if we have permit data
     if (flatData.buildingPermitNumber || flatData.buildingPermitDate) {
-      await client.query(`
+      await client.query(
+        `
         INSERT INTO building_permit_extracts (
           shuma_id, session_id,
           permit_number, permit_number_confidence,
@@ -681,24 +939,36 @@ class ShumaDBEnhanced {
           pdf_path
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         ON CONFLICT DO NOTHING
-      `, [
-        shumaId,
-        sessionId,
-        this._truncateString(flatData.buildingPermitNumber, 255),
-        this._validateConfidence(extractedData.buildingPermitNumberConfidence, 0.95),
-        formatDateForDB(flatData.buildingPermitDate) || null,
-        this._validateConfidence(extractedData.buildingPermitDateConfidence, 0.95),
-        this._truncateString(flatData.permittedUse, 255),
-        this._validateConfidence(extractedData.permittedUseConfidence, 0.95),
-        flatData.buildingDescription || null, // TEXT field, no truncation needed
-        this._validateConfidence(extractedData.buildingDescriptionConfidence, 0.95),
-        null
-      ])
+      `,
+        [
+          shumaId,
+          sessionId,
+          this._truncateString(flatData.buildingPermitNumber, 255),
+          this._validateConfidence(
+            extractedData.buildingPermitNumberConfidence,
+            0.95,
+          ),
+          formatDateForDB(flatData.buildingPermitDate) || null,
+          this._validateConfidence(
+            extractedData.buildingPermitDateConfidence,
+            0.95,
+          ),
+          this._truncateString(flatData.permittedUse, 255),
+          this._validateConfidence(extractedData.permittedUseConfidence, 0.95),
+          flatData.buildingDescription || null, // TEXT field, no truncation needed
+          this._validateConfidence(
+            extractedData.buildingDescriptionConfidence,
+            0.95,
+          ),
+          null,
+        ],
+      );
     }
 
     // Save to shared_building_order if we have shared building data
     if (flatData.buildingDescription || flatData.buildingFloors) {
-      await client.query(`
+      await client.query(
+        `
         INSERT INTO shared_building_order (
           shuma_id, session_id,
           building_description, building_description_confidence,
@@ -708,19 +978,32 @@ class ShumaDBEnhanced {
           pdf_path
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         ON CONFLICT DO NOTHING
-      `, [
-        shumaId,
-        sessionId,
-        flatData.buildingDescription || null,
-        this._validateConfidence(extractedData.buildingDescriptionConfidence, 0.95),
-        this._parseNumeric(flatData.buildingFloors),
-        this._validateConfidence(extractedData.buildingFloorsConfidence || extractedData.numberOfFloorsConfidence, 0.95),
-        this._parseNumeric(flatData.buildingUnits),
-        this._validateConfidence(extractedData.buildingUnitsConfidence || extractedData.numberOfUnitsConfidence, 0.95),
-        flatData.commonAreas || null,
-        this._validateConfidence(extractedData.commonAreasConfidence, 0.95),
-        null
-      ])
+      `,
+        [
+          shumaId,
+          sessionId,
+          flatData.buildingDescription || null,
+          this._validateConfidence(
+            extractedData.buildingDescriptionConfidence,
+            0.95,
+          ),
+          this._parseNumeric(flatData.buildingFloors),
+          this._validateConfidence(
+            extractedData.buildingFloorsConfidence ||
+              extractedData.numberOfFloorsConfidence,
+            0.95,
+          ),
+          this._parseNumeric(flatData.buildingUnits),
+          this._validateConfidence(
+            extractedData.buildingUnitsConfidence ||
+              extractedData.numberOfUnitsConfidence,
+            0.95,
+          ),
+          flatData.commonAreas || null,
+          this._validateConfidence(extractedData.commonAreasConfidence, 0.95),
+          null,
+        ],
+      );
     }
   }
 
@@ -728,55 +1011,60 @@ class ShumaDBEnhanced {
    * Validate confidence values to prevent NaN errors
    */
   static _validateConfidence(value, defaultValue) {
-    if (value === null || value === undefined || isNaN(value) || value === 'NaN') {
-      return defaultValue
+    if (
+      value === null ||
+      value === undefined ||
+      isNaN(value) ||
+      value === "NaN"
+    ) {
+      return defaultValue;
     }
-    const numValue = parseFloat(value)
+    const numValue = parseFloat(value);
     if (isNaN(numValue)) {
-      return defaultValue
+      return defaultValue;
     }
-    return Math.max(0, Math.min(1, numValue)) // Clamp between 0 and 1
+    return Math.max(0, Math.min(1, numValue)); // Clamp between 0 and 1
   }
 
   /**
    * Truncate string to fit in varchar field
    */
   static _truncateString(value, maxLength = 255) {
-    if (!value) return null
-    const str = String(value)
-    return str.length > maxLength ? str.substring(0, maxLength) : str
+    if (!value) return null;
+    const str = String(value);
+    return str.length > maxLength ? str.substring(0, maxLength) : str;
   }
 
   /**
    * Parse numeric value, returning null if invalid (e.g., "לא נמצא", "not found", etc.)
    */
   static _parseNumeric(value) {
-    if (value === null || value === undefined || value === '') return null
-    
+    if (value === null || value === undefined || value === "") return null;
+
     // Convert to string to check
-    const str = String(value).trim()
-    
+    const str = String(value).trim();
+
     // If it contains Hebrew or common "not found" phrases, return null
     if (
-      str.includes('לא נמצא') || 
-      str.includes('not found') || 
-      str.includes('N/A') ||
-      str.includes('n/a') ||
-      str === '-' ||
-      str === ''
+      str.includes("לא נמצא") ||
+      str.includes("not found") ||
+      str.includes("N/A") ||
+      str.includes("n/a") ||
+      str === "-" ||
+      str === ""
     ) {
-      return null
+      return null;
     }
-    
+
     // Try to parse as number
-    const num = parseFloat(str)
-    
+    const num = parseFloat(str);
+
     // If it's NaN or infinite, return null
     if (isNaN(num) || !isFinite(num)) {
-      return null
+      return null;
     }
-    
-    return num
+
+    return num;
   }
 
   /**
@@ -786,7 +1074,7 @@ class ShumaDBEnhanced {
     if (!floorsValue) return null;
 
     // Handle string values like "8-9" by extracting the first number
-    if (typeof floorsValue === 'string') {
+    if (typeof floorsValue === "string") {
       // Extract first number from range like "8-9" -> 8
       const match = floorsValue.match(/^(\d+)/);
       if (match) {
@@ -798,7 +1086,7 @@ class ShumaDBEnhanced {
     }
 
     // If it's already a number, return it
-    if (typeof floorsValue === 'number') {
+    if (typeof floorsValue === "number") {
       return floorsValue;
     }
 
@@ -810,49 +1098,61 @@ class ShumaDBEnhanced {
    * Note: pngExport should be a file URL (not base64) after processing in saveGarmushkaData
    */
   static async _saveGarmushkaData(client, shumaId, sessionId, garmushkaData) {
-    if (!garmushkaData || !Array.isArray(garmushkaData.measurementTable) || garmushkaData.measurementTable.length === 0) {
-      return
+    if (
+      !garmushkaData ||
+      !Array.isArray(garmushkaData.measurementTable) ||
+      garmushkaData.measurementTable.length === 0
+    ) {
+      return;
     }
 
-    const pngExport = typeof garmushkaData.pngExport === 'string' ? garmushkaData.pngExport.trim() : null
-    const pngHash = pngExport ? crypto.createHash('md5').update(pngExport).digest('hex') : null
+    const pngExport =
+      typeof garmushkaData.pngExport === "string"
+        ? garmushkaData.pngExport.trim()
+        : null;
+    const pngHash = pngExport
+      ? crypto.createHash("md5").update(pngExport).digest("hex")
+      : null;
 
-    const existingRows = await client.query(`
+    const existingRows = await client.query(
+      `
       SELECT id, md5(COALESCE(png_export, '')) AS png_hash
       FROM garmushka
       WHERE session_id = $1
       ORDER BY id DESC
-    `, [sessionId])
+    `,
+      [sessionId],
+    );
 
-    const duplicatesToDelete = []
-    const seenHashes = new Set()
-    let matchedRowId = null
+    const duplicatesToDelete = [];
+    const seenHashes = new Set();
+    let matchedRowId = null;
 
     for (const row of existingRows.rows) {
-      const rowHash = row.png_hash || null
+      const rowHash = row.png_hash || null;
       if (rowHash) {
         if (seenHashes.has(rowHash)) {
-          duplicatesToDelete.push(row.id)
-          continue
+          duplicatesToDelete.push(row.id);
+          continue;
         }
-        seenHashes.add(rowHash)
+        seenHashes.add(rowHash);
         if (!matchedRowId && pngHash && rowHash === pngHash) {
-          matchedRowId = row.id
+          matchedRowId = row.id;
         }
       }
     }
 
     if (duplicatesToDelete.length > 0) {
-      await client.query(
-        `DELETE FROM garmushka WHERE id = ANY($1::int[])`,
-        [duplicatesToDelete]
-      )
+      await client.query(`DELETE FROM garmushka WHERE id = ANY($1::int[])`, [
+        duplicatesToDelete,
+      ]);
     }
 
-    let garmushkaId = matchedRowId || null
+    let garmushkaId = matchedRowId || null;
 
     if (garmushkaId) {
-      await client.query(`
+      await client.query(
+        `
         UPDATE garmushka SET
           file_name = $1,
           measurement_table = $2,
@@ -861,17 +1161,23 @@ class ShumaDBEnhanced {
           is_calibrated = $5,
           png_export = $6
         WHERE id = $7
-      `, [
-        this._truncateString(garmushkaData.fileName || 'measurement.pdf', 255),
-        JSON.stringify(garmushkaData.measurementTable || []),
-        garmushkaData.metersPerPixel || null,
-        this._truncateString(garmushkaData.unitMode || 'metric', 20),
-        garmushkaData.isCalibrated || false,
-        pngExport,
-        garmushkaId
-      ])
+      `,
+        [
+          this._truncateString(
+            garmushkaData.fileName || "measurement.pdf",
+            255,
+          ),
+          JSON.stringify(garmushkaData.measurementTable || []),
+          garmushkaData.metersPerPixel || null,
+          this._truncateString(garmushkaData.unitMode || "metric", 20),
+          garmushkaData.isCalibrated || false,
+          pngExport,
+          garmushkaId,
+        ],
+      );
     } else {
-      const insertResult = await client.query(`
+      const insertResult = await client.query(
+        `
         INSERT INTO garmushka (
           file_name,
           measurement_table,
@@ -883,22 +1189,28 @@ class ShumaDBEnhanced {
           session_id
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING id
-      `, [
-        this._truncateString(garmushkaData.fileName || 'measurement.pdf', 255),
-        JSON.stringify(garmushkaData.measurementTable || []),
-        garmushkaData.metersPerPixel || null,
-        this._truncateString(garmushkaData.unitMode || 'metric', 20),
-        garmushkaData.isCalibrated || false,
-        pngExport,
-        shumaId,
-        sessionId
-      ])
+      `,
+        [
+          this._truncateString(
+            garmushkaData.fileName || "measurement.pdf",
+            255,
+          ),
+          JSON.stringify(garmushkaData.measurementTable || []),
+          garmushkaData.metersPerPixel || null,
+          this._truncateString(garmushkaData.unitMode || "metric", 20),
+          garmushkaData.isCalibrated || false,
+          pngExport,
+          shumaId,
+          sessionId,
+        ],
+      );
 
-      garmushkaId = insertResult.rows[0].id
+      garmushkaId = insertResult.rows[0].id;
     }
 
     // Update shuma with reference to garmushka record
-    await client.query(`
+    await client.query(
+      `
       UPDATE shuma SET
         garmushka_measurements = jsonb_set(
           COALESCE(garmushka_measurements, '{}'::jsonb),
@@ -906,7 +1218,9 @@ class ShumaDBEnhanced {
           to_jsonb($1::integer)
         )
       WHERE id = $2
-    `, [garmushkaId, shumaId])
+    `,
+      [garmushkaId, shumaId],
+    );
   }
 
   /**
@@ -920,48 +1234,51 @@ class ShumaDBEnhanced {
   static async _saveBase64ImageToFile(base64Data, sessionId, filename) {
     try {
       // Extract base64 data (remove data:image/png;base64, prefix if present)
-      const base64String = base64Data.includes(',') 
-        ? base64Data.split(',')[1] 
-        : base64Data
-      
+      const base64String = base64Data.includes(",")
+        ? base64Data.split(",")[1]
+        : base64Data;
+
       // Convert base64 to Buffer
-      const buffer = Buffer.from(base64String, 'base64')
-      
+      const buffer = Buffer.from(base64String, "base64");
+
       // Check if we're in Vercel production
       // In Vercel, process.env.VERCEL is truthy (typically '1')
       // ALWAYS try Blob first if we're in Vercel, regardless of token (token might be auto-detected)
-      const isVercel = !!process.env.VERCEL || process.env.VERCEL_ENV === 'production'
-      
-      console.log('🔍 [SAVE] Environment check:', {
+      const isVercel =
+        !!process.env.VERCEL || process.env.VERCEL_ENV === "production";
+
+      console.log("🔍 [SAVE] Environment check:", {
         isVercel,
         VERCEL: process.env.VERCEL,
         VERCEL_ENV: process.env.VERCEL_ENV,
         hasBlobToken: !!process.env.BLOB_READ_WRITE_TOKEN,
-        NODE_ENV: process.env.NODE_ENV
-      })
-      
+        NODE_ENV: process.env.NODE_ENV,
+      });
+
       // ALWAYS try Vercel Blob first if in Vercel (primary storage method)
       if (isVercel) {
         try {
-          console.log('🚀 [SAVE] In Vercel - Attempting Blob upload...')
-          return await this._saveToVercelBlob(buffer, sessionId, filename)
+          console.log("🚀 [SAVE] In Vercel - Attempting Blob upload...");
+          return await this._saveToVercelBlob(buffer, sessionId, filename);
         } catch (blobError) {
-          console.error('❌ [SAVE] Vercel Blob failed:', blobError.message)
+          console.error("❌ [SAVE] Vercel Blob failed:", blobError.message);
           // In Vercel, we should NOT fall back to local filesystem
           // Vercel filesystem is read-only except /tmp, and files won't persist
-          throw new Error(`Failed to save to Vercel Blob: ${blobError.message}. This is required in Vercel production.`)
+          throw new Error(
+            `Failed to save to Vercel Blob: ${blobError.message}. This is required in Vercel production.`,
+          );
         }
       }
-      
+
       // Use local filesystem in development ONLY
-      console.log('📁 [SAVE] Using local filesystem (development)...')
-      return await this._saveToLocalFilesystem(buffer, sessionId, filename)
+      console.log("📁 [SAVE] Using local filesystem (development)...");
+      return await this._saveToLocalFilesystem(buffer, sessionId, filename);
     } catch (error) {
-      console.error(`❌ Error saving image file:`, error)
-      throw error
+      console.error(`❌ Error saving image file:`, error);
+      throw error;
     }
   }
-  
+
   /**
    * Save file to Vercel Blob (Production)
    * This is the PRIMARY method for production/Vercel deployments
@@ -969,169 +1286,195 @@ class ShumaDBEnhanced {
   static async _saveToVercelBlob(buffer, sessionId, filename) {
     try {
       // Try to use @vercel/blob
-      let put
+      let put;
       try {
-        const blobModule = require('@vercel/blob')
-        put = blobModule.put
-        console.log('✅ [BLOB] @vercel/blob module loaded successfully')
+        const blobModule = require("@vercel/blob");
+        put = blobModule.put;
+        console.log("✅ [BLOB] @vercel/blob module loaded successfully");
       } catch (e) {
-        const errorMsg = '@vercel/blob not available. Please install: npm install @vercel/blob'
-        console.error('❌ [BLOB] Module load error:', errorMsg)
-        throw new Error(errorMsg)
+        const errorMsg =
+          "@vercel/blob not available. Please install: npm install @vercel/blob";
+        console.error("❌ [BLOB] Module load error:", errorMsg);
+        throw new Error(errorMsg);
       }
-      
+
       // Check for required token
       if (!process.env.BLOB_READ_WRITE_TOKEN) {
-        throw new Error('BLOB_READ_WRITE_TOKEN environment variable is not set')
+        throw new Error(
+          "BLOB_READ_WRITE_TOKEN environment variable is not set",
+        );
       }
-      
-      const pathname = `${sessionId}/${filename}`
-      
-      console.log('🔍 [BLOB] Uploading file:', {
+
+      const pathname = `${sessionId}/${filename}`;
+
+      console.log("🔍 [BLOB] Uploading file:", {
         sessionId,
         filename,
         pathname,
         size: buffer.length,
-        hasToken: !!process.env.BLOB_READ_WRITE_TOKEN
-      })
-      
+        hasToken: !!process.env.BLOB_READ_WRITE_TOKEN,
+      });
+
       // CRITICAL: Allow overwrite in case blob already exists (for updates/re-saves)
       const blob = await put(pathname, buffer, {
-        access: 'public',
+        access: "public",
         addRandomSuffix: false,
         allowOverwrite: true, // Allow overwriting existing blobs
-      })
-      
-      console.log('✅ [BLOB] File uploaded successfully:', {
+      });
+
+      console.log("✅ [BLOB] File uploaded successfully:", {
         url: blob.url,
         pathname: blob.pathname || pathname,
-        size: buffer.length
-      })
-      
+        size: buffer.length,
+      });
+
       return {
         url: blob.url,
         path: blob.pathname || pathname,
-        size: buffer.length
-      }
+        size: buffer.length,
+      };
     } catch (error) {
-      console.error('❌ [BLOB] Upload error:', {
+      console.error("❌ [BLOB] Upload error:", {
         message: error.message,
         stack: error.stack,
-        hasToken: !!process.env.BLOB_READ_WRITE_TOKEN
-      })
+        hasToken: !!process.env.BLOB_READ_WRITE_TOKEN,
+      });
       // Re-throw error so caller can handle fallback
-      throw error
+      throw error;
     }
   }
-  
+
   /**
    * Save file to local filesystem (Development ONLY)
    * Saves to frontend/uploads when running locally (since frontend serves from there)
    * NOTE: This should NEVER be used in Vercel production - use _saveToVercelBlob instead
    */
   static async _saveToLocalFilesystem(buffer, sessionId, filename) {
-    const fs = require('fs').promises
-    const path = require('path')
-    
+    const fs = require("fs").promises;
+    const path = require("path");
+
     // Warn if called in production (should not happen)
-    if (process.env.VERCEL === '1') {
-      console.warn('⚠️ [LOCAL] WARNING: _saveToLocalFilesystem called in Vercel! This should use Blob instead.')
+    if (process.env.VERCEL === "1") {
+      console.warn(
+        "⚠️ [LOCAL] WARNING: _saveToLocalFilesystem called in Vercel! This should use Blob instead.",
+      );
     }
-    
+
     // Local dev: Always save to frontend/uploads
     // Use path.resolve to get absolute path from backend/src/models to project root
     // __dirname = backend/src/models
     // Go up 3 levels: models -> src -> backend -> project root
-    const projectRoot = path.resolve(__dirname, '../../..')
-    const uploadsDir = path.join(projectRoot, 'frontend', 'uploads', sessionId)
-    
+    const projectRoot = path.resolve(__dirname, "../../..");
+    const uploadsDir = path.join(projectRoot, "frontend", "uploads", sessionId);
+
     // Ensure directory exists
-    await fs.mkdir(uploadsDir, { recursive: true })
-    console.log(`📁 [LOCAL] Using upload directory: ${uploadsDir}`)
-    
+    await fs.mkdir(uploadsDir, { recursive: true });
+    console.log(`📁 [LOCAL] Using upload directory: ${uploadsDir}`);
+
     // Save file
-    const filePath = path.join(uploadsDir, filename)
-    await fs.writeFile(filePath, buffer)
-    
+    const filePath = path.join(uploadsDir, filename);
+    await fs.writeFile(filePath, buffer);
+
     // Get file stats
-    const stats = await fs.stat(filePath)
-    
+    const stats = await fs.stat(filePath);
+
     // Return URL for local access
     // Use /uploads/ path to match the upload route format
     // This is served by the frontend Next.js app
-    const url = `/uploads/${sessionId}/${filename}`
-    
-    console.log(`✅ [LOCAL] Saved image file: ${filePath} (${stats.size} bytes)`)
-    console.log(`📁 [LOCAL] File URL: ${url}`)
-    
-    return { 
-      url, 
-      path: `${sessionId}/${filename}`, 
-      size: stats.size 
-    }
+    const url = `/uploads/${sessionId}/${filename}`;
+
+    console.log(
+      `✅ [LOCAL] Saved image file: ${filePath} (${stats.size} bytes)`,
+    );
+    console.log(`📁 [LOCAL] File URL: ${url}`);
+
+    return {
+      url,
+      path: `${sessionId}/${filename}`,
+      size: stats.size,
+    };
   }
 
   /**
    * Save GIS screenshots metadata to images table using URLs (files already saved)
    */
-  static async _saveGISScreenshotsWithUrls(client, shumaId, sessionId, screenshotUrls, originalScreenshots) {
+  static async _saveGISScreenshotsWithUrls(
+    client,
+    shumaId,
+    sessionId,
+    screenshotUrls,
+    originalScreenshots,
+  ) {
     // screenshotUrls has URLs, originalScreenshots has base64 (for size info)
-    const imagesToSave = []
-    
+    const imagesToSave = [];
+
     if (screenshotUrls.cropMode0) {
-      const originalSize = originalScreenshots.cropMode0 ? originalScreenshots.cropMode0.length : 0
+      const originalSize = originalScreenshots.cropMode0
+        ? originalScreenshots.cropMode0.length
+        : 0;
       imagesToSave.push({
-        type: 'סקרין שוט GOVMAP',
+        type: "סקרין שוט GOVMAP",
         filename: `gis-screenshot-clean-${sessionId}.png`,
         url: screenshotUrls.cropMode0,
-        cropMode: '0',
-        originalSize
-      })
+        cropMode: "0",
+        originalSize,
+      });
     }
-    
+
     if (screenshotUrls.cropMode1) {
-      const originalSize = originalScreenshots.cropMode1 ? originalScreenshots.cropMode1.length : 0
+      const originalSize = originalScreenshots.cropMode1
+        ? originalScreenshots.cropMode1.length
+        : 0;
       imagesToSave.push({
-        type: 'סקרין שוט תצ״א',
+        type: "סקרין שוט תצ״א",
         filename: `gis-screenshot-taba-${sessionId}.png`,
         url: screenshotUrls.cropMode1,
-        cropMode: '1',
-        originalSize
-      })
+        cropMode: "1",
+        originalSize,
+      });
     }
 
     for (const img of imagesToSave) {
       try {
-        console.log(`💾 Saving image metadata: ${img.filename}, URL: ${img.url}`)
-        
+        console.log(
+          `💾 Saving image metadata: ${img.filename}, URL: ${img.url}`,
+        );
+
         // Save metadata to images table (no base64, just URL)
-        const imageType = this._truncateString(img.type || 'gis_screenshot', 50)
+        const imageType = this._truncateString(
+          img.type || "gis_screenshot",
+          50,
+        );
         const metadataJson = JSON.stringify({
           filename: img.filename,
           mapType: img.mapType,
           cropMode: img.cropMode,
           timestamp: new Date().toISOString(),
-          storedAs: 'file',
-          originalBase64Size: img.originalSize
-        })
-        
-        const updateResult = await client.query(`
+          storedAs: "file",
+          originalBase64Size: img.originalSize,
+        });
+
+        const updateResult = await client.query(
+          `
           UPDATE images 
           SET 
             image_data = NULL,
             image_url = $1,
             metadata = $2
           WHERE session_id = $3 AND image_type = $4
-        `, [
-          img.url, // Store URL, not base64
-          metadataJson,
-          sessionId,
-          imageType
-        ])
-        
+        `,
+          [
+            img.url, // Store URL, not base64
+            metadataJson,
+            sessionId,
+            imageType,
+          ],
+        );
+
         // If no rows were updated, insert new record
         if (updateResult.rowCount === 0) {
-          await client.query(`
+          await client.query(
+            `
             INSERT INTO images (
               shuma_id,
               session_id,
@@ -1140,83 +1483,107 @@ class ShumaDBEnhanced {
               image_url,
               metadata
             ) VALUES ($1, $2, $3, NULL, $4, $5)
-          `, [
-            shumaId,
-            sessionId,
-            imageType,
-            img.url, // Store URL, not base64
-            metadataJson
-          ])
+          `,
+            [
+              shumaId,
+              sessionId,
+              imageType,
+              img.url, // Store URL, not base64
+              metadataJson,
+            ],
+          );
         }
-        console.log(`✅ Successfully saved image metadata: ${img.filename} (URL: ${img.url})`)
+        console.log(
+          `✅ Successfully saved image metadata: ${img.filename} (URL: ${img.url})`,
+        );
       } catch (imgError) {
-        console.error(`❌ Error saving individual image ${img.filename}:`, imgError.message)
-        continue
+        console.error(
+          `❌ Error saving individual image ${img.filename}:`,
+          imgError.message,
+        );
+        continue;
       }
     }
   }
 
   static async _saveGISScreenshots(client, shumaId, sessionId, gisScreenshots) {
     if (!gisScreenshots.cropMode0 && !gisScreenshots.cropMode1) {
-      return
+      return;
     }
 
-    const imagesToSave = []
-    
+    const imagesToSave = [];
+
     if (gisScreenshots.cropMode0) {
       imagesToSave.push({
-        type: 'סקרין שוט GOVMAP',
+        type: "סקרין שוט GOVMAP",
         filename: `gis-screenshot-clean-${sessionId}.png`,
         data: gisScreenshots.cropMode0,
-        cropMode: '0'
-      })
+        cropMode: "0",
+      });
     }
-    
+
     if (gisScreenshots.cropMode1) {
       imagesToSave.push({
-        type: 'סקרין שוט תצ״א',
+        type: "סקרין שוט תצ״א",
         filename: `gis-screenshot-taba-${sessionId}.png`,
         data: gisScreenshots.cropMode1,
-        cropMode: '1'
-      })
+        cropMode: "1",
+      });
     }
 
     for (const img of imagesToSave) {
-      const savepointName = `sp_image_${img.cropMode || 'unknown'}`
+      const savepointName = `sp_image_${img.cropMode || "unknown"}`;
       try {
         // Create savepoint for this image so errors don't abort entire transaction
-        await client.query(`SAVEPOINT ${savepointName}`)
-        
-        const dataSize = img.data ? img.data.length : 0
-        console.log(`💾 Processing image: ${img.filename}, base64 size: ${dataSize} characters`)
-        
+        await client.query(`SAVEPOINT ${savepointName}`);
+
+        const dataSize = img.data ? img.data.length : 0;
+        console.log(
+          `💾 Processing image: ${img.filename}, base64 size: ${dataSize} characters`,
+        );
+
         // Save image to file storage instead of storing base64 in DB
-        let imageUrl = null
+        let imageUrl = null;
         try {
-          const fileResult = await this._saveBase64ImageToFile(img.data, sessionId, img.filename)
-          imageUrl = fileResult.url
-          console.log(`✅ Image saved to file storage: ${imageUrl}`)
+          const fileResult = await this._saveBase64ImageToFile(
+            img.data,
+            sessionId,
+            img.filename,
+          );
+          imageUrl = fileResult.url;
+          console.log(`✅ Image saved to file storage: ${imageUrl}`);
         } catch (fileError) {
-          console.error(`❌ Failed to save image file:`, fileError.message)
+          console.error(`❌ Failed to save image file:`, fileError.message);
           // Fallback: continue without file URL (save will continue with URL as null)
         }
-        
+
         // CRITICAL FIX: Check if image URL already exists for this session/image_type
         // This prevents overwriting existing images when saving the same screenshot multiple times
-        const imageType = this._truncateString(img.type || 'gis_screenshot', 50)
-        const existingCheck = await client.query(`
+        const imageType = this._truncateString(
+          img.type || "gis_screenshot",
+          50,
+        );
+        const existingCheck = await client.query(
+          `
           SELECT id, image_url FROM images 
           WHERE session_id = $1 AND image_type = $2
           LIMIT 1
-        `, [sessionId, imageType])
-        
+        `,
+          [sessionId, imageType],
+        );
+
         // If image exists and URL is the same, skip update to prevent deletion/overwrite
-        if (existingCheck.rows.length > 0 && existingCheck.rows[0].image_url === imageUrl) {
-          console.log(`⏭️ Image already exists with same URL, skipping update: ${img.filename}`)
-          await client.query(`RELEASE SAVEPOINT ${savepointName}`)
-          continue
+        if (
+          existingCheck.rows.length > 0 &&
+          existingCheck.rows[0].image_url === imageUrl
+        ) {
+          console.log(
+            `⏭️ Image already exists with same URL, skipping update: ${img.filename}`,
+          );
+          await client.query(`RELEASE SAVEPOINT ${savepointName}`);
+          continue;
         }
-        
+
         // If existing record has a different URL, we'll update it (old file will remain in storage)
         // In production, you might want to delete the old file, but that's handled separately
         const metadataJson = JSON.stringify({
@@ -1224,28 +1591,27 @@ class ShumaDBEnhanced {
           mapType: img.mapType,
           cropMode: img.cropMode,
           timestamp: new Date().toISOString(),
-          storedAs: 'file',
-          originalSize: dataSize
-        })
-        
+          storedAs: "file",
+          originalSize: dataSize,
+        });
+
         // CRITICAL: Don't set updated_at as the column doesn't exist in images table
-        const updateResult = await client.query(`
+        const updateResult = await client.query(
+          `
           UPDATE images 
           SET 
             image_data = NULL,
             image_url = $1,
             metadata = $2
           WHERE session_id = $3 AND image_type = $4
-        `, [
-          imageUrl,
-          metadataJson,
-          sessionId,
-          imageType
-        ])
-        
+        `,
+          [imageUrl, metadataJson, sessionId, imageType],
+        );
+
         // If no rows were updated, insert new record
         if (updateResult.rowCount === 0) {
-          await client.query(`
+          await client.query(
+            `
             INSERT INTO images (
               shuma_id,
               session_id,
@@ -1254,29 +1620,33 @@ class ShumaDBEnhanced {
               image_url,
               metadata
             ) VALUES ($1, $2, $3, NULL, $4, $5)
-          `, [
-            shumaId,
-            sessionId,
-            imageType,
-            imageUrl,
-            metadataJson
-          ])
+          `,
+            [shumaId, sessionId, imageType, imageUrl, metadataJson],
+          );
         }
-        
+
         // Release savepoint on success
-        await client.query(`RELEASE SAVEPOINT ${savepointName}`)
-        console.log(`✅ Successfully saved image metadata: ${img.filename} (URL: ${imageUrl})`)
+        await client.query(`RELEASE SAVEPOINT ${savepointName}`);
+        console.log(
+          `✅ Successfully saved image metadata: ${img.filename} (URL: ${imageUrl})`,
+        );
       } catch (imgError) {
         // Rollback to savepoint to continue with other images
         try {
-          await client.query(`ROLLBACK TO SAVEPOINT ${savepointName}`)
+          await client.query(`ROLLBACK TO SAVEPOINT ${savepointName}`);
         } catch (rollbackError) {
-          console.error(`❌ Failed to rollback to savepoint:`, rollbackError.message)
+          console.error(
+            `❌ Failed to rollback to savepoint:`,
+            rollbackError.message,
+          );
         }
-        console.error(`❌ Error saving individual image ${img.filename}:`, imgError.message)
-        console.error(`❌ Image error stack:`, imgError.stack)
+        console.error(
+          `❌ Error saving individual image ${img.filename}:`,
+          imgError.message,
+        );
+        console.error(`❌ Image error stack:`, imgError.stack);
         // Continue with other images even if one fails
-        continue
+        continue;
       }
     }
   }
@@ -1289,96 +1659,99 @@ class ShumaDBEnhanced {
     try {
       // Check cache first (unless explicitly skipped)
       if (!skipCache) {
-        const cached = shumaCache.get(sessionId)
-        if (cached && (Date.now() - cached.timestamp) < CACHE_TTL_MS) {
-          return cached.data
+        const cached = shumaCache.get(sessionId);
+        if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+          return cached.data;
         }
       }
 
-      const result = await db.query(`
+      const result = await db.query(
+        `
         SELECT * FROM shuma WHERE session_id = $1
-      `, [sessionId])
+      `,
+        [sessionId],
+      );
 
       if (result.rows.length === 0) {
-        const notFound = { error: 'Shuma not found' }
+        const notFound = { error: "Shuma not found" };
         // Cache not found result briefly to avoid repeated queries
-        shumaCache.set(sessionId, { data: notFound, timestamp: Date.now() })
-        return notFound
+        shumaCache.set(sessionId, { data: notFound, timestamp: Date.now() });
+        return notFound;
       }
 
-      const shuma = result.rows[0]
-      
+      const shuma = result.rows[0];
+
       // Convert database data back to ValuationData format
       // Optimize JSON parsing: only parse strings, use already-parsed objects
       const valuationData = {
         // Basic Property Information
-        street: shuma.street || '',
-        buildingNumber: shuma.building_number || '',
-        city: shuma.city || '',
-        neighborhood: shuma.neighborhood || '',
-        fullAddress: shuma.full_address || '',
+        street: shuma.street || "",
+        buildingNumber: shuma.building_number || "",
+        city: shuma.city || "",
+        neighborhood: shuma.neighborhood || "",
+        fullAddress: shuma.full_address || "",
         rooms: shuma.rooms || 0,
         floor: shuma.floor || 0,
-        airDirections: shuma.air_directions || '',
+        airDirections: shuma.air_directions || "",
         area: parseFloat(shuma.area) || 0,
-        propertyEssence: shuma.property_essence || '',
-        
+        propertyEssence: shuma.property_essence || "",
+
         // Cover Page Fields
-        clientName: shuma.client_name || '',
-        clientTitle: shuma.client_title ?? '',
-        clientNote: shuma.client_note ?? '',
-        clientRelation: shuma.client_relation ?? '',
-        visitDate: shuma.visit_date || '',
-        valuationDate: shuma.valuation_date || '',
-        valuationType: shuma.valuation_type ?? '',
-        valuationEffectiveDate: shuma.valuation_effective_date || '',
-        referenceNumber: shuma.reference_number || '',
-        shamayName: shuma.shamay_name || '',
-        shamaySerialNumber: shuma.shamay_serial_number || '',
-        
+        clientName: shuma.client_name || "",
+        clientTitle: shuma.client_title ?? "",
+        clientNote: shuma.client_note ?? "",
+        clientRelation: shuma.client_relation ?? "",
+        visitDate: shuma.visit_date || "",
+        valuationDate: shuma.valuation_date || "",
+        valuationType: shuma.valuation_type ?? "",
+        valuationEffectiveDate: shuma.valuation_effective_date || "",
+        referenceNumber: shuma.reference_number || "",
+        shamayName: shuma.shamay_name || "",
+        shamaySerialNumber: shuma.shamay_serial_number || "",
+
         // Land Contamination
         landContamination: shuma.land_contamination || false,
-        landContaminationNote: shuma.land_contamination_note || '',
-        
+        landContaminationNote: shuma.land_contamination_note || "",
+
         // Legal Status Fields
-        gush: shuma.gush || '',
-        parcel: shuma.parcel || '',
+        gush: shuma.gush || "",
+        parcel: shuma.parcel || "",
         parcelArea: parseFloat(shuma.parcel_area) || 0,
-        parcelShape: shuma.parcel_shape || '',
-        parcelSurface: shuma.parcel_surface || '',
-        subParcel: shuma.sub_parcel || '',
+        parcelShape: shuma.parcel_shape || "",
+        parcelSurface: shuma.parcel_surface || "",
+        subParcel: shuma.sub_parcel || "",
         registeredArea: parseFloat(shuma.registered_area) || 0,
         builtArea: parseFloat(shuma.built_area) || 0,
         balconyArea: parseFloat(shuma.balcony_area) || 0,
-        buildingPermitNumber: shuma.building_permit_number || '',
-        buildingPermitDate: shuma.building_permit_date || '',
-        buildingDescription: shuma.building_description || '',
+        buildingPermitNumber: shuma.building_permit_number || "",
+        buildingPermitDate: shuma.building_permit_date || "",
+        buildingDescription: shuma.building_description || "",
         buildingFloors: shuma.building_floors || 0,
         buildingUnits: shuma.building_units || 0,
-        buildingDetails: shuma.building_details || '',
-        constructionSource: shuma.construction_source || '',
-        attachments: shuma.attachments || '',
-        ownershipRights: shuma.ownership_rights || '',
-        notes: shuma.notes || '',
-        
+        buildingDetails: shuma.building_details || "",
+        constructionSource: shuma.construction_source || "",
+        attachments: shuma.attachments || "",
+        ownershipRights: shuma.ownership_rights || "",
+        notes: shuma.notes || "",
+
         // Registry Information
-        registryOffice: shuma.registry_office || '',
-        extractDate: shuma.extract_date || '',
-        
+        registryOffice: shuma.registry_office || "",
+        extractDate: shuma.extract_date || "",
+
         // Property Description Fields
-        internalLayout: shuma.internal_layout || '',
-        finishStandard: shuma.finish_standard || '',
-        finishDetails: shuma.finish_details || '',
-        
+        internalLayout: shuma.internal_layout || "",
+        finishStandard: shuma.finish_standard || "",
+        finishDetails: shuma.finish_details || "",
+
         // Document Uploads (optimized JSON parsing)
         propertyImages: safeParseJSON(shuma.property_images, []),
         selectedImageIndex: shuma.selected_image_index || 0,
         selectedImagePreview: shuma.selected_image_preview || null,
         interiorImages: safeParseJSON(shuma.interior_images, []),
-        
+
         // Signature
         signaturePreview: shuma.signature_preview || null,
-        
+
         // Analysis data (optimized JSON parsing)
         propertyAnalysis: safeParseJSON(shuma.property_analysis, {}),
         marketAnalysis: safeParseJSON(shuma.market_analysis, {}),
@@ -1386,52 +1759,55 @@ class ShumaDBEnhanced {
         comparableDataAnalysis: safeParseJSON(shuma.market_analysis, {}),
         riskAssessment: safeParseJSON(shuma.risk_assessment, {}),
         recommendations: safeParseJSON(shuma.recommendations, []),
-        
+
         // Extracted data
         extractedData: safeParseJSON(shuma.extracted_data, {}),
-        
+
         // Calculations
         comparableData: safeParseJSON(shuma.comparable_data, []),
         finalValuation: parseFloat(shuma.final_valuation) || 0,
         pricePerSqm: parseFloat(shuma.price_per_sqm) || 0,
-        
+
         // Status
         isComplete: shuma.is_complete || false,
         sessionId: shuma.session_id,
-        
+
         // Uploads
         uploads: safeParseJSON(shuma.uploads, []),
-        
+
         // GIS Analysis
         gisAnalysis: safeParseJSON(shuma.gis_analysis, {}),
-        
+
         // GIS Screenshots
         gisScreenshots: safeParseJSON(shuma.gis_screenshots, {}),
-        
-        // Garmushka Measurements
-        garmushkaMeasurements: safeParseJSON(shuma.garmushka_measurements, {})
-      }
 
-      const resultData = { valuationData, success: true }
-      
+        // Garmushka Measurements
+        garmushkaMeasurements: safeParseJSON(shuma.garmushka_measurements, {}),
+
+        // Structured Footnotes
+        structuredFootnotes: safeParseJSON(shuma.structured_footnotes, []),
+      };
+
+      const resultData = { valuationData, success: true };
+
       // Cache the result
-      shumaCache.set(sessionId, { data: resultData, timestamp: Date.now() })
-      
-      return resultData
+      shumaCache.set(sessionId, { data: resultData, timestamp: Date.now() });
+
+      return resultData;
     } catch (error) {
-      console.error('Error loading shuma for wizard:', error)
-      return { error: 'Failed to load shuma' }
+      console.error("Error loading shuma for wizard:", error);
+      return { error: "Failed to load shuma" };
     }
   }
-  
+
   /**
    * Clear cache for a session (call after saving to ensure fresh data)
    */
   static clearShumaCache(sessionId) {
     if (sessionId) {
-      shumaCache.delete(sessionId)
+      shumaCache.delete(sessionId);
     } else {
-      shumaCache.clear()
+      shumaCache.clear();
     }
   }
 
@@ -1440,102 +1816,131 @@ class ShumaDBEnhanced {
    * Merges with existing screenshots to avoid overwriting
    */
   static async saveGISData(sessionId, gisData) {
-    const client = await db.client()
-    
+    const client = await db.client();
+
     try {
-      await client.query('BEGIN')
-      
+      await client.query("BEGIN");
+
       // Get shuma ID and existing screenshots
-      const shumaResult = await client.query('SELECT id, gis_screenshots FROM shuma WHERE session_id = $1', [sessionId])
+      const shumaResult = await client.query(
+        "SELECT id, gis_screenshots FROM shuma WHERE session_id = $1",
+        [sessionId],
+      );
       if (shumaResult.rows.length === 0) {
-        throw new Error('Shuma not found for session')
+        throw new Error("Shuma not found for session");
       }
-      const shumaId = shumaResult.rows[0].id
-      const existingScreenshots = typeof shumaResult.rows[0].gis_screenshots === 'string' 
-        ? JSON.parse(shumaResult.rows[0].gis_screenshots) 
-        : (shumaResult.rows[0].gis_screenshots || {})
-      
+      const shumaId = shumaResult.rows[0].id;
+      const existingScreenshots =
+        typeof shumaResult.rows[0].gis_screenshots === "string"
+          ? JSON.parse(shumaResult.rows[0].gis_screenshots)
+          : shumaResult.rows[0].gis_screenshots || {};
+
       // Merge new data with existing screenshots
       let mergedScreenshots = {
         ...existingScreenshots,
-        ...gisData
-      }
-      
+        ...gisData,
+      };
+
       // Process screenshots - convert base64 to URLs if needed (frontend now sends URLs directly)
-      const processedScreenshots = {}
+      const processedScreenshots = {};
       for (const [key, value] of Object.entries(mergedScreenshots)) {
-        if (typeof value === 'string') {
+        if (typeof value === "string") {
           // If it's already a URL (from file storage), use it directly
-          if (value.startsWith('/api/files/') || value.startsWith('http://') || value.startsWith('https://')) {
-            processedScreenshots[key] = value // Already a URL, no conversion needed
-            console.log(`✅ ${key} is already a URL: ${value.substring(0, 50)}...`)
-          } else if (value.startsWith('data:image')) {
+          if (
+            value.startsWith("/api/files/") ||
+            value.startsWith("http://") ||
+            value.startsWith("https://")
+          ) {
+            processedScreenshots[key] = value; // Already a URL, no conversion needed
+            console.log(
+              `✅ ${key} is already a URL: ${value.substring(0, 50)}...`,
+            );
+          } else if (value.startsWith("data:image")) {
             // It's base64 - convert to file (for backwards compatibility)
-            const filename = `gis-screenshot-${key === 'cropMode0' ? 'clean' : 'taba'}-${sessionId}.png`
+            const filename = `gis-screenshot-${key === "cropMode0" ? "clean" : "taba"}-${sessionId}.png`;
             try {
-              const fileResult = await this._saveBase64ImageToFile(value, sessionId, filename)
-              processedScreenshots[key] = fileResult.url // Store URL instead of base64
-              console.log(`✅ Converted ${key} from base64 to file URL: ${fileResult.url}`)
+              const fileResult = await this._saveBase64ImageToFile(
+                value,
+                sessionId,
+                filename,
+              );
+              processedScreenshots[key] = fileResult.url; // Store URL instead of base64
+              console.log(
+                `✅ Converted ${key} from base64 to file URL: ${fileResult.url}`,
+              );
             } catch (fileError) {
-              console.warn(`⚠️ Failed to convert ${key} to file, keeping original:`, fileError.message)
-              processedScreenshots[key] = value // Fallback to original if file save fails
+              console.warn(
+                `⚠️ Failed to convert ${key} to file, keeping original:`,
+                fileError.message,
+              );
+              processedScreenshots[key] = value; // Fallback to original if file save fails
             }
           } else {
             // Other string value, keep as-is
-            processedScreenshots[key] = value
+            processedScreenshots[key] = value;
           }
         } else {
           // Non-string value, keep as-is
-          processedScreenshots[key] = value
+          processedScreenshots[key] = value;
         }
       }
-      
-      console.log('📸 GIS Data Save:', {
+
+      console.log("📸 GIS Data Save:", {
         sessionId,
         existing: existingScreenshots,
         new: gisData,
-        processed: processedScreenshots
-      })
-      
+        processed: processedScreenshots,
+      });
+
       // Update shuma table with processed screenshots (URLs instead of base64)
-      const mergedJson = JSON.stringify(processedScreenshots)
-      console.log(`📊 Processed JSON size: ${mergedJson.length} characters (much smaller than base64!)`)
-      
+      const mergedJson = JSON.stringify(processedScreenshots);
+      console.log(
+        `📊 Processed JSON size: ${mergedJson.length} characters (much smaller than base64!)`,
+      );
+
       try {
-        await client.query(`
+        await client.query(
+          `
           UPDATE shuma SET
             gis_screenshots = $1,
             updated_at = NOW()
           WHERE session_id = $2
-        `, [mergedJson, sessionId])
-        console.log('✅ Updated shuma table with GIS screenshots')
+        `,
+          [mergedJson, sessionId],
+        );
+        console.log("✅ Updated shuma table with GIS screenshots");
       } catch (updateError) {
-        console.error('❌ Error updating shuma table:', updateError.message)
-        throw updateError
+        console.error("❌ Error updating shuma table:", updateError.message);
+        throw updateError;
       }
-      
+
       // Save to images table - files are already saved, just store URLs and metadata
       // Use processedScreenshots which has URLs, not base64
       try {
-        await this._saveGISScreenshotsWithUrls(client, shumaId, sessionId, processedScreenshots, mergedScreenshots)
-        console.log('✅ Saved GIS screenshots metadata to images table')
+        await this._saveGISScreenshotsWithUrls(
+          client,
+          shumaId,
+          sessionId,
+          processedScreenshots,
+          mergedScreenshots,
+        );
+        console.log("✅ Saved GIS screenshots metadata to images table");
       } catch (imagesError) {
-        console.error('❌ Error saving to images table:', imagesError.message)
+        console.error("❌ Error saving to images table:", imagesError.message);
         // Don't fail the entire operation if images table save fails
         // The main data is already in shuma.gis_screenshots
-        console.warn('⚠️ Continuing despite images table error')
+        console.warn("⚠️ Continuing despite images table error");
       }
-      
-      await client.query('COMMIT')
-      return { success: true }
-      
+
+      await client.query("COMMIT");
+      return { success: true };
     } catch (error) {
-      await client.query('ROLLBACK')
-      console.error('❌ Error saving GIS data:', error)
-      console.error('❌ Error stack:', error.stack)
-      return { error: error.message || 'Failed to save GIS data' }
+      await client.query("ROLLBACK");
+      console.error("❌ Error saving GIS data:", error);
+      console.error("❌ Error stack:", error.stack);
+      return { error: error.message || "Failed to save GIS data" };
     } finally {
-      client.release()
+      client.release();
     }
   }
 
@@ -1544,69 +1949,99 @@ class ShumaDBEnhanced {
    * Converts base64 pngExport to file URL before saving
    */
   static async saveGarmushkaData(sessionId, garmushkaData) {
-    const client = await db.client()
-    
+    const client = await db.client();
+
     try {
-      await client.query('BEGIN')
-      
+      await client.query("BEGIN");
+
       // Get shuma ID
-      const shumaResult = await client.query('SELECT id FROM shuma WHERE session_id = $1', [sessionId])
+      const shumaResult = await client.query(
+        "SELECT id FROM shuma WHERE session_id = $1",
+        [sessionId],
+      );
       if (shumaResult.rows.length === 0) {
-        throw new Error('Shuma not found for session')
+        throw new Error("Shuma not found for session");
       }
-      const shumaId = shumaResult.rows[0].id
-      
+      const shumaId = shumaResult.rows[0].id;
+
       // Process pngExport: convert base64 to file URL if needed
-      let processedGarmushkaData = { ...garmushkaData }
-      
-      if (garmushkaData.pngExport && typeof garmushkaData.pngExport === 'string') {
+      let processedGarmushkaData = { ...garmushkaData };
+
+      if (
+        garmushkaData.pngExport &&
+        typeof garmushkaData.pngExport === "string"
+      ) {
         // If it's already a URL, use it directly
-        if (garmushkaData.pngExport.startsWith('/api/files/') || 
-            garmushkaData.pngExport.startsWith('http://') || 
-            garmushkaData.pngExport.startsWith('https://')) {
-          console.log('✅ Garmushka pngExport is already a URL:', garmushkaData.pngExport.substring(0, 50))
-          processedGarmushkaData.pngExport = garmushkaData.pngExport
-        } else if (garmushkaData.pngExport.startsWith('data:image')) {
+        if (
+          garmushkaData.pngExport.startsWith("/api/files/") ||
+          garmushkaData.pngExport.startsWith("http://") ||
+          garmushkaData.pngExport.startsWith("https://")
+        ) {
+          console.log(
+            "✅ Garmushka pngExport is already a URL:",
+            garmushkaData.pngExport.substring(0, 50),
+          );
+          processedGarmushkaData.pngExport = garmushkaData.pngExport;
+        } else if (garmushkaData.pngExport.startsWith("data:image")) {
           // It's base64 - convert to file
-          const filename = `garmushka-export-${sessionId}.png`
+          const filename = `garmushka-export-${sessionId}.png`;
           try {
-            const fileResult = await this._saveBase64ImageToFile(garmushkaData.pngExport, sessionId, filename)
-            processedGarmushkaData.pngExport = fileResult.url // Store URL instead of base64
-            console.log(`✅ Converted Garmushka pngExport from base64 to file URL: ${fileResult.url}`)
+            const fileResult = await this._saveBase64ImageToFile(
+              garmushkaData.pngExport,
+              sessionId,
+              filename,
+            );
+            processedGarmushkaData.pngExport = fileResult.url; // Store URL instead of base64
+            console.log(
+              `✅ Converted Garmushka pngExport from base64 to file URL: ${fileResult.url}`,
+            );
           } catch (fileError) {
-            console.warn(`⚠️ Failed to convert Garmushka pngExport to file, keeping original:`, fileError.message)
-            processedGarmushkaData.pngExport = garmushkaData.pngExport // Fallback to original
+            console.warn(
+              `⚠️ Failed to convert Garmushka pngExport to file, keeping original:`,
+              fileError.message,
+            );
+            processedGarmushkaData.pngExport = garmushkaData.pngExport; // Fallback to original
           }
         }
       }
-      
-    if (processedGarmushkaData) {
-      delete processedGarmushkaData.garmushkaRecords
-      if (Array.isArray(processedGarmushkaData.pngExports) && processedGarmushkaData.pngExports.length === 0) {
-        delete processedGarmushkaData.pngExports
+
+      if (processedGarmushkaData) {
+        delete processedGarmushkaData.garmushkaRecords;
+        if (
+          Array.isArray(processedGarmushkaData.pngExports) &&
+          processedGarmushkaData.pngExports.length === 0
+        ) {
+          delete processedGarmushkaData.pngExports;
+        }
       }
-    }
-    
+
       // Update shuma table with processed data (may contain URL instead of base64)
-      await client.query(`
+      await client.query(
+        `
         UPDATE shuma SET
           garmushka_measurements = $1,
           updated_at = NOW()
         WHERE session_id = $2
-      `, [JSON.stringify(processedGarmushkaData), sessionId])
-      
+      `,
+        [JSON.stringify(processedGarmushkaData), sessionId],
+      );
+
       // Save to garmushka table (with processed pngExport as URL)
-      await this._saveGarmushkaData(client, shumaId, sessionId, processedGarmushkaData)
-      
-      await client.query('COMMIT')
-      return { success: true }
-      
+      await this._saveGarmushkaData(
+        client,
+        shumaId,
+        sessionId,
+        processedGarmushkaData,
+      );
+
+      await client.query("COMMIT");
+      return { success: true };
     } catch (error) {
-      await client.query('ROLLBACK')
-      console.error('Error saving Garmushka data:', error)
-      return { error: error.message || 'Failed to save Garmushka data' }
+      await client.query("ROLLBACK");
+      console.error("Error saving Garmushka data:", error);
+      return { error: error.message || "Failed to save Garmushka data" };
     } finally {
-      client.release()
+      client.release();
     }
   }
 
@@ -1615,43 +2050,53 @@ class ShumaDBEnhanced {
    * Deletes from both shuma table and garmushka table
    */
   static async deleteGarmushkaData(sessionId) {
-    const client = await db.client()
-    
+    const client = await db.client();
+
     try {
-      await client.query('BEGIN')
-      
+      await client.query("BEGIN");
+
       // Get shuma ID
-      const shumaResult = await client.query('SELECT id FROM shuma WHERE session_id = $1', [sessionId])
+      const shumaResult = await client.query(
+        "SELECT id FROM shuma WHERE session_id = $1",
+        [sessionId],
+      );
       if (shumaResult.rows.length === 0) {
-        throw new Error('Shuma not found for session')
+        throw new Error("Shuma not found for session");
       }
-      const shumaId = shumaResult.rows[0].id
-      
+      const shumaId = shumaResult.rows[0].id;
+
       // Delete all garmushka records for this session
-      const deleteResult = await client.query(`
+      const deleteResult = await client.query(
+        `
         DELETE FROM garmushka 
         WHERE session_id = $1
-      `, [sessionId])
-      
-      console.log(`🗑️ Deleted ${deleteResult.rowCount} Garmushka record(s) for session ${sessionId}`)
-      
+      `,
+        [sessionId],
+      );
+
+      console.log(
+        `🗑️ Deleted ${deleteResult.rowCount} Garmushka record(s) for session ${sessionId}`,
+      );
+
       // Clear garmushka_measurements from shuma table
-      await client.query(`
+      await client.query(
+        `
         UPDATE shuma SET
           garmushka_measurements = '{}'::jsonb,
           updated_at = NOW()
         WHERE session_id = $1
-      `, [sessionId])
-      
-      await client.query('COMMIT')
-      return { success: true, deletedCount: deleteResult.rowCount }
-      
+      `,
+        [sessionId],
+      );
+
+      await client.query("COMMIT");
+      return { success: true, deletedCount: deleteResult.rowCount };
     } catch (error) {
-      await client.query('ROLLBACK')
-      console.error('Error deleting Garmushka data:', error)
-      return { error: error.message || 'Failed to delete Garmushka data' }
+      await client.query("ROLLBACK");
+      console.error("Error deleting Garmushka data:", error);
+      return { error: error.message || "Failed to delete Garmushka data" };
     } finally {
-      client.release()
+      client.release();
     }
   }
 
@@ -1659,20 +2104,24 @@ class ShumaDBEnhanced {
    * Save building permit data to building_permit_extracts table
    */
   static async savePermitExtraction(sessionId, permitData, documentFilename) {
-    const client = await db.client()
-    
+    const client = await db.client();
+
     try {
-      await client.query('BEGIN')
-      
+      await client.query("BEGIN");
+
       // Get shuma ID
-      const shumaResult = await client.query('SELECT id FROM shuma WHERE session_id = $1', [sessionId])
+      const shumaResult = await client.query(
+        "SELECT id FROM shuma WHERE session_id = $1",
+        [sessionId],
+      );
       if (shumaResult.rows.length === 0) {
-        throw new Error('Shuma not found for session')
+        throw new Error("Shuma not found for session");
       }
-      const shumaId = shumaResult.rows[0].id
-      
+      const shumaId = shumaResult.rows[0].id;
+
       // Insert into building_permit_extracts
-      const result = await client.query(`
+      const result = await client.query(
+        `
         INSERT INTO building_permit_extracts (
           shuma_id, session_id,
           permit_number, permit_number_confidence,
@@ -1683,25 +2132,38 @@ class ShumaDBEnhanced {
           processing_method
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING id
-      `, [
-        shumaId,
-        sessionId,
-        this._truncateString(permitData.permitNumber, 255),
-        this._validateConfidence(permitData.permitNumberConfidence, 0.95),
-        formatDateForDB(permitData.permitDate),
-        this._validateConfidence(permitData.permitDateConfidence, 0.95),
-        this._truncateString(permitData.permittedUsage || permitData.permittedUse, 255),
-        this._validateConfidence(permitData.permittedUsageConfidence || permitData.permittedUseConfidence, 0.95),
-        permitData.buildingDescription, // TEXT field, no truncation needed
-        this._validateConfidence(permitData.buildingDescriptionConfidence, 0.95),
-        documentFilename, // Can be TEXT if path is long
-        this._truncateString(permitData.processingMethod || 'openai', 50)
-      ])
-      
-      const permitId = result.rows[0].id
-      
+      `,
+        [
+          shumaId,
+          sessionId,
+          this._truncateString(permitData.permitNumber, 255),
+          this._validateConfidence(permitData.permitNumberConfidence, 0.95),
+          formatDateForDB(permitData.permitDate),
+          this._validateConfidence(permitData.permitDateConfidence, 0.95),
+          this._truncateString(
+            permitData.permittedUsage || permitData.permittedUse,
+            255,
+          ),
+          this._validateConfidence(
+            permitData.permittedUsageConfidence ||
+              permitData.permittedUseConfidence,
+            0.95,
+          ),
+          permitData.buildingDescription, // TEXT field, no truncation needed
+          this._validateConfidence(
+            permitData.buildingDescriptionConfidence,
+            0.95,
+          ),
+          documentFilename, // Can be TEXT if path is long
+          this._truncateString(permitData.processingMethod || "openai", 50),
+        ],
+      );
+
+      const permitId = result.rows[0].id;
+
       // Update shuma with extracted permit data AND reference
-      await client.query(`
+      await client.query(
+        `
         UPDATE shuma SET
           building_permit_number = $1,
           building_permit_date = $2,
@@ -1712,38 +2174,52 @@ class ShumaDBEnhanced {
           ),
           updated_at = NOW()
         WHERE id = $4
-      `, [permitData.permitNumber, formatDateForDB(permitData.permitDate), permitId, shumaId])
-      
-      await client.query('COMMIT')
-      return { success: true, permitId }
-      
+      `,
+        [
+          permitData.permitNumber,
+          formatDateForDB(permitData.permitDate),
+          permitId,
+          shumaId,
+        ],
+      );
+
+      await client.query("COMMIT");
+      return { success: true, permitId };
     } catch (error) {
-      await client.query('ROLLBACK')
-      console.error('Error saving permit extraction:', error)
-      return { error: error.message || 'Failed to save permit extraction' }
+      await client.query("ROLLBACK");
+      console.error("Error saving permit extraction:", error);
+      return { error: error.message || "Failed to save permit extraction" };
     } finally {
-      client.release()
+      client.release();
     }
   }
 
   /**
    * Save land registry data to land_registry_extracts table
    */
-  static async saveLandRegistryExtraction(sessionId, landRegistryData, documentFilename) {
-    const client = await db.client()
-    
+  static async saveLandRegistryExtraction(
+    sessionId,
+    landRegistryData,
+    documentFilename,
+  ) {
+    const client = await db.client();
+
     try {
-      await client.query('BEGIN')
-      
+      await client.query("BEGIN");
+
       // Get shuma ID
-      const shumaResult = await client.query('SELECT id FROM shuma WHERE session_id = $1', [sessionId])
+      const shumaResult = await client.query(
+        "SELECT id FROM shuma WHERE session_id = $1",
+        [sessionId],
+      );
       if (shumaResult.rows.length === 0) {
-        throw new Error('Shuma not found for session')
+        throw new Error("Shuma not found for session");
       }
-      const shumaId = shumaResult.rows[0].id
-      
+      const shumaId = shumaResult.rows[0].id;
+
       // Insert into land_registry_extracts
-      const result = await client.query(`
+      const result = await client.query(
+        `
         INSERT INTO land_registry_extracts (
           shuma_id, session_id, pdf_path,
           gush, gush_confidence,
@@ -1756,22 +2232,46 @@ class ShumaDBEnhanced {
           raw_extraction
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
         RETURNING id
-      `, [
-        shumaId, sessionId, documentFilename,
-        landRegistryData.gush || null, this._validateConfidence(landRegistryData.gushConfidence, 0.95),
-        landRegistryData.parcel || null, this._validateConfidence(landRegistryData.parcelConfidence, 0.95),
-        landRegistryData.subParcel || null, this._validateConfidence(landRegistryData.subParcelConfidence, 0.95),
-        landRegistryData.registeredArea || null, this._validateConfidence(landRegistryData.registeredAreaConfidence, 0.95),
-        landRegistryData.registrationOffice || null, this._validateConfidence(landRegistryData.registrationOfficeConfidence, 0.95),
-        landRegistryData.ownershipType || null, this._validateConfidence(landRegistryData.ownershipTypeConfidence, 0.95),
-        landRegistryData.attachments || null, this._validateConfidence(landRegistryData.attachmentsConfidence, 0.95),
-        JSON.stringify(landRegistryData)
-      ])
-      
-      const landRegistryId = result.rows[0].id
-      
+      `,
+        [
+          shumaId,
+          sessionId,
+          documentFilename,
+          landRegistryData.gush || null,
+          this._validateConfidence(landRegistryData.gushConfidence, 0.95),
+          landRegistryData.parcel || null,
+          this._validateConfidence(landRegistryData.parcelConfidence, 0.95),
+          landRegistryData.subParcel || null,
+          this._validateConfidence(landRegistryData.subParcelConfidence, 0.95),
+          landRegistryData.registeredArea || null,
+          this._validateConfidence(
+            landRegistryData.registeredAreaConfidence,
+            0.95,
+          ),
+          landRegistryData.registrationOffice || null,
+          this._validateConfidence(
+            landRegistryData.registrationOfficeConfidence,
+            0.95,
+          ),
+          landRegistryData.ownershipType || null,
+          this._validateConfidence(
+            landRegistryData.ownershipTypeConfidence,
+            0.95,
+          ),
+          landRegistryData.attachments || null,
+          this._validateConfidence(
+            landRegistryData.attachmentsConfidence,
+            0.95,
+          ),
+          JSON.stringify(landRegistryData),
+        ],
+      );
+
+      const landRegistryId = result.rows[0].id;
+
       // Update shuma with extracted data AND reference
-      await client.query(`
+      await client.query(
+        `
         UPDATE shuma SET
           gush = $1,
           parcel = $2,
@@ -1784,46 +2284,57 @@ class ShumaDBEnhanced {
           ),
           updated_at = NOW()
         WHERE id = $6
-      `, [
-        landRegistryData.gush,
-        landRegistryData.parcel,
-        landRegistryData.subParcel,
-        landRegistryData.registeredArea,
-        landRegistryId,
-        shumaId
-      ])
-      
-      await client.query('COMMIT')
-      return { success: true, landRegistryId }
-      
+      `,
+        [
+          landRegistryData.gush,
+          landRegistryData.parcel,
+          landRegistryData.subParcel,
+          landRegistryData.registeredArea,
+          landRegistryId,
+          shumaId,
+        ],
+      );
+
+      await client.query("COMMIT");
+      return { success: true, landRegistryId };
     } catch (error) {
-      await client.query('ROLLBACK')
-      console.error('Error saving land registry extraction:', error)
-      return { error: error.message || 'Failed to save land registry extraction' }
+      await client.query("ROLLBACK");
+      console.error("Error saving land registry extraction:", error);
+      return {
+        error: error.message || "Failed to save land registry extraction",
+      };
     } finally {
-      client.release()
+      client.release();
     }
   }
 
   /**
    * Save shared building order data to shared_building_order table
    */
-  static async saveSharedBuildingExtraction(sessionId, sharedBuildingData, documentFilename) {
-    const client = await db.client()
-    
+  static async saveSharedBuildingExtraction(
+    sessionId,
+    sharedBuildingData,
+    documentFilename,
+  ) {
+    const client = await db.client();
+
     try {
-      await client.query('BEGIN')
-      
+      await client.query("BEGIN");
+
       // Get shuma ID
-      const shumaResult = await client.query('SELECT id FROM shuma WHERE session_id = $1', [sessionId])
+      const shumaResult = await client.query(
+        "SELECT id FROM shuma WHERE session_id = $1",
+        [sessionId],
+      );
       if (shumaResult.rows.length === 0) {
-        throw new Error('Shuma not found for session')
+        throw new Error("Shuma not found for session");
       }
-      const shumaId = shumaResult.rows[0].id
-      
+      const shumaId = shumaResult.rows[0].id;
+
       // Insert into shared_building_order
       // Production schema has shuma_id and session_id, not filename
-      const result = await client.query(`
+      const result = await client.query(
+        `
         INSERT INTO shared_building_order (
           shuma_id, session_id,
           building_description, building_description_confidence,
@@ -1833,24 +2344,47 @@ class ShumaDBEnhanced {
           raw_extraction
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING id
-      `, [
-        shumaId,
-        sessionId,
-        sharedBuildingData.buildingDescription || sharedBuildingData.building_description,
-        this._validateConfidence(sharedBuildingData.buildingDescriptionConfidence || sharedBuildingData.confidence, 0.95),
-        this._parseFloorsToInteger(sharedBuildingData.buildingFloors || sharedBuildingData.building_floors),
-        this._validateConfidence(sharedBuildingData.buildingFloorsConfidence || sharedBuildingData.confidence, 0.95),
-        sharedBuildingData.buildingSubPlotsCount || sharedBuildingData.building_sub_plots_count || sharedBuildingData.total_sub_plots,
-        this._validateConfidence(sharedBuildingData.buildingSubPlotsCountConfidence || sharedBuildingData.confidence, 0.95),
-        sharedBuildingData.buildingAddress || sharedBuildingData.building_address || null,
-        this._validateConfidence(sharedBuildingData.confidence, 0.95),
-        JSON.stringify(sharedBuildingData) // Store all raw data
-      ])
-      
-      const sharedBuildingId = result.rows[0].id
-      
+      `,
+        [
+          shumaId,
+          sessionId,
+          sharedBuildingData.buildingDescription ||
+            sharedBuildingData.building_description,
+          this._validateConfidence(
+            sharedBuildingData.buildingDescriptionConfidence ||
+              sharedBuildingData.confidence,
+            0.95,
+          ),
+          this._parseFloorsToInteger(
+            sharedBuildingData.buildingFloors ||
+              sharedBuildingData.building_floors,
+          ),
+          this._validateConfidence(
+            sharedBuildingData.buildingFloorsConfidence ||
+              sharedBuildingData.confidence,
+            0.95,
+          ),
+          sharedBuildingData.buildingSubPlotsCount ||
+            sharedBuildingData.building_sub_plots_count ||
+            sharedBuildingData.total_sub_plots,
+          this._validateConfidence(
+            sharedBuildingData.buildingSubPlotsCountConfidence ||
+              sharedBuildingData.confidence,
+            0.95,
+          ),
+          sharedBuildingData.buildingAddress ||
+            sharedBuildingData.building_address ||
+            null,
+          this._validateConfidence(sharedBuildingData.confidence, 0.95),
+          JSON.stringify(sharedBuildingData), // Store all raw data
+        ],
+      );
+
+      const sharedBuildingId = result.rows[0].id;
+
       // Update shuma with extracted data AND reference
-      await client.query(`
+      await client.query(
+        `
         UPDATE shuma SET
           building_description = $1,
           building_floors = $2,
@@ -1862,23 +2396,26 @@ class ShumaDBEnhanced {
           ),
           updated_at = NOW()
         WHERE id = $5
-      `, [
-        sharedBuildingData.buildingDescription,
-        sharedBuildingData.buildingFloors,
-        sharedBuildingData.totalSubPlots,
-        sharedBuildingId,
-        shumaId
-      ])
-      
-      await client.query('COMMIT')
-      return { success: true, sharedBuildingId }
-      
+      `,
+        [
+          sharedBuildingData.buildingDescription,
+          sharedBuildingData.buildingFloors,
+          sharedBuildingData.totalSubPlots,
+          sharedBuildingId,
+          shumaId,
+        ],
+      );
+
+      await client.query("COMMIT");
+      return { success: true, sharedBuildingId };
     } catch (error) {
-      await client.query('ROLLBACK')
-      console.error('Error saving shared building extraction:', error)
-      return { error: error.message || 'Failed to save shared building extraction' }
+      await client.query("ROLLBACK");
+      console.error("Error saving shared building extraction:", error);
+      return {
+        error: error.message || "Failed to save shared building extraction",
+      };
     } finally {
-      client.release()
+      client.release();
     }
   }
 
@@ -1888,51 +2425,64 @@ class ShumaDBEnhanced {
   static async getAllExtractedData(sessionId) {
     try {
       // Get shuma
-      const shumaResult = await db.query('SELECT id, extracted_data FROM shuma WHERE session_id = $1', [sessionId])
+      const shumaResult = await db.query(
+        "SELECT id, extracted_data FROM shuma WHERE session_id = $1",
+        [sessionId],
+      );
       if (shumaResult.rows.length === 0) {
-        return { error: 'Shuma not found' }
+        return { error: "Shuma not found" };
       }
-      
-      const shuma = shumaResult.rows[0]
-      const extractedDataRefs = shuma.extracted_data || {}
-      
+
+      const shuma = shumaResult.rows[0];
+      const extractedDataRefs = shuma.extracted_data || {};
+
       // Get related extractions
       const allData = {
         landRegistry: null,
         buildingPermit: null,
         sharedBuilding: null,
-        garmushka: null
-      }
-      
+        garmushka: null,
+      };
+
       // Load land registry if reference exists
       if (extractedDataRefs.landRegistryId) {
-        const result = await db.query('SELECT * FROM land_registry_extracts WHERE id = $1', [extractedDataRefs.landRegistryId])
-        allData.landRegistry = result.rows[0] || null
+        const result = await db.query(
+          "SELECT * FROM land_registry_extracts WHERE id = $1",
+          [extractedDataRefs.landRegistryId],
+        );
+        allData.landRegistry = result.rows[0] || null;
       }
-      
+
       // Load building permit if reference exists
       if (extractedDataRefs.buildingPermitId) {
-        const result = await db.query('SELECT * FROM building_permit_extracts WHERE id = $1', [extractedDataRefs.buildingPermitId])
-        allData.buildingPermit = result.rows[0] || null
+        const result = await db.query(
+          "SELECT * FROM building_permit_extracts WHERE id = $1",
+          [extractedDataRefs.buildingPermitId],
+        );
+        allData.buildingPermit = result.rows[0] || null;
       }
-      
+
       // Load shared building if reference exists
       if (extractedDataRefs.sharedBuildingId) {
-        const result = await db.query('SELECT * FROM shared_building_order WHERE id = $1', [extractedDataRefs.sharedBuildingId])
-        allData.sharedBuilding = result.rows[0] || null
+        const result = await db.query(
+          "SELECT * FROM shared_building_order WHERE id = $1",
+          [extractedDataRefs.sharedBuildingId],
+        );
+        allData.sharedBuilding = result.rows[0] || null;
       }
-      
+
       // Load garmushka if reference exists
       if (extractedDataRefs.garmushkaId) {
-        const result = await db.query('SELECT * FROM garmushka WHERE id = $1', [extractedDataRefs.garmushkaId])
-        allData.garmushka = result.rows[0] || null
+        const result = await db.query("SELECT * FROM garmushka WHERE id = $1", [
+          extractedDataRefs.garmushkaId,
+        ]);
+        allData.garmushka = result.rows[0] || null;
       }
-      
-      return { success: true, data: allData }
-      
+
+      return { success: true, data: allData };
     } catch (error) {
-      console.error('Error getting all extracted data:', error)
-      return { error: error.message || 'Failed to get extracted data' }
+      console.error("Error getting all extracted data:", error);
+      return { error: error.message || "Failed to get extracted data" };
     }
   }
 
@@ -1940,10 +2490,9 @@ class ShumaDBEnhanced {
    * Search shumas by organization, search term, and status
    */
   static async searchShumas(organizationId, search, status) {
-    const client = await db.client()
+    const client = await db.client();
 
     try {
-
       let query = `
         SELECT 
           id,
@@ -1967,9 +2516,9 @@ class ShumaDBEnhanced {
           updated_at
         FROM shuma 
         WHERE organization_id = $1
-      `
-      const params = [organizationId]
-      let paramIndex = 2
+      `;
+      const params = [organizationId];
+      let paramIndex = 2;
 
       if (search) {
         query += ` AND (
@@ -1977,42 +2526,44 @@ class ShumaDBEnhanced {
           client_name ILIKE $${paramIndex} OR
           street ILIKE $${paramIndex} OR
           city ILIKE $${paramIndex}
-        )`
-        params.push(`%${search}%`)
-        paramIndex++
+        )`;
+        params.push(`%${search}%`);
+        paramIndex++;
       }
 
       if (status) {
-        if (status === 'complete') {
-          query += ` AND is_complete = true`
-        } else if (status === 'draft') {
-          query += ` AND is_complete = false`
+        if (status === "complete") {
+          query += ` AND is_complete = true`;
+        } else if (status === "draft") {
+          query += ` AND is_complete = false`;
         }
       }
 
-      query += ` ORDER BY updated_at DESC`
+      query += ` ORDER BY updated_at DESC`;
 
-      const result = await client.query(query, params)
+      const result = await client.query(query, params);
 
       return {
         success: true,
-        shumas: result.rows.map(row => ({
+        shumas: result.rows.map((row) => ({
           id: row.id,
           sessionId: row.session_id,
-          address: row.full_address || `${row.street} ${row.building_number}, ${row.city}`,
+          address:
+            row.full_address ||
+            `${row.street} ${row.building_number}, ${row.city}`,
           clientName: row.client_name,
           rooms: row.rooms,
           area: row.area,
           isComplete: row.is_complete,
           createdAt: row.created_at,
-          updatedAt: row.updated_at
-        }))
-      }
+          updatedAt: row.updated_at,
+        })),
+      };
     } catch (error) {
-      console.error('Error searching shumas:', error)
-      return { success: false, error: error.message }
+      console.error("Error searching shumas:", error);
+      return { success: false, error: error.message };
     } finally {
-      client.release()
+      client.release();
     }
   }
 
@@ -2020,10 +2571,11 @@ class ShumaDBEnhanced {
    * Get a single shuma by ID
    */
   static async getShumaById(shumaId) {
-    const client = await db.client()
+    const client = await db.client();
 
     try {
-      const result = await client.query(`
+      const result = await client.query(
+        `
         SELECT 
           id,
           session_id,
@@ -2049,19 +2601,23 @@ class ShumaDBEnhanced {
           garmushka_measurements
         FROM shuma 
         WHERE id = $1
-      `, [shumaId])
+      `,
+        [shumaId],
+      );
 
       if (result.rows.length === 0) {
-        return { success: false, error: 'Shuma not found' }
+        return { success: false, error: "Shuma not found" };
       }
 
-      const row = result.rows[0]
+      const row = result.rows[0];
       return {
         success: true,
         shuma: {
           id: row.id,
           sessionId: row.session_id,
-          address: row.full_address || `${row.street} ${row.building_number}, ${row.city}`,
+          address:
+            row.full_address ||
+            `${row.street} ${row.building_number}, ${row.city}`,
           clientName: row.client_name,
           rooms: row.rooms,
           area: row.area,
@@ -2070,35 +2626,42 @@ class ShumaDBEnhanced {
           updatedAt: row.updated_at,
           uploads: row.uploads || [],
           gisScreenshots: row.gis_screenshots || {},
-          garmushkaMeasurements: row.garmushka_measurements || {}
-        }
-      }
+          garmushkaMeasurements: row.garmushka_measurements || {},
+        },
+      };
     } catch (error) {
-      console.error('Error getting shuma by ID:', error)
-      return { success: false, error: error.message }
+      console.error("Error getting shuma by ID:", error);
+      return { success: false, error: error.message };
     } finally {
-      client.release()
+      client.release();
     }
   }
 
   /**
    * Save AI extraction result (original, unmodified data)
    */
-  static async saveAIExtraction(sessionId, extractionType, aiResponse, extractedFields, metadata = {}) {
-    const client = await db.client()
-    
+  static async saveAIExtraction(
+    sessionId,
+    extractionType,
+    aiResponse,
+    extractedFields,
+    metadata = {},
+  ) {
+    const client = await db.client();
+
     try {
-      await client.query('BEGIN')
-      
+      await client.query("BEGIN");
+
       // Get shuma_id if it exists
       const shumaResult = await client.query(
-        'SELECT id FROM shuma WHERE session_id = $1',
-        [sessionId]
-      )
-      const shumaId = shumaResult.rows[0]?.id || null
-      
+        "SELECT id FROM shuma WHERE session_id = $1",
+        [sessionId],
+      );
+      const shumaId = shumaResult.rows[0]?.id || null;
+
       // Insert AI extraction
-      const result = await client.query(`
+      const result = await client.query(
+        `
         INSERT INTO ai_extractions (
           shuma_id, session_id, extraction_type,
           raw_ai_response, extracted_fields,
@@ -2107,33 +2670,35 @@ class ShumaDBEnhanced {
           is_active
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING id
-      `, [
-        shumaId,
-        sessionId,
-        extractionType,
-        JSON.stringify(aiResponse),
-        JSON.stringify(extractedFields),
-        metadata.aiModel || 'gpt-4-vision-preview',
-        metadata.processingCost || null,
-        metadata.confidenceScore || null,
-        metadata.processingTimeMs || null,
-        metadata.documentFilename || null,
-        metadata.documentPath || null,
-        true // is_active by default
-      ])
-      
-      await client.query('COMMIT')
-      
-      return { 
-        success: true, 
-        extractionId: result.rows[0].id 
-      }
+      `,
+        [
+          shumaId,
+          sessionId,
+          extractionType,
+          JSON.stringify(aiResponse),
+          JSON.stringify(extractedFields),
+          metadata.aiModel || "gpt-4-vision-preview",
+          metadata.processingCost || null,
+          metadata.confidenceScore || null,
+          metadata.processingTimeMs || null,
+          metadata.documentFilename || null,
+          metadata.documentPath || null,
+          true, // is_active by default
+        ],
+      );
+
+      await client.query("COMMIT");
+
+      return {
+        success: true,
+        extractionId: result.rows[0].id,
+      };
     } catch (error) {
-      await client.query('ROLLBACK')
-      console.error('Error saving AI extraction:', error)
-      return { success: false, error: error.message }
+      await client.query("ROLLBACK");
+      console.error("Error saving AI extraction:", error);
+      return { success: false, error: error.message };
     } finally {
-      client.release()
+      client.release();
     }
   }
 
@@ -2141,44 +2706,46 @@ class ShumaDBEnhanced {
    * Get all AI extractions for a session
    */
   static async getAIExtractions(sessionId, extractionType = null) {
-    const client = await db.client()
-    
+    const client = await db.client();
+
     try {
       let query = `
         SELECT * FROM ai_extractions 
         WHERE session_id = $1
-      `
-      const params = [sessionId]
-      
+      `;
+      const params = [sessionId];
+
       if (extractionType) {
-        query += ` AND extraction_type = $2`
-        params.push(extractionType)
+        query += ` AND extraction_type = $2`;
+        params.push(extractionType);
       }
-      
-      query += ` ORDER BY extraction_date DESC`
-      
-      const result = await client.query(query, params)
-      
+
+      query += ` ORDER BY extraction_date DESC`;
+
+      const result = await client.query(query, params);
+
       // Parse JSONB fields
-      const extractions = result.rows.map(row => ({
+      const extractions = result.rows.map((row) => ({
         ...row,
-        raw_ai_response: typeof row.raw_ai_response === 'string' 
-          ? JSON.parse(row.raw_ai_response) 
-          : row.raw_ai_response,
-        extracted_fields: typeof row.extracted_fields === 'string' 
-          ? JSON.parse(row.extracted_fields) 
-          : row.extracted_fields
-      }))
-      
-      return { 
-        success: true, 
-        extractions 
-      }
+        raw_ai_response:
+          typeof row.raw_ai_response === "string"
+            ? JSON.parse(row.raw_ai_response)
+            : row.raw_ai_response,
+        extracted_fields:
+          typeof row.extracted_fields === "string"
+            ? JSON.parse(row.extracted_fields)
+            : row.extracted_fields,
+      }));
+
+      return {
+        success: true,
+        extractions,
+      };
     } catch (error) {
-      console.error('Error getting AI extractions:', error)
-      return { success: false, error: error.message }
+      console.error("Error getting AI extractions:", error);
+      return { success: false, error: error.message };
     } finally {
-      client.release()
+      client.release();
     }
   }
 
@@ -2186,41 +2753,46 @@ class ShumaDBEnhanced {
    * Get the most recent active AI extraction for a type
    */
   static async getLatestAIExtraction(sessionId, extractionType) {
-    const client = await db.client()
-    
+    const client = await db.client();
+
     try {
-      const result = await client.query(`
+      const result = await client.query(
+        `
         SELECT * FROM ai_extractions 
         WHERE session_id = $1 
           AND extraction_type = $2 
           AND is_active = true
         ORDER BY extraction_date DESC
         LIMIT 1
-      `, [sessionId, extractionType])
-      
+      `,
+        [sessionId, extractionType],
+      );
+
       if (result.rows.length === 0) {
-        return { success: true, extraction: null }
+        return { success: true, extraction: null };
       }
-      
+
       const extraction = {
         ...result.rows[0],
-        raw_ai_response: typeof result.rows[0].raw_ai_response === 'string' 
-          ? JSON.parse(result.rows[0].raw_ai_response) 
-          : result.rows[0].raw_ai_response,
-        extracted_fields: typeof result.rows[0].extracted_fields === 'string' 
-          ? JSON.parse(result.rows[0].extracted_fields) 
-          : result.rows[0].extracted_fields
-      }
-      
-      return { 
-        success: true, 
-        extraction 
-      }
+        raw_ai_response:
+          typeof result.rows[0].raw_ai_response === "string"
+            ? JSON.parse(result.rows[0].raw_ai_response)
+            : result.rows[0].raw_ai_response,
+        extracted_fields:
+          typeof result.rows[0].extracted_fields === "string"
+            ? JSON.parse(result.rows[0].extracted_fields)
+            : result.rows[0].extracted_fields,
+      };
+
+      return {
+        success: true,
+        extraction,
+      };
     } catch (error) {
-      console.error('Error getting latest AI extraction:', error)
-      return { success: false, error: error.message }
+      console.error("Error getting latest AI extraction:", error);
+      return { success: false, error: error.message };
     } finally {
-      client.release()
+      client.release();
     }
   }
 
@@ -2228,21 +2800,24 @@ class ShumaDBEnhanced {
    * Mark AI extraction as inactive (user has overridden)
    */
   static async deactivateAIExtraction(extractionId) {
-    const client = await db.client()
-    
+    const client = await db.client();
+
     try {
-      await client.query(`
+      await client.query(
+        `
         UPDATE ai_extractions 
         SET is_active = false, updated_at = NOW()
         WHERE id = $1
-      `, [extractionId])
-      
-      return { success: true }
+      `,
+        [extractionId],
+      );
+
+      return { success: true };
     } catch (error) {
-      console.error('Error deactivating AI extraction:', error)
-      return { success: false, error: error.message }
+      console.error("Error deactivating AI extraction:", error);
+      return { success: false, error: error.message };
     } finally {
-      client.release()
+      client.release();
     }
   }
 
@@ -2250,72 +2825,76 @@ class ShumaDBEnhanced {
    * Restore AI extraction (revert user edits)
    */
   static async restoreAIExtraction(sessionId, extractionId) {
-    const client = await db.client()
-    
+    const client = await db.client();
+
     try {
-      await client.query('BEGIN')
-      
+      await client.query("BEGIN");
+
       // Get the AI extraction
       const extractionResult = await client.query(
-        'SELECT * FROM ai_extractions WHERE id = $1 AND session_id = $2',
-        [extractionId, sessionId]
-      )
-      
+        "SELECT * FROM ai_extractions WHERE id = $1 AND session_id = $2",
+        [extractionId, sessionId],
+      );
+
       if (extractionResult.rows.length === 0) {
-        await client.query('ROLLBACK')
-        return { success: false, error: 'AI extraction not found' }
+        await client.query("ROLLBACK");
+        return { success: false, error: "AI extraction not found" };
       }
-      
-      const extraction = extractionResult.rows[0]
-      const extractedFields = typeof extraction.extracted_fields === 'string' 
-        ? JSON.parse(extraction.extracted_fields) 
-        : extraction.extracted_fields
-      
+
+      const extraction = extractionResult.rows[0];
+      const extractedFields =
+        typeof extraction.extracted_fields === "string"
+          ? JSON.parse(extraction.extracted_fields)
+          : extraction.extracted_fields;
+
       // Load current shuma data
-      const loadResult = await this.loadShumaForWizard(sessionId)
+      const loadResult = await this.loadShumaForWizard(sessionId);
       if (!loadResult.success || !loadResult.valuationData) {
-        await client.query('ROLLBACK')
-        return { success: false, error: 'Session not found' }
+        await client.query("ROLLBACK");
+        return { success: false, error: "Session not found" };
       }
-      
+
       // Merge AI extracted fields back into extractedData
       const updatedExtractedData = {
         ...loadResult.valuationData.extractedData,
-        ...extractedFields
-      }
-      
+        ...extractedFields,
+      };
+
       // Save to shuma
       await this.saveShumaFromSession(
         sessionId,
-        loadResult.valuationData.organizationId || 'default-org',
-        loadResult.valuationData.userId || 'system',
+        loadResult.valuationData.organizationId || "default-org",
+        loadResult.valuationData.userId || "system",
         {
           ...loadResult.valuationData,
-          extractedData: updatedExtractedData
-        }
-      )
-      
+          extractedData: updatedExtractedData,
+        },
+      );
+
       // Reactivate this extraction
-      await client.query(`
+      await client.query(
+        `
         UPDATE ai_extractions 
         SET is_active = true, updated_at = NOW()
         WHERE id = $1
-      `, [extractionId])
-      
-      await client.query('COMMIT')
-      
-      return { 
-        success: true, 
-        restoredFields: extractedFields 
-      }
+      `,
+        [extractionId],
+      );
+
+      await client.query("COMMIT");
+
+      return {
+        success: true,
+        restoredFields: extractedFields,
+      };
     } catch (error) {
-      await client.query('ROLLBACK')
-      console.error('Error restoring AI extraction:', error)
-      return { success: false, error: error.message }
+      await client.query("ROLLBACK");
+      console.error("Error restoring AI extraction:", error);
+      return { success: false, error: error.message };
     } finally {
-      client.release()
+      client.release();
     }
   }
 }
 
-module.exports = { db, ShumaDB: ShumaDBEnhanced, formatDateForDB }
+module.exports = { db, ShumaDB: ShumaDBEnhanced, formatDateForDB };
