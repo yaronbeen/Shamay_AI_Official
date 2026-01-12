@@ -1482,6 +1482,50 @@ export function EditableDocumentPreview({
     [data, onDataChange],
   );
 
+  // Export current table to CSV
+  const handleExportTableToCSV = useCallback(() => {
+    if (!currentTableCell) {
+      alert("יש לבחור תא בטבלה לפני ייצוא");
+      return;
+    }
+
+    const existingTables: CustomTable[] = (data as any).customTables || [];
+    const table = existingTables.find((t) => t.id === currentTableCell.tableId);
+
+    if (!table) {
+      alert("לא נמצאה הטבלה לייצוא");
+      return;
+    }
+
+    // Build CSV content with proper escaping
+    const escapeCSVField = (field: string): string => {
+      if (field.includes(",") || field.includes('"') || field.includes("\n")) {
+        return `"${field.replace(/"/g, '""')}"`;
+      }
+      return field;
+    };
+
+    const headerRow = table.headers.map(escapeCSVField).join(",");
+    const dataRows = table.rows.map((row) => row.map(escapeCSVField).join(","));
+    const csvContent = [headerRow, ...dataRows].join("\n");
+
+    // Add BOM for Hebrew support in Excel
+    const BOM = "\uFEFF";
+    const blob = new Blob([BOM + csvContent], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    // Download the file
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${table.title || "table"}-export.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, [currentTableCell, data]);
+
   // Table operations for custom tables
   const handleTableOperation = useCallback(
     (
@@ -2121,6 +2165,14 @@ export function EditableDocumentPreview({
                   title="מחק את כל הטבלה"
                 >
                   🗑️ מחק טבלה
+                </button>
+                <button
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={handleExportTableToCSV}
+                  className="rounded-md border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                  title="ייצוא טבלה ל-CSV"
+                >
+                  📥 ייצוא CSV
                 </button>
                 <button
                   onMouseDown={(event) => event.preventDefault()}
