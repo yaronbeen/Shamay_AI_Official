@@ -238,11 +238,6 @@ export function ValuationProvider({ children }: ValuationProviderProps) {
     const localSessionId = localStorage.getItem("shamay_session_id");
     const currentSessionId = currentUrlSessionId || localSessionId;
 
-    // Skip if sessionId value hasn't changed
-    if (currentSessionId === prevSessionIdRef.current) {
-      return;
-    }
-
     // Skip if already initialized with this session
     if (
       currentSessionId &&
@@ -255,6 +250,15 @@ export function ValuationProvider({ children }: ValuationProviderProps) {
     // Skip if no sessionId and already initialized
     if (!currentSessionId && initializedSessionRef.current) {
       prevSessionIdRef.current = null;
+      return;
+    }
+
+    // Skip if sessionId value hasn't changed AND we're already initialized
+    // (This prevents re-initialization on every render, but allows first initialization)
+    if (
+      currentSessionId === prevSessionIdRef.current &&
+      initializedSessionRef.current
+    ) {
       return;
     }
 

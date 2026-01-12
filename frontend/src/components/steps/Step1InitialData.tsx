@@ -1,258 +1,347 @@
-'use client'
+"use client";
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import type { ValuationData } from "../ValuationWizard";
 
 interface Step1InitialDataProps {
-  data: any
-  updateData: (updates: Partial<any>, options?: { skipAutoSave?: boolean }) => void
-  onValidationChange: (isValid: boolean) => void
+  data: ValuationData;
+  updateData: (
+    updates: Partial<ValuationData>,
+    options?: { skipAutoSave?: boolean },
+  ) => void;
+  onValidationChange: (isValid: boolean) => void;
 }
 
-const DATE_FIELDS = new Set(['valuationDate', 'valuationEffectiveDate'])
+const DATE_FIELDS = new Set(["valuationDate", "valuationEffectiveDate"]);
 
-const normalizeDateToISO = (dateInput: string | Date | null | undefined): string => {
-  if (!dateInput) return ''
-  
+const normalizeDateToISO = (
+  dateInput: string | Date | null | undefined,
+): string => {
+  if (!dateInput) return "";
+
   // Handle Date objects
   if (dateInput instanceof Date) {
-    const year = dateInput.getFullYear()
-    const month = String(dateInput.getMonth() + 1).padStart(2, '0')
-    const day = String(dateInput.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
+    const year = dateInput.getFullYear();
+    const month = String(dateInput.getMonth() + 1).padStart(2, "0");
+    const day = String(dateInput.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   }
-  
+
   // Handle strings
-  const dateStr = String(dateInput)
+  const dateStr = String(dateInput);
   if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-    return dateStr
+    return dateStr;
   }
-  
+
   // Handle ISO date strings with time (YYYY-MM-DDTHH:mm:ss)
-  const isoMatch = dateStr.match(/^(\d{4}-\d{2}-\d{2})/)
+  const isoMatch = dateStr.match(/^(\d{4}-\d{2}-\d{2})/);
   if (isoMatch) {
-    return isoMatch[1]
+    return isoMatch[1];
   }
-  
-  const dotMatch = dateStr.match(/^(\d{2})\.(\d{2})\.(\d{4})$/)
+
+  const dotMatch = dateStr.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
   if (dotMatch) {
-    const [, day, month, year] = dotMatch
-    return `${year}-${month}-${day}`
+    const [, day, month, year] = dotMatch;
+    return `${year}-${month}-${day}`;
   }
-  
-  const slashMatch = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+
+  const slashMatch = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (slashMatch) {
-    const [, day, month, year] = slashMatch
-    return `${year}-${month}-${day}`
+    const [, day, month, year] = slashMatch;
+    return `${year}-${month}-${day}`;
   }
-  
-  return ''
-}
+
+  return "";
+};
 
 const formatDateForDisplay = (dateStr: string) => {
-  const iso = normalizeDateToISO(dateStr)
-  if (!iso) return ''
-  const [year, month, day] = iso.split('-')
-  return `${day}/${month}/${year}`
-}
+  const iso = normalizeDateToISO(dateStr);
+  if (!iso) return "";
+  const [year, month, day] = iso.split("-");
+  return `${day}/${month}/${year}`;
+};
 
-const LAST_ADDRESS_KEY = 'shamay_last_address'
+const LAST_ADDRESS_KEY = "shamay_last_address";
 
-export function Step1InitialData({ data, updateData, onValidationChange }: Step1InitialDataProps) {
-  const isInitialLoad = useRef(true)
+export function Step1InitialData({
+  data,
+  updateData,
+  onValidationChange,
+}: Step1InitialDataProps) {
+  const isInitialLoad = useRef(true);
   const [formData, setFormData] = useState({
     // סוג שומה ומועד כתיבתה
-    valuationType: data.valuationType || 'שווי שוק',
-    valuationDate: normalizeDateToISO(data.valuationDate) || '',
-    
+    valuationType: data.valuationType || "שווי שוק",
+    valuationDate: normalizeDateToISO(data.valuationDate) || "",
+
     // זהות מזמין השומה והקשר שלו לנכס
-    clientName: data.clientName || '',
-    clientTitle: (data as any).clientTitle || '',
-    clientNote: (data as any).clientNote || '',
-    clientRelation: data.clientRelation || '',
-    
+    clientName: data.clientName || "",
+    clientTitle: (data as any).clientTitle || "",
+    clientNote: (data as any).clientNote || "",
+    clientRelation: data.clientRelation || "",
+
     // המועד הקובע לשומה
-    valuationEffectiveDate: normalizeDateToISO(data.valuationEffectiveDate) || '',
-    
+    valuationEffectiveDate:
+      normalizeDateToISO(data.valuationEffectiveDate) || "",
+
     // זיהוי הנכס
-    street: data.street || '',
-    buildingNumber: data.buildingNumber || '',
-    neighborhood: data.neighborhood || '',
-    city: data.city || '',
-    
+    street: data.street || "",
+    buildingNumber: data.buildingNumber || "",
+    neighborhood: data.neighborhood || "",
+    city: data.city || "",
+
     // תיאור הנכס והסביבה (basic info only - detailed analysis will be done by AI in Step 3)
-    rooms: (data.rooms !== null && data.rooms !== undefined && data.rooms !== 0 && data.rooms !== '') ? data.rooms : '',
-    floor: (data.floor !== null && data.floor !== undefined && data.floor !== 0 && data.floor !== '') ? data.floor : '',
-    airDirections: data.airDirections || '',
-    area: (data.area !== null && data.area !== undefined && data.area !== 0 && data.area !== '') ? data.area : '',
-    
+    rooms:
+      data.rooms !== null && data.rooms !== undefined && data.rooms !== 0
+        ? data.rooms
+        : "",
+    floor:
+      data.floor !== null && data.floor !== undefined && data.floor !== 0
+        ? data.floor
+        : "",
+    airDirections: data.airDirections || "",
+    area:
+      data.area !== null && data.area !== undefined && data.area !== 0
+        ? data.area
+        : "",
+
     // זיהום קרקע
     landContamination: (data as any).landContamination || false,
-    landContaminationNote: (data as any).landContaminationNote || '',
-    
+    landContaminationNote: (data as any).landContaminationNote || "",
+
     // פרטי שמאי
-    shamayName: data.shamayName || '',
-    shamaySerialNumber: data.shamaySerialNumber || ''
-  })
+    shamayName: data.shamayName || "",
+    shamaySerialNumber: data.shamaySerialNumber || "",
+  });
 
   // פונקציה לפרסור כתובת מלאה לחלקים
-  function parseAddress(address: string): { street: string; buildingNumber: string; neighborhood: string; city: string } {
+  function parseAddress(address: string): {
+    street: string;
+    buildingNumber: string;
+    neighborhood: string;
+    city: string;
+  } {
     // נסה לפרק כתובת ישראלית טיפוסית
     // פורמטים נפוצים: "רחוב הרצל 15, תל אביב" או "הרצל 15 תל אביב"
     const parts = {
-      street: '',
-      buildingNumber: '',
-      neighborhood: '',
-      city: ''
-    }
-    
+      street: "",
+      buildingNumber: "",
+      neighborhood: "",
+      city: "",
+    };
+
     // חיפוש מספר בניין
-    const buildingMatch = address.match(/(\d+)/)
+    const buildingMatch = address.match(/(\d+)/);
     if (buildingMatch) {
-      parts.buildingNumber = buildingMatch[1]
-      const beforeNumber = address.substring(0, buildingMatch.index).trim()
-      parts.street = beforeNumber.replace(/^רחוב\s*/i, '').trim()
+      parts.buildingNumber = buildingMatch[1];
+      const beforeNumber = address.substring(0, buildingMatch.index).trim();
+      parts.street = beforeNumber.replace(/^רחוב\s*/i, "").trim();
     } else {
       // אין מספר בניין, הכל זה רחוב
-      parts.street = address.split(',')[0].trim().replace(/^רחוב\s*/i, '')
+      parts.street = address
+        .split(",")[0]
+        .trim()
+        .replace(/^רחוב\s*/i, "");
     }
-    
+
     // חיפוש עיר (אחרי פסיק או בסוף)
-    const cityMatch = address.match(/,\s*([^,]+)$/) || address.match(/\s+([א-ת]+)$/)
+    const cityMatch =
+      address.match(/,\s*([^,]+)$/) || address.match(/\s+([א-ת]+)$/);
     if (cityMatch) {
-      parts.city = cityMatch[1].trim()
+      parts.city = cityMatch[1].trim();
     }
-    
-    return parts
+
+    return parts;
   }
 
   // טען כתובת אחרונה רק אם אין נתונים מהדיבי (רק פעם אחת)
   // CRITICAL: רק אם אין נתונים מהדיבי - לא לטעון מ-localStorage אם יש נתונים מהדיבי
   useEffect(() => {
     // בדוק אם יש נתונים מהדיבי - אם יש, אל תטען מ-localStorage
-    const hasDataFromDB = data.street || data.city || data.buildingNumber || data.neighborhood
-    if (!hasDataFromDB && typeof window !== 'undefined') {
-      const lastAddress = localStorage.getItem(LAST_ADDRESS_KEY)
+    const hasDataFromDB =
+      data.street || data.city || data.buildingNumber || data.neighborhood;
+    if (!hasDataFromDB && typeof window !== "undefined") {
+      const lastAddress = localStorage.getItem(LAST_ADDRESS_KEY);
       if (lastAddress) {
         // נסה לפרק את הכתובת לחלקים
-        const addressParts = parseAddress(lastAddress)
+        const addressParts = parseAddress(lastAddress);
         if (addressParts.street || addressParts.city) {
           // עדכן את formData ישירות
-          setFormData(prev => ({
+          setFormData((prev) => ({
             ...prev,
             street: addressParts.street || prev.street,
             city: addressParts.city || prev.city,
             buildingNumber: addressParts.buildingNumber || prev.buildingNumber,
-            neighborhood: addressParts.neighborhood || prev.neighborhood
-          }))
+            neighborhood: addressParts.neighborhood || prev.neighborhood,
+          }));
           // עדכן גם את data דרך updateData
-          updateData({
-            street: addressParts.street || '',
-            city: addressParts.city || '',
-            buildingNumber: addressParts.buildingNumber || '',
-            neighborhood: addressParts.neighborhood || ''
-          } as any, { skipAutoSave: true } as any)
+          updateData(
+            {
+              street: addressParts.street || "",
+              city: addressParts.city || "",
+              buildingNumber: addressParts.buildingNumber || "",
+              neighborhood: addressParts.neighborhood || "",
+            } as any,
+            { skipAutoSave: true } as any,
+          );
         }
       }
     }
-  }, []) // רק פעם אחת בטעינה ראשונית
+  }, []); // רק פעם אחת בטעינה ראשונית
 
   // שמור כתובת כשמשתנה
   useEffect(() => {
-    if (formData.street && formData.city && typeof window !== 'undefined') {
-      const fullAddress = `${formData.street} ${formData.buildingNumber || ''} ${formData.neighborhood || ''} ${formData.city}`.trim()
+    if (formData.street && formData.city && typeof window !== "undefined") {
+      const fullAddress =
+        `${formData.street} ${formData.buildingNumber || ""} ${formData.neighborhood || ""} ${formData.city}`.trim();
       if (fullAddress) {
-        localStorage.setItem(LAST_ADDRESS_KEY, fullAddress)
+        localStorage.setItem(LAST_ADDRESS_KEY, fullAddress);
       }
     }
-  }, [formData.street, formData.city, formData.buildingNumber, formData.neighborhood])
+  }, [
+    formData.street,
+    formData.city,
+    formData.buildingNumber,
+    formData.neighborhood,
+  ]);
 
   // Sync local formData with incoming data prop when data changes
   // OPTIMIZATION: Only update formData when Step1-specific fields change, not all data changes
   // Use ref to track previous values and only update changed fields
-  const prevDataRef = useRef<Partial<any>>({})
-  
+  const prevDataRef = useRef<Partial<any>>({});
+
   useEffect(() => {
     // Only update if Step1-specific fields actually changed
     const step1Fields = [
-      'valuationType', 'valuationDate', 'valuationEffectiveDate',
-      'clientName', 'clientTitle', 'clientNote', 'clientRelation',
-      'street', 'buildingNumber', 'neighborhood', 'city',
-      'rooms', 'floor', 'airDirections', 'area',
-      'landContamination', 'landContaminationNote',
-      'shamayName', 'shamaySerialNumber'
-    ]
-    
+      "valuationType",
+      "valuationDate",
+      "valuationEffectiveDate",
+      "clientName",
+      "clientTitle",
+      "clientNote",
+      "clientRelation",
+      "street",
+      "buildingNumber",
+      "neighborhood",
+      "city",
+      "rooms",
+      "floor",
+      "airDirections",
+      "area",
+      "landContamination",
+      "landContaminationNote",
+      "shamayName",
+      "shamaySerialNumber",
+    ];
+
     // Check if any Step1 field changed
-    const hasChanges = step1Fields.some(field => {
-      const currentValue = field === 'valuationDate' || field === 'valuationEffectiveDate' 
-        ? normalizeDateToISO((data as any)[field])
-        : (data as any)[field]
-      const prevValue = prevDataRef.current[field]
-      
+    const hasChanges = step1Fields.some((field) => {
+      const currentValue =
+        field === "valuationDate" || field === "valuationEffectiveDate"
+          ? normalizeDateToISO((data as any)[field])
+          : (data as any)[field];
+      const prevValue = prevDataRef.current[field];
+
       // Handle special cases for numbers and booleans
-      if (field === 'rooms' || field === 'floor') {
-        const current = currentValue !== null && currentValue !== undefined && currentValue !== 0 && currentValue !== '' ? currentValue : ''
-        const prev = prevValue !== null && prevValue !== undefined && prevValue !== 0 && prevValue !== '' ? prevValue : ''
-        return current !== prev
+      if (field === "rooms" || field === "floor") {
+        const current =
+          currentValue !== null &&
+          currentValue !== undefined &&
+          currentValue !== 0 &&
+          currentValue !== ""
+            ? currentValue
+            : "";
+        const prev =
+          prevValue !== null &&
+          prevValue !== undefined &&
+          prevValue !== 0 &&
+          prevValue !== ""
+            ? prevValue
+            : "";
+        return current !== prev;
       }
-      
-      return currentValue !== prevValue
-    })
-    
+
+      return currentValue !== prevValue;
+    });
+
     if (!hasChanges) {
-      return // No changes to Step1 fields, skip update
+      return; // No changes to Step1 fields, skip update
     }
-    
+
     // Check if data has meaningful values (not just empty strings)
-    const hasData = data.valuationType || data.clientName || data.street || data.city || 
-                    (data as any).clientTitle || data.valuationDate || data.valuationEffectiveDate
-    
+    const hasData =
+      data.valuationType ||
+      data.clientName ||
+      data.street ||
+      data.city ||
+      (data as any).clientTitle ||
+      data.valuationDate ||
+      data.valuationEffectiveDate;
+
     if (hasData) {
       // Update only changed fields using functional update to avoid unnecessary re-renders
-      setFormData(prev => {
+      setFormData((prev) => {
         const updated = {
           // סוג שומה ומועד כתיבתה
-          valuationType: data.valuationType || prev.valuationType || 'שווי שוק',
-          valuationDate: normalizeDateToISO(data.valuationDate) || prev.valuationDate || '',
-          
+          valuationType: data.valuationType || prev.valuationType || "שווי שוק",
+          valuationDate:
+            normalizeDateToISO(data.valuationDate) || prev.valuationDate || "",
+
           // זהות מזמין השומה והקשר שלו לנכס
-          clientName: data.clientName || prev.clientName || '',
-          clientTitle: (data as any).clientTitle ?? prev.clientTitle ?? '',
-          clientNote: (data as any).clientNote ?? prev.clientNote ?? '',
-          clientRelation: data.clientRelation ?? prev.clientRelation ?? '',
-          
+          clientName: data.clientName || prev.clientName || "",
+          clientTitle: (data as any).clientTitle ?? prev.clientTitle ?? "",
+          clientNote: (data as any).clientNote ?? prev.clientNote ?? "",
+          clientRelation: data.clientRelation ?? prev.clientRelation ?? "",
+
           // המועד הקובע לשומה
-          valuationEffectiveDate: normalizeDateToISO(data.valuationEffectiveDate) || prev.valuationEffectiveDate || '',
-          
+          valuationEffectiveDate:
+            normalizeDateToISO(data.valuationEffectiveDate) ||
+            prev.valuationEffectiveDate ||
+            "",
+
           // זיהוי הנכס
-          street: data.street || prev.street || '',
-          buildingNumber: data.buildingNumber || prev.buildingNumber || '',
-          neighborhood: data.neighborhood || prev.neighborhood || '',
-          city: data.city || prev.city || '',
-          
+          street: data.street || prev.street || "",
+          buildingNumber: data.buildingNumber || prev.buildingNumber || "",
+          neighborhood: data.neighborhood || prev.neighborhood || "",
+          city: data.city || prev.city || "",
+
           // תיאור הנכס והסביבה
-          rooms: (data.rooms !== null && data.rooms !== undefined && data.rooms !== 0 && data.rooms !== '') ? data.rooms : (prev.rooms || ''),
-          floor: (data.floor !== null && data.floor !== undefined && data.floor !== 0 && data.floor !== '') ? data.floor : (prev.floor || ''),
-          airDirections: data.airDirections || prev.airDirections || '',
-          area: (data.area !== null && data.area !== undefined && data.area !== 0 && data.area !== '') ? data.area : (prev.area || ''),
-          
+          rooms:
+            data.rooms !== null && data.rooms !== undefined && data.rooms !== 0
+              ? data.rooms
+              : prev.rooms || "",
+          floor:
+            data.floor !== null && data.floor !== undefined && data.floor !== 0
+              ? data.floor
+              : prev.floor || "",
+          airDirections: data.airDirections || prev.airDirections || "",
+          area:
+            data.area !== null && data.area !== undefined && data.area !== 0
+              ? data.area
+              : prev.area || "",
+
           // זיהום קרקע
-          landContamination: (data as any).landContamination ?? prev.landContamination ?? false,
-          landContaminationNote: (data as any).landContaminationNote ?? prev.landContaminationNote ?? '',
-          
+          landContamination:
+            (data as any).landContamination ?? prev.landContamination ?? false,
+          landContaminationNote:
+            (data as any).landContaminationNote ??
+            prev.landContaminationNote ??
+            "",
+
           // פרטי שמאי
-          shamayName: data.shamayName || prev.shamayName || '',
-          shamaySerialNumber: data.shamaySerialNumber || prev.shamaySerialNumber || ''
-        }
-        
+          shamayName: data.shamayName || prev.shamayName || "",
+          shamaySerialNumber:
+            data.shamaySerialNumber || prev.shamaySerialNumber || "",
+        };
+
         // Update ref with current values
-        step1Fields.forEach(field => {
-          prevDataRef.current[field] = (data as any)[field]
-        })
-        
-        return updated
-      })
-      isInitialLoad.current = false
+        step1Fields.forEach((field) => {
+          prevDataRef.current[field] = (data as any)[field];
+        });
+
+        return updated;
+      });
+      isInitialLoad.current = false;
     }
   }, [
     data.valuationType,
@@ -273,64 +362,74 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
     (data as any).landContamination,
     (data as any).landContaminationNote,
     data.shamayName,
-    data.shamaySerialNumber
-  ])
+    data.shamaySerialNumber,
+  ]);
 
   const validateForm = useCallback(() => {
-    const isValid = formData.valuationType.trim() !== '' &&
-                   formData.clientName.trim() !== '' &&
-                   formData.street.trim() !== '' &&
-                   formData.buildingNumber.trim() !== '' &&
-                   formData.city.trim() !== '' &&
-                   formData.rooms > 0 &&
-                   String(formData.floor || '').trim() !== '' &&
-                   // שטח יבוא מהטאבו - לא נדרש כאן
-                   formData.shamayName.trim() !== '' &&
-                   formData.shamaySerialNumber.trim() !== ''
+    const isValid =
+      formData.valuationType.trim() !== "" &&
+      formData.clientName.trim() !== "" &&
+      formData.street.trim() !== "" &&
+      formData.buildingNumber.trim() !== "" &&
+      formData.city.trim() !== "" &&
+      Number(formData.rooms) > 0 &&
+      String(formData.floor || "").trim() !== "" &&
+      // שטח יבוא מהטאבו - לא נדרש כאן
+      formData.shamayName.trim() !== "" &&
+      formData.shamaySerialNumber.trim() !== "";
 
-    return isValid
-  }, [formData])
+    return isValid;
+  }, [formData]);
 
   // CRITICAL: Use ref to prevent infinite loops - track last validation state
-  const lastValidationStateRef = useRef<boolean | null>(null)
-  
+  const lastValidationStateRef = useRef<boolean | null>(null);
+
   // Validate only when formData changes and update validation if it changed
   useEffect(() => {
-    const isValid = validateForm()
+    const isValid = validateForm();
     // Only call onValidationChange if validation state actually changed
     if (lastValidationStateRef.current !== isValid) {
-      onValidationChange(isValid)
-      lastValidationStateRef.current = isValid
+      onValidationChange(isValid);
+      lastValidationStateRef.current = isValid;
     }
-  }, [formData]) // Only depend on formData, not onValidationChange or validateForm
+  }, [formData]); // Only depend on formData, not onValidationChange or validateForm
 
-  const updateField = useCallback((field: string, value: any) => {
-    setFormData(prev => {
-      const newData = { ...prev, [field]: value }
+  const updateField = useCallback(
+    (field: string, value: any) => {
+      setFormData((prev) => {
+        const newData = { ...prev, [field]: value };
 
-      // Ensure all Step1 fields are included, even if empty
-      const payload: Record<string, any> = {
-        ...newData,
-        valuationType: newData.valuationType ?? '',
-        clientTitle: newData.clientTitle ?? '',
-        clientNote: newData.clientNote ?? '',
-        clientRelation: newData.clientRelation ?? '',
-        valuationEffectiveDate: newData.valuationEffectiveDate ?? ''
-      }
-      
-      // Critical fields that should save immediately:
-      // - valuationType, valuationDate, valuationEffectiveDate (required for document generation)
-      const criticalFields = ['valuationType', 'valuationDate', 'valuationEffectiveDate']
-      const shouldSaveImmediately = criticalFields.includes(field)
-      
-      // Skip auto-save for text inputs - only save on step navigation or explicit save
-      // BUT save immediately for critical fields
-      updateData(payload as any, { skipAutoSave: !shouldSaveImmediately } as any)
-      
-      return newData
-    })
-  }, [updateData])
+        // Ensure all Step1 fields are included, even if empty
+        const payload: Record<string, any> = {
+          ...newData,
+          valuationType: newData.valuationType ?? "",
+          clientTitle: newData.clientTitle ?? "",
+          clientNote: newData.clientNote ?? "",
+          clientRelation: newData.clientRelation ?? "",
+          valuationEffectiveDate: newData.valuationEffectiveDate ?? "",
+        };
 
+        // Critical fields that should save immediately:
+        // - valuationType, valuationDate, valuationEffectiveDate (required for document generation)
+        const criticalFields = [
+          "valuationType",
+          "valuationDate",
+          "valuationEffectiveDate",
+        ];
+        const shouldSaveImmediately = criticalFields.includes(field);
+
+        // Skip auto-save for text inputs - only save on step navigation or explicit save
+        // BUT save immediately for critical fields
+        updateData(
+          payload as any,
+          { skipAutoSave: !shouldSaveImmediately } as any,
+        );
+
+        return newData;
+      });
+    },
+    [updateData],
+  );
 
   return (
     <div className="max-w-4xl mx-auto p-6">
@@ -346,8 +445,10 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
       <div className="space-y-8">
         {/* סוג שומה ומועד כתיבתה */}
         <div className="bg-white p-6 rounded-lg border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">סוג שומה ומועד כתיבתה</h3>
-          
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            סוג שומה ומועד כתיבתה
+          </h3>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
@@ -355,8 +456,8 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
               </label>
               <select
                 name="valuationType"
-                value={formData.valuationType || 'שווי שוק'}
-                onChange={(e) => updateField('valuationType', e.target.value)}
+                value={formData.valuationType || "שווי שוק"}
+                onChange={(e) => updateField("valuationType", e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 dir="rtl"
               >
@@ -379,8 +480,8 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 type="date"
                 name="valuationDate"
                 autoComplete="off"
-                value={formData.valuationDate || ''}
-                onChange={(e) => updateField('valuationDate', e.target.value)}
+                value={formData.valuationDate || ""}
+                onChange={(e) => updateField("valuationDate", e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
@@ -389,8 +490,10 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
 
         {/* זהות מזמין השומה והקשר שלו לנכס */}
         <div className="bg-white p-6 rounded-lg border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">זהות מזמין השומה והקשר שלו לנכס</h3>
-          
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            זהות מזמין השומה והקשר שלו לנכס
+          </h3>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
@@ -399,10 +502,10 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
               <input
                 type="text"
                 name="clientTitle"
-                value={(formData as any).clientTitle || ''}
-                onChange={(e) => updateField('clientTitle', e.target.value)}
+                value={(formData as any).clientTitle || ""}
+                onChange={(e) => updateField("clientTitle", e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="למשל: עו&quot;ד, כונס נכסים"
+                placeholder='למשל: עו"ד, כונס נכסים'
                 dir="rtl"
               />
             </div>
@@ -416,7 +519,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 name="clientName"
                 autoComplete="name"
                 value={formData.clientName}
-                onChange={(e) => updateField('clientName', e.target.value)}
+                onChange={(e) => updateField("clientName", e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="הזן שם מלא"
                 dir="rtl"
@@ -430,8 +533,8 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
               <input
                 type="text"
                 name="clientNote"
-                value={(formData as any).clientNote || ''}
-                onChange={(e) => updateField('clientNote', e.target.value)}
+                value={(formData as any).clientNote || ""}
+                onChange={(e) => updateField("clientNote", e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="למשל: א.נ."
                 dir="rtl"
@@ -444,8 +547,8 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
               </label>
               <select
                 name="clientRelation"
-                value={formData.clientRelation || ''}
-                onChange={(e) => updateField('clientRelation', e.target.value)}
+                value={formData.clientRelation || ""}
+                onChange={(e) => updateField("clientRelation", e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 dir="rtl"
               >
@@ -462,11 +565,12 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
           </div>
         </div>
 
-
         {/* המועד הקובע לשומה */}
         <div className="bg-white p-6 rounded-lg border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">המועד הקובע לשומה</h3>
-          
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            המועד הקובע לשומה
+          </h3>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
               המועד הקובע לשומה *
@@ -475,8 +579,10 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
               type="date"
               name="valuationEffectiveDate"
               autoComplete="off"
-              value={formData.valuationEffectiveDate || ''}
-              onChange={(e) => updateField('valuationEffectiveDate', e.target.value)}
+              value={formData.valuationEffectiveDate || ""}
+              onChange={(e) =>
+                updateField("valuationEffectiveDate", e.target.value)
+              }
               className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
@@ -484,8 +590,10 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
 
         {/* זיהוי הנכס */}
         <div className="bg-white p-6 rounded-lg border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">זיהוי הנכס</h3>
-          
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            זיהוי הנכס
+          </h3>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
@@ -496,13 +604,13 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 name="street"
                 autoComplete="address-line1"
                 value={formData.street}
-                onChange={(e) => updateField('street', e.target.value)}
+                onChange={(e) => updateField("street", e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="הזן שם רחוב"
                 dir="rtl"
               />
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
                 מספר בניין *
@@ -512,13 +620,13 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 name="buildingNumber"
                 autoComplete="address-line2"
                 value={formData.buildingNumber}
-                onChange={(e) => updateField('buildingNumber', e.target.value)}
+                onChange={(e) => updateField("buildingNumber", e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="הזן מספר בניין"
                 dir="rtl"
               />
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
                 שכונה (אופציונלי)
@@ -528,13 +636,13 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 name="neighborhood"
                 autoComplete="address-level2"
                 value={formData.neighborhood}
-                onChange={(e) => updateField('neighborhood', e.target.value)}
+                onChange={(e) => updateField("neighborhood", e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="הזן שם שכונה (אופציונלי)"
                 dir="rtl"
               />
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
                 עיר *
@@ -544,15 +652,14 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 name="city"
                 autoComplete="address-level1"
                 value={formData.city}
-                onChange={(e) => updateField('city', e.target.value)}
+                onChange={(e) => updateField("city", e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="הזן שם עיר"
                 dir="rtl"
               />
             </div>
-
           </div>
-          
+
           {/* גוש, חלקה ותת-חלקה - מוצגים אם נשלפו מטאבו */}
           {(data.gush || data.parcel || data.subParcel) && (
             <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -597,8 +704,10 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
 
         {/* תיאור הנכס והסביבה */}
         <div className="bg-white p-6 rounded-lg border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">תיאור הנכס והסביבה</h3>
-          
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            תיאור הנכס והסביבה
+          </h3>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
@@ -610,16 +719,21 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 autoComplete="off"
                 min="0"
                 max="99"
-                value={formData.rooms === '' || formData.rooms === 0 ? '' : formData.rooms}
+                value={
+                  formData.rooms === "" || formData.rooms === 0
+                    ? ""
+                    : formData.rooms
+                }
                 onChange={(e) => {
-                  const val = e.target.value === '' ? '' : parseInt(e.target.value)
-                  updateField('rooms', val)
+                  const val =
+                    e.target.value === "" ? "" : parseInt(e.target.value);
+                  updateField("rooms", val);
                 }}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="הזן מספר חדרים"
               />
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
                 קומה *
@@ -628,53 +742,72 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 type="text"
                 name="floor"
                 autoComplete="off"
-                value={formData.floor || ''}
-                onChange={(e) => updateField('floor', e.target.value)}
+                value={formData.floor || ""}
+                onChange={(e) => updateField("floor", e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="לדוגמה: 1, א, קומה ראשונה"
               />
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
                 כיווני אוויר (אופציונלי)
               </label>
               <div className="flex flex-wrap gap-3 justify-end">
-                {['צפון', 'מזרח', 'דרום', 'מערב'].map((direction) => {
-                  const currentDirections = (formData as any).airDirections ? String((formData as any).airDirections).split('-').filter(Boolean) : []
-                  const isSelected = currentDirections.includes(direction)
+                {["צפון", "מזרח", "דרום", "מערב"].map((direction) => {
+                  const currentDirections = (formData as any).airDirections
+                    ? String((formData as any).airDirections)
+                        .split("-")
+                        .filter(Boolean)
+                    : [];
+                  const isSelected = currentDirections.includes(direction);
                   return (
-                    <label key={direction} className="flex items-center gap-2 cursor-pointer">
+                    <label
+                      key={direction}
+                      className="flex items-center gap-2 cursor-pointer"
+                    >
                       <span className="text-sm text-gray-700">{direction}</span>
                       <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={(e) => {
-                          let newDirections = [...currentDirections]
+                          let newDirections = [...currentDirections];
                           if (e.target.checked) {
-                            newDirections.push(direction)
+                            newDirections.push(direction);
                           } else {
-                            newDirections = newDirections.filter(d => d !== direction)
+                            newDirections = newDirections.filter(
+                              (d) => d !== direction,
+                            );
                           }
                           // Sort to avoid opposite directions next to each other
                           // Order: צפון → מערב → דרום → מזרח (alternating pattern)
-                          const nonOppositeOrder = ['צפון', 'מערב', 'דרום', 'מזרח']
-                          newDirections.sort((a, b) => nonOppositeOrder.indexOf(a) - nonOppositeOrder.indexOf(b))
-                          updateField('airDirections', newDirections.join('-'))
+                          const nonOppositeOrder = [
+                            "צפון",
+                            "מערב",
+                            "דרום",
+                            "מזרח",
+                          ];
+                          newDirections.sort(
+                            (a, b) =>
+                              nonOppositeOrder.indexOf(a) -
+                              nonOppositeOrder.indexOf(b),
+                          );
+                          updateField("airDirections", newDirections.join("-"));
                         }}
                         className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                       />
                     </label>
-                  )
+                  );
                 })}
               </div>
               {(formData as any).airDirections && (
-                <p className="text-xs text-gray-500 mt-2 text-right">נבחר: {(formData as any).airDirections}</p>
+                <p className="text-xs text-gray-500 mt-2 text-right">
+                  נבחר: {(formData as any).airDirections}
+                </p>
               )}
             </div>
-            
           </div>
-          
+
           {/* הודעה על שטח אם נשלף מטאבו */}
           {/* {data.area && data.area > 0 && (
             <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -687,8 +820,10 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
 
         {/* זיהום קרקע */}
         <div className="bg-white p-6 rounded-lg border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">זיהום קרקע</h3>
-          
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            זיהום קרקע
+          </h3>
+
           <div className="space-y-4">
             <div className="flex items-start gap-3">
               <input
@@ -696,18 +831,21 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 id="landContamination"
                 checked={(formData as any).landContamination || false}
                 onChange={(e) => {
-                  updateField('landContamination', e.target.checked)
+                  updateField("landContamination", e.target.checked);
                   if (!e.target.checked) {
-                    updateField('landContaminationNote', '')
+                    updateField("landContaminationNote", "");
                   }
                 }}
                 className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
               />
-              <label htmlFor="landContamination" className="text-sm font-medium text-gray-700 text-right flex-1">
+              <label
+                htmlFor="landContamination"
+                className="text-sm font-medium text-gray-700 text-right flex-1"
+              >
                 הובאה לידיעתך סיבה לחשד לקיומם של חומרים מסוכנים או מזהמים?
               </label>
             </div>
-            
+
             {(formData as any).landContamination && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
@@ -715,8 +853,10 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 </label>
                 <textarea
                   name="landContaminationNote"
-                  value={(formData as any).landContaminationNote || ''}
-                  onChange={(e) => updateField('landContaminationNote', e.target.value)}
+                  value={(formData as any).landContaminationNote || ""}
+                  onChange={(e) =>
+                    updateField("landContaminationNote", e.target.value)
+                  }
                   rows={3}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="הזן פרטים על החשד או המידע שהובא לידיעתך"
@@ -730,8 +870,10 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
 
         {/* פרטי שמאי */}
         <div className="bg-white p-6 rounded-lg border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">פרטי שמאי</h3>
-          
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            פרטי שמאי
+          </h3>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
@@ -742,7 +884,7 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 name="shamayName"
                 autoComplete="name"
                 value={formData.shamayName}
-                onChange={(e) => updateField('shamayName', e.target.value)}
+                onChange={(e) => updateField("shamayName", e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="הזן שם מלא של השמאי"
                 dir="rtl"
@@ -758,23 +900,25 @@ export function Step1InitialData({ data, updateData, onValidationChange }: Step1
                 name="shamaySerialNumber"
                 autoComplete="off"
                 value={formData.shamaySerialNumber}
-                onChange={(e) => updateField('shamaySerialNumber', e.target.value)}
+                onChange={(e) =>
+                  updateField("shamaySerialNumber", e.target.value)
+                }
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="הזן מספר רישיון"
                 dir="rtl"
               />
             </div>
-
           </div>
         </div>
 
         {/* Note about signature */}
         <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
           <p className="text-sm text-blue-800">
-            💡 <strong>חתימת שמאי:</strong> ניתן להעלות חתימת שמאי קבועה בהגדרות הארגון. החתימה תופיע בכל הדוחות שיוצאו.
+            💡 <strong>חתימת שמאי:</strong> ניתן להעלות חתימת שמאי קבועה בהגדרות
+            הארגון. החתימה תופיע בכל הדוחות שיוצאו.
           </p>
         </div>
       </div>
     </div>
-  )
+  );
 }

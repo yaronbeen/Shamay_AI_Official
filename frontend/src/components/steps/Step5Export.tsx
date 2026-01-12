@@ -1,129 +1,150 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import React from 'react'
-import { Download, FileText, CheckCircle, Loader2, ExternalLink } from 'lucide-react'
-import { ValuationData } from '../ValuationWizard'
-import { Step5ValuationPanel } from './Step5ValuationPanel'
-import { CollapsibleDrawer } from '../ui/CollapsibleDrawer'
-import { cn } from '@/lib/utils'
+import { useState } from "react";
+import React from "react";
+import {
+  Download,
+  FileText,
+  CheckCircle,
+  Loader2,
+  ExternalLink,
+} from "lucide-react";
+import { ValuationData } from "../ValuationWizard";
+import { Step5ValuationPanel } from "./Step5ValuationPanel";
+import { CollapsibleDrawer } from "../ui/CollapsibleDrawer";
+import { cn } from "@/lib/utils";
 
 interface Step5ExportProps {
-  data: ValuationData
-  updateData?: (updates: Partial<ValuationData>) => void
-  sessionId?: string
-  onSaveFinalResults?: (finalValuation: number, pricePerSqm: number, comparableData: any, propertyAnalysis: any) => Promise<void>
+  data: ValuationData;
+  updateData?: (updates: Partial<ValuationData>) => void;
+  sessionId?: string;
+  onSaveFinalResults?: (
+    finalValuation: number,
+    pricePerSqm: number,
+    comparableData: any,
+    propertyAnalysis: any,
+  ) => Promise<void>;
 }
 
 export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
-  const [exporting, setExporting] = useState(false)
-  const [exportStatus, setExportStatus] = useState<'idle' | 'success' | 'error'>('idle')
-  const [pdfBlob, setPdfBlob] = useState<Blob | null>(null)
+  const [exporting, setExporting] = useState(false);
+  const [exportStatus, setExportStatus] = useState<
+    "idle" | "success" | "error"
+  >("idle");
+  const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
 
   // Drawer state
-  const [isDrawerOpen, setIsDrawerOpen] = useState(true)
+  const [isDrawerOpen, setIsDrawerOpen] = useState(true);
 
   // Use prop sessionId or fall back to data.sessionId
-  const effectiveSessionId = sessionId || data.sessionId
+  const effectiveSessionId = sessionId || data.sessionId;
 
   const openExportInNewTab = () => {
     if (effectiveSessionId) {
-      window.open(`/panel/step5-export?sessionId=${effectiveSessionId}`, '_blank', 'noopener,noreferrer')
+      window.open(
+        `/panel/step5-export?sessionId=${effectiveSessionId}`,
+        "_blank",
+        "noopener,noreferrer",
+      );
     }
-  }
+  };
 
   const handleExportPDF = async () => {
     if (!effectiveSessionId) {
-      console.error('No session ID available')
-      return
+      console.error("No session ID available");
+      return;
     }
 
     try {
-      setExporting(true)
-      setExportStatus('idle')
+      setExporting(true);
+      setExportStatus("idle");
 
-      console.log('📄 Starting PDF export...')
+      console.log("📄 Starting PDF export...");
 
-      const response = await fetch(`/api/session/${effectiveSessionId}/export-pdf`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      })
+      const response = await fetch(
+        `/api/session/${effectiveSessionId}/export-pdf`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        },
+      );
 
       if (!response.ok) {
-        throw new Error(`PDF export failed: ${response.status}`)
+        throw new Error(`PDF export failed: ${response.status}`);
       }
 
-      const contentType = response.headers.get('content-type')
-      console.log('📄 Response content type:', contentType)
+      const contentType = response.headers.get("content-type");
+      console.log("📄 Response content type:", contentType);
 
-      if (contentType?.includes('application/pdf')) {
-        const pdfBlob = await response.blob()
-        console.log('✅ PDF blob created:', pdfBlob.size, 'bytes')
+      if (contentType?.includes("application/pdf")) {
+        const pdfBlob = await response.blob();
+        console.log("✅ PDF blob created:", pdfBlob.size, "bytes");
 
-        setPdfBlob(pdfBlob)
-        setExportStatus('success')
+        setPdfBlob(pdfBlob);
+        setExportStatus("success");
 
-        const url = URL.createObjectURL(pdfBlob)
+        const url = URL.createObjectURL(pdfBlob);
         try {
-          const link = document.createElement('a')
-          link.href = url
-          link.download = `shamay-valuation-${effectiveSessionId}.pdf`
-          document.body.appendChild(link)
-          link.click()
-          document.body.removeChild(link)
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = `shamay-valuation-${effectiveSessionId}.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
         } finally {
-          URL.revokeObjectURL(url)
+          URL.revokeObjectURL(url);
         }
+      } else if (contentType?.includes("text/html")) {
+        const html = await response.text();
+        console.warn(
+          "⚠️ Received HTML instead of PDF, opening print dialog...",
+        );
 
-      } else if (contentType?.includes('text/html')) {
-        const html = await response.text()
-        console.warn('⚠️ Received HTML instead of PDF, opening print dialog...')
-
-        const printWindow = window.open('', '_blank')
+        const printWindow = window.open("", "_blank");
         if (printWindow) {
-          printWindow.document.write(html)
-          printWindow.document.close()
-          setTimeout(() => printWindow.print(), 500)
+          printWindow.document.write(html);
+          printWindow.document.close();
+          setTimeout(() => printWindow.print(), 500);
         }
 
-        setExportStatus('success')
-
+        setExportStatus("success");
       } else {
-        const result = await response.json()
-        console.error('❌ PDF export error:', result)
-        throw new Error(result.error || 'PDF export failed')
+        const result = await response.json();
+        console.error("❌ PDF export error:", result);
+        throw new Error(result.error || "PDF export failed");
       }
-
     } catch (error) {
-      console.error('❌ PDF export error:', error)
-      setExportStatus('error')
+      console.error("❌ PDF export error:", error);
+      setExportStatus("error");
     } finally {
-      setExporting(false)
+      setExporting(false);
     }
-  }
+  };
 
   const handleDownloadPDF = () => {
     if (pdfBlob && effectiveSessionId) {
-      const url = URL.createObjectURL(pdfBlob)
+      const url = URL.createObjectURL(pdfBlob);
       try {
-        const link = document.createElement('a')
-        link.href = url
-        link.download = `shamay-valuation-${effectiveSessionId}.pdf`
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `shamay-valuation-${effectiveSessionId}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
       } finally {
-        URL.revokeObjectURL(url)
+        URL.revokeObjectURL(url);
       }
     }
-  }
+  };
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="text-center">
         <h2 className="text-3xl font-bold mb-2">חישוב שווי וייצוא</h2>
-        <p className="text-gray-600 text-lg">סיכום הערכת השווי ויצירת דוח PDF</p>
+        <p className="text-gray-600 text-lg">
+          סיכום הערכת השווי ויצירת דוח PDF
+        </p>
       </div>
 
       {/* Main Content - Flex Layout with Drawer */}
@@ -142,10 +163,12 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
         </CollapsibleDrawer>
 
         {/* Right Side - PDF Export (expands when drawer closed) */}
-        <div className={cn(
-          'transition-all duration-300',
-          isDrawerOpen ? 'flex-1' : 'w-full'
-        )}>
+        <div
+          className={cn(
+            "transition-all duration-300",
+            isDrawerOpen ? "flex-1" : "w-full",
+          )}
+        >
           <div className="bg-white border-2 border-gray-200 rounded-xl p-6 shadow-lg h-full">
             {/* Header with open in new tab button */}
             <div className="flex justify-end mb-2">
@@ -165,7 +188,9 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
                 <FileText className="h-8 w-8 text-blue-600" />
               </div>
               <h3 className="text-xl font-semibold mb-2">ייצוא PDF</h3>
-              <p className="text-sm text-gray-600">יצירת דוח PDF מקצועי עם כל המידע והנתונים</p>
+              <p className="text-sm text-gray-600">
+                יצירת דוח PDF מקצועי עם כל המידע והנתונים
+              </p>
             </div>
 
             <button
@@ -173,8 +198,8 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
               disabled={exporting}
               className={`w-full px-6 py-4 rounded-lg font-semibold text-lg transition-all ${
                 exporting
-                  ? 'bg-gray-400 text-white cursor-not-allowed'
-                  : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-lg transform hover:scale-105'
+                  ? "bg-gray-400 text-white cursor-not-allowed"
+                  : "bg-blue-600 text-white hover:bg-blue-700 hover:shadow-lg transform hover:scale-105"
               }`}
             >
               {exporting ? (
@@ -190,11 +215,13 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
               )}
             </button>
 
-            {exportStatus === 'success' && (
+            {exportStatus === "success" && (
               <div className="mt-6 p-4 bg-green-50 border-2 border-green-300 rounded-lg">
                 <div className="flex items-center justify-center text-green-800 mb-2">
                   <CheckCircle className="h-6 w-6 mr-2" />
-                  <span className="text-base font-semibold">PDF נוצר בהצלחה!</span>
+                  <span className="text-base font-semibold">
+                    PDF נוצר בהצלחה!
+                  </span>
                 </div>
                 {pdfBlob && (
                   <button
@@ -208,15 +235,19 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
               </div>
             )}
 
-            {exportStatus === 'error' && (
+            {exportStatus === "error" && (
               <div className="mt-6 p-4 bg-red-50 border-2 border-red-300 rounded-lg">
-                <p className="text-sm text-red-800 text-center font-medium">שגיאה ביצירת PDF</p>
+                <p className="text-sm text-red-800 text-center font-medium">
+                  שגיאה ביצירת PDF
+                </p>
               </div>
             )}
 
             {/* Word Conversion Option */}
             <div className="mt-6 pt-6 border-t-2 border-gray-200">
-              <p className="text-sm text-gray-700 mb-3 text-center font-medium">רוצים להמיר את ה-PDF ל-Word?</p>
+              <p className="text-sm text-gray-700 mb-3 text-center font-medium">
+                רוצים להמיר את ה-PDF ל-Word?
+              </p>
               <a
                 href="https://www.adobe.com/il_he/acrobat/online/pdf-to-word.html"
                 target="_blank"
@@ -235,5 +266,5 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
         </div>
       </div>
     </div>
-  )
+  );
 }
