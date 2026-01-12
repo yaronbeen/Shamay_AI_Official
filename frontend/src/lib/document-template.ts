@@ -1,4 +1,4 @@
-import { ValuationData } from "../components/ValuationWizard";
+import { ValuationData } from "@/types/valuation";
 import { STATIC_TEXTS } from "./static-texts-he";
 import { LOCKED_HEBREW_TEXT, COMPLETE_TA_BINDINGS } from "./report-spec-hebrew";
 import { formatBlockParcelFromString } from "./comparable-data-formatter";

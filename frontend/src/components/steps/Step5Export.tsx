@@ -9,7 +9,7 @@ import {
   Loader2,
   ExternalLink,
 } from "lucide-react";
-import { ValuationData } from "../ValuationWizard";
+import { ValuationData } from "@/types/valuation";
 import { Step5ValuationPanel } from "./Step5ValuationPanel";
 import { CollapsibleDrawer } from "../ui/CollapsibleDrawer";
 import { cn } from "@/lib/utils";

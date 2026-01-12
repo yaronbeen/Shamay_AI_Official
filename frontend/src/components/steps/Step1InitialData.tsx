@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import type { ValuationData } from "../ValuationWizard";
+import type { ValuationData } from "@/types/valuation";
 
 interface Step1InitialDataProps {
   data: ValuationData;

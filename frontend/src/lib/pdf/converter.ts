@@ -1,4 +1,4 @@
-import { ValuationData } from "@/components/ValuationWizard";
+import { ValuationData } from "@/types/valuation";
 import { ReportData } from "./types";
 
 // Helper function to convert numbers to Hebrew words (copied from document-template.ts)

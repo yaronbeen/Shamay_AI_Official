@@ -1,18 +1,18 @@
-'use client'
+"use client";
 
-import { ValuationData } from './ValuationWizard'
-import { EditableDocumentPreview } from './EditableDocumentPreview'
+import { ValuationData } from "@/types/valuation";
+import { EditableDocumentPreview } from "./EditableDocumentPreview";
 
 interface DocumentPreviewProps {
-  data: ValuationData
-  onDataChange?: (updates: Partial<ValuationData>) => void
+  data: ValuationData;
+  onDataChange?: (updates: Partial<ValuationData>) => void;
 }
 
 export function DocumentPreview({ data, onDataChange }: DocumentPreviewProps) {
   return (
-    <EditableDocumentPreview 
-      data={data} 
-      onDataChange={onDataChange || (() => {})} 
+    <EditableDocumentPreview
+      data={data}
+      onDataChange={onDataChange || (() => {})}
     />
-  )
+  );
 }

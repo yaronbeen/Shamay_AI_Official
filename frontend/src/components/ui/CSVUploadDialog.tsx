@@ -1,6 +1,6 @@
-'use client'
+"use client";
 
-import React, { useState, useCallback, useRef } from 'react'
+import React, { useState, useCallback, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -8,88 +8,103 @@ import {
   DialogTitle,
   DialogFooter,
   DialogDescription,
-} from './dialog'
-import { Button } from './button'
-import { parseCSVFile, generateTableId, type ParsedCSV } from '@/lib/csv-parser'
-import { CustomTable } from '@/components/ValuationWizard'
+} from "./dialog";
+import { Button } from "./button";
+import {
+  parseCSVFile,
+  generateTableId,
+  type ParsedCSV,
+} from "@/lib/csv-parser";
+import { CustomTable } from "@/types/valuation";
 
 interface CSVUploadDialogProps {
-  isOpen: boolean
-  onClose: () => void
-  onTableInsert: (table: CustomTable) => void
+  isOpen: boolean;
+  onClose: () => void;
+  onTableInsert: (table: CustomTable) => void;
 }
 
-export function CSVUploadDialog({ isOpen, onClose, onTableInsert }: CSVUploadDialogProps) {
-  const [parsedData, setParsedData] = useState<ParsedCSV | null>(null)
-  const [tableTitle, setTableTitle] = useState('')
-  const [fileName, setFileName] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const currentFileRef = useRef<string | null>(null)
+export function CSVUploadDialog({
+  isOpen,
+  onClose,
+  onTableInsert,
+}: CSVUploadDialogProps) {
+  const [parsedData, setParsedData] = useState<ParsedCSV | null>(null);
+  const [tableTitle, setTableTitle] = useState("");
+  const [fileName, setFileName] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const currentFileRef = useRef<string | null>(null);
 
-  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+  const handleFileSelect = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
 
-    // Security: Limit file size to 5MB to prevent memory issues
-    const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
-    if (file.size > MAX_FILE_SIZE) {
-      setError('הקובץ גדול מדי. הגודל המקסימלי הוא 5MB')
-      return
-    }
-
-    // Track current file to prevent race conditions
-    const fileId = `${file.name}-${file.lastModified}`
-    currentFileRef.current = fileId
-
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const parsed = await parseCSVFile(file)
-
-      // Check if this is still the current file (user may have selected another)
-      if (currentFileRef.current !== fileId) {
-        return // Ignore stale result
+      // Security: Limit file size to 5MB to prevent memory issues
+      const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+      if (file.size > MAX_FILE_SIZE) {
+        setError("הקובץ גדול מדי. הגודל המקסימלי הוא 5MB");
+        return;
       }
 
-      if (parsed.headers.length === 0) {
-        throw new Error('הקובץ ריק או בפורמט לא תקין')
-      }
+      // Track current file to prevent race conditions
+      const fileId = `${file.name}-${file.lastModified}`;
+      currentFileRef.current = fileId;
 
-      // Security: Limit table dimensions to prevent performance issues
-      const MAX_ROWS = 1000
-      const MAX_COLS = 50
-      if (parsed.rows.length > MAX_ROWS) {
-        throw new Error(`הטבלה גדולה מדי. מקסימום ${MAX_ROWS} שורות (נמצאו ${parsed.rows.length})`)
-      }
-      if (parsed.headers.length > MAX_COLS) {
-        throw new Error(`יותר מדי עמודות. מקסימום ${MAX_COLS} עמודות (נמצאו ${parsed.headers.length})`)
-      }
+      setIsLoading(true);
+      setError(null);
 
-      setParsedData(parsed)
-      setFileName(file.name)
-      // Default title from filename (without extension)
-      setTableTitle(file.name.replace(/\.csv$/i, ''))
-    } catch (err) {
-      // Only set error if this is still the current file
-      if (currentFileRef.current === fileId) {
-        setError(err instanceof Error ? err.message : 'שגיאה בקריאת הקובץ')
-        setParsedData(null)
+      try {
+        const parsed = await parseCSVFile(file);
+
+        // Check if this is still the current file (user may have selected another)
+        if (currentFileRef.current !== fileId) {
+          return; // Ignore stale result
+        }
+
+        if (parsed.headers.length === 0) {
+          throw new Error("הקובץ ריק או בפורמט לא תקין");
+        }
+
+        // Security: Limit table dimensions to prevent performance issues
+        const MAX_ROWS = 1000;
+        const MAX_COLS = 50;
+        if (parsed.rows.length > MAX_ROWS) {
+          throw new Error(
+            `הטבלה גדולה מדי. מקסימום ${MAX_ROWS} שורות (נמצאו ${parsed.rows.length})`,
+          );
+        }
+        if (parsed.headers.length > MAX_COLS) {
+          throw new Error(
+            `יותר מדי עמודות. מקסימום ${MAX_COLS} עמודות (נמצאו ${parsed.headers.length})`,
+          );
+        }
+
+        setParsedData(parsed);
+        setFileName(file.name);
+        // Default title from filename (without extension)
+        setTableTitle(file.name.replace(/\.csv$/i, ""));
+      } catch (err) {
+        // Only set error if this is still the current file
+        if (currentFileRef.current === fileId) {
+          setError(err instanceof Error ? err.message : "שגיאה בקריאת הקובץ");
+          setParsedData(null);
+        }
+      } finally {
+        // Only update loading state if this is still the current file
+        if (currentFileRef.current === fileId) {
+          setIsLoading(false);
+        }
       }
-    } finally {
-      // Only update loading state if this is still the current file
-      if (currentFileRef.current === fileId) {
-        setIsLoading(false)
-      }
-    }
-  }, [])
+    },
+    [],
+  );
 
   const handleInsert = useCallback(() => {
-    if (!parsedData) return
+    if (!parsedData) return;
 
-    const now = new Date().toISOString()
+    const now = new Date().toISOString();
     const table: CustomTable = {
       id: generateTableId(),
       title: tableTitle.trim() || undefined,
@@ -97,29 +112,32 @@ export function CSVUploadDialog({ isOpen, onClose, onTableInsert }: CSVUploadDia
       rows: parsedData.rows,
       createdAt: now,
       updatedAt: now,
-    }
+    };
 
-    onTableInsert(table)
-    onClose()
-  }, [parsedData, tableTitle, onTableInsert, onClose])
+    onTableInsert(table);
+    onClose();
+  }, [parsedData, tableTitle, onTableInsert, onClose]);
 
   const handleClose = useCallback(() => {
-    setParsedData(null)
-    setTableTitle('')
-    setFileName('')
-    setError(null)
+    setParsedData(null);
+    setTableTitle("");
+    setFileName("");
+    setError(null);
     if (fileInputRef.current) {
-      fileInputRef.current.value = ''
+      fileInputRef.current.value = "";
     }
-    onClose()
-  }, [onClose])
+    onClose();
+  }, [onClose]);
 
-  const previewRows = parsedData?.rows.slice(0, 5) || []
-  const hasMoreRows = (parsedData?.rows.length || 0) > 5
+  const previewRows = parsedData?.rows.slice(0, 5) || [];
+  const hasMoreRows = (parsedData?.rows.length || 0) > 5;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col" dir="rtl">
+      <DialogContent
+        className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col"
+        dir="rtl"
+      >
         <DialogHeader>
           <DialogTitle className="text-right">העלאת טבלה מ-CSV</DialogTitle>
           <DialogDescription className="text-right">
@@ -188,7 +206,8 @@ export function CSVUploadDialog({ isOpen, onClose, onTableInsert }: CSVUploadDia
               {/* Data Preview */}
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-gray-700">
-                  תצוגה מקדימה ({parsedData.rows.length} שורות, {parsedData.headers.length} עמודות)
+                  תצוגה מקדימה ({parsedData.rows.length} שורות,{" "}
+                  {parsedData.headers.length} עמודות)
                 </label>
                 <div className="border border-gray-200 rounded-md overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200 text-sm">
@@ -212,7 +231,7 @@ export function CSVUploadDialog({ isOpen, onClose, onTableInsert }: CSVUploadDia
                               key={cellIdx}
                               className="px-3 py-2 text-gray-600 whitespace-nowrap"
                             >
-                              {cell || '—'}
+                              {cell || "—"}
                             </td>
                           ))}
                         </tr>
@@ -244,5 +263,5 @@ export function CSVUploadDialog({ isOpen, onClose, onTableInsert }: CSVUploadDia
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

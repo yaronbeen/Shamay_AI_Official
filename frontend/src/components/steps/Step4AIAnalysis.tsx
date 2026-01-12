@@ -18,7 +18,7 @@ import {
   Map,
   Flag,
 } from "lucide-react";
-import { ValuationData } from "../ValuationWizard";
+import { ValuationData } from "@/types/valuation";
 import GISMapViewer from "../ui/GISMapViewer";
 import GarmushkaMeasurementViewer from "../ui/GarmushkaMeasurementViewer";
 import ComparableDataViewer from "../ui/ComparableDataViewer";
