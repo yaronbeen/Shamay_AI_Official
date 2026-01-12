@@ -34,6 +34,13 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
   >("idle");
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
 
+  // Word export state
+  const [exportingDocx, setExportingDocx] = useState(false);
+  const [docxStatus, setDocxStatus] = useState<"idle" | "success" | "error">(
+    "idle",
+  );
+  const [docxBlob, setDocxBlob] = useState<Blob | null>(null);
+
   // Drawer state
   const [isDrawerOpen, setIsDrawerOpen] = useState(true);
 
@@ -131,6 +138,85 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
         const link = document.createElement("a");
         link.href = url;
         link.download = `shamay-valuation-${effectiveSessionId}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    }
+  };
+
+  const handleExportDocx = async () => {
+    if (!effectiveSessionId) {
+      console.error("No session ID available");
+      return;
+    }
+
+    try {
+      setExportingDocx(true);
+      setDocxStatus("idle");
+
+      console.log("📝 Starting Word export...");
+
+      const response = await fetch(
+        `/api/session/${effectiveSessionId}/export-docx`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(`Word export failed: ${response.status}`);
+      }
+
+      const contentType = response.headers.get("content-type");
+
+      if (
+        contentType?.includes(
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+      ) {
+        const wordBlob = await response.blob();
+        console.log("✅ Word blob created:", wordBlob.size, "bytes");
+
+        setDocxBlob(wordBlob);
+        setDocxStatus("success");
+        toast.success("Word נוצר בהצלחה! הקובץ הורד למחשב שלך");
+
+        const url = URL.createObjectURL(wordBlob);
+        try {
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = `shamay-valuation-${effectiveSessionId}.docx`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      } else {
+        const result = await response.json();
+        console.error("❌ Word export error:", result);
+        throw new Error(result.error || "Word export failed");
+      }
+    } catch (error) {
+      console.error("❌ Word export error:", error);
+      setDocxStatus("error");
+      toast.error("שגיאה ביצירת Word. אנא נסה שוב");
+    } finally {
+      setExportingDocx(false);
+    }
+  };
+
+  const handleDownloadDocx = () => {
+    if (docxBlob && effectiveSessionId) {
+      const url = URL.createObjectURL(docxBlob);
+      try {
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `shamay-valuation-${effectiveSessionId}.docx`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -246,24 +332,64 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
               </div>
             )}
 
-            {/* Word Conversion Option */}
+            {/* Word Export Option */}
             <div className="mt-6 pt-6 border-t-2 border-gray-200">
-              <p className="text-sm text-gray-700 mb-3 text-center font-medium">
-                רוצים להמיר את ה-PDF ל-Word?
-              </p>
-              <a
-                href="https://www.adobe.com/il_he/acrobat/online/pdf-to-word.html"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center w-full px-4 py-3 rounded-lg font-medium bg-green-50 text-green-700 hover:bg-green-100 border-2 border-green-300 transition-colors"
+              <div className="text-center mb-4">
+                <h4 className="text-lg font-semibold mb-1">ייצוא Word</h4>
+                <p className="text-sm text-gray-600">
+                  יצירת מסמך Word ניתן לעריכה
+                </p>
+              </div>
+
+              <button
+                onClick={handleExportDocx}
+                disabled={exportingDocx}
+                className={`w-full px-4 py-3 rounded-lg font-medium transition-all ${
+                  exportingDocx
+                    ? "bg-gray-400 text-white cursor-not-allowed"
+                    : "bg-green-600 text-white hover:bg-green-700 hover:shadow-lg"
+                }`}
               >
-                <FileText className="h-4 w-4 ml-2" />
-                המרת PDF ל-Word באמצעות Adobe
-                <ExternalLink className="h-4 w-4 mr-2" />
-              </a>
-              <p className="text-xs text-gray-500 mt-2 text-center">
-                כלי חינמי להמרת PDF למסמך Word ניתן לעריכה
-              </p>
+                {exportingDocx ? (
+                  <div className="flex items-center justify-center">
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    מייצא Word...
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center">
+                    <FileText className="h-4 w-4 mr-2" />
+                    יצור Word
+                  </div>
+                )}
+              </button>
+
+              {docxStatus === "success" && (
+                <div className="mt-4 p-3 bg-green-50 border border-green-300 rounded-lg">
+                  <div className="flex items-center justify-center text-green-800 mb-1">
+                    <CheckCircle className="h-5 w-5 mr-2" />
+                    <span className="text-sm font-semibold">
+                      Word נוצר בהצלחה!
+                    </span>
+                  </div>
+                  {docxBlob && (
+                    <button
+                      onClick={handleDownloadDocx}
+                      className="w-full mt-2 px-3 py-1.5 text-sm text-green-700 hover:text-green-900 hover:underline font-medium"
+                    >
+                      <Download className="h-3 w-3 inline mr-1" />
+                      הורד Word שוב
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {docxStatus === "error" && (
+                <div className="mt-4 p-3 bg-red-50 border border-red-300 rounded-lg">
+                  <p className="text-sm text-red-800 text-center font-medium">
+                    שגיאה ביצירת Word
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
