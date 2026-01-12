@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import React from "react";
 import { Calculator, Edit2, Save } from "lucide-react";
+import { toast } from "sonner";
 import { ValuationData } from "@/types/valuation";
 
 interface Step5ValuationPanelProps {
@@ -140,6 +141,40 @@ export function Step5ValuationPanel({
     setIsEditing(true);
   };
 
+  // Auto-save on blur - saves current values without exiting edit mode
+  const handleAutoSave = useCallback(async () => {
+    const newFinalValue = editMeasuredArea * editPricePerSqm;
+
+    // Update local state
+    if (updateData) {
+      updateData({
+        apartmentSqm: editMeasuredArea,
+        pricePerSqm: editPricePerSqm,
+        finalValuation: newFinalValue,
+      });
+    }
+
+    // Save to session
+    if (effectiveSessionId) {
+      try {
+        await fetch(`/api/session/${effectiveSessionId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            data: {
+              apartmentSqm: editMeasuredArea,
+              pricePerSqm: editPricePerSqm,
+              finalValuation: newFinalValue,
+            },
+          }),
+        });
+        console.log("✅ Auto-saved valuation to session");
+      } catch (error) {
+        console.error("Error auto-saving valuation:", error);
+      }
+    }
+  }, [editMeasuredArea, editPricePerSqm, effectiveSessionId, updateData]);
+
   const handleSaveEdit = async () => {
     const newFinalValue = editMeasuredArea * editPricePerSqm;
 
@@ -167,8 +202,10 @@ export function Step5ValuationPanel({
           }),
         });
         console.log("✅ Saved updated valuation to session");
+        toast.success("הערכת השווי נשמרה בהצלחה");
       } catch (error) {
         console.error("Error saving valuation:", error);
+        toast.error("שגיאה בשמירת הערכת השווי");
       }
     }
 
@@ -224,6 +261,7 @@ export function Step5ValuationPanel({
                 onChange={(e) =>
                   setEditMeasuredArea(parseFloat(e.target.value) || 0)
                 }
+                onBlur={handleAutoSave}
                 className="text-2xl font-bold text-blue-900 w-32 border-b-2 border-blue-300 focus:border-blue-500 outline-none bg-transparent"
               />
               <span className="text-lg text-gray-600">מ"ר</span>
@@ -259,6 +297,7 @@ export function Step5ValuationPanel({
                 onChange={(e) =>
                   setEditPricePerSqm(parseFloat(e.target.value) || 0)
                 }
+                onBlur={handleAutoSave}
                 className="text-2xl font-bold text-blue-900 w-32 border-b-2 border-blue-300 focus:border-blue-500 outline-none bg-transparent"
               />
             </div>

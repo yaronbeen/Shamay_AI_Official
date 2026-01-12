@@ -9,6 +9,7 @@ import {
   Loader2,
   ExternalLink,
 } from "lucide-react";
+import { toast } from "sonner";
 import { ValuationData } from "@/types/valuation";
 import { Step5ValuationPanel } from "./Step5ValuationPanel";
 import { CollapsibleDrawer } from "../ui/CollapsibleDrawer";
@@ -82,6 +83,7 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
 
         setPdfBlob(pdfBlob);
         setExportStatus("success");
+        toast.success("PDF נוצר בהצלחה! הקובץ הורד למחשב שלך");
 
         const url = URL.createObjectURL(pdfBlob);
         try {
@@ -116,6 +118,7 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
     } catch (error) {
       console.error("❌ PDF export error:", error);
       setExportStatus("error");
+      toast.error("שגיאה ביצירת PDF. אנא נסה שוב");
     } finally {
       setExporting(false);
     }

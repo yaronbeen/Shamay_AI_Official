@@ -18,6 +18,7 @@ import {
   Map,
   Flag,
 } from "lucide-react";
+import { toast } from "sonner";
 import { ValuationData } from "@/types/valuation";
 import GISMapViewer from "../ui/GISMapViewer";
 import GarmushkaMeasurementViewer from "../ui/GarmushkaMeasurementViewer";
@@ -195,9 +196,13 @@ export function Step4AIAnalysis({
           ...analysisResults,
           visualMapping: result,
         });
+        toast.success("ניתוח התמונות הושלם בהצלחה");
+      } else {
+        toast.error("שגיאה בניתוח התמונות");
       }
     } catch (error) {
       console.error("Error analyzing images:", error);
+      toast.error("שגיאה בניתוח התמונות");
     } finally {
       setIsProcessing(false);
     }
@@ -227,9 +232,13 @@ export function Step4AIAnalysis({
           ...analysisResults,
           marketAnalysis: result,
         });
+        toast.success("ניתוח נתוני השוק הושלם בהצלחה");
+      } else {
+        toast.error("שגיאה בניתוח נתוני השוק");
       }
     } catch (error) {
       console.error("Error analyzing market data:", error);
+      toast.error("שגיאה בניתוח נתוני השוק");
     } finally {
       setIsProcessing(false);
     }
