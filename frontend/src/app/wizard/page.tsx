@@ -58,6 +58,7 @@ function WizardContent() {
   const [isTransitioning, startTransition] = useTransition();
   const [stepKey, setStepKey] = useState(1);
   const [showChat, setShowChat] = useState(false);
+  const [showPreview, setShowPreview] = useState(true);
 
   // ==========================================================================
   // EFFECTS
@@ -275,8 +276,16 @@ function WizardContent() {
         <div
           className={`grid grid-cols-1 ${currentStep === 3 ? "" : "xl:grid-cols-12"} gap-8`}
         >
-          {/* Main Content - Full width on Step 3, 7/12 otherwise */}
-          <div className={currentStep === 3 ? "" : "xl:col-span-7"}>
+          {/* Main Content - Full width on Step 3, expands when preview hidden */}
+          <div
+            className={
+              currentStep === 3
+                ? ""
+                : showPreview
+                  ? "xl:col-span-7"
+                  : "xl:col-span-11"
+            }
+          >
             <StepIndicator
               currentStep={currentStep}
               onStepClick={handleStepClick}
@@ -308,10 +317,62 @@ function WizardContent() {
             </div>
           </div>
 
-          {/* Document Preview - Takes 5/12 of the width (42%) - Hidden on Step 3 */}
+          {/* Document Preview - Toggleable, Hidden on Step 3 */}
           {currentStep !== 3 && (
-            <div className="xl:col-span-5 sticky top-24 self-start h-[calc(100vh-8rem)]">
-              <DocumentPreview data={data} onDataChange={updateData} />
+            <div
+              className={`${showPreview ? "xl:col-span-5" : "xl:col-span-1"} sticky top-24 self-start h-[calc(100vh-8rem)] transition-all duration-300`}
+            >
+              {showPreview ? (
+                <div className="relative h-full">
+                  <button
+                    onClick={() => setShowPreview(false)}
+                    className="absolute top-2 left-2 z-10 p-1.5 bg-white/80 hover:bg-gray-100 rounded-md border border-gray-200 shadow-sm transition-colors"
+                    title="הסתר תצוגה מקדימה"
+                    aria-label="הסתר תצוגה מקדימה"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-4 w-4 text-gray-600"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M13 5l7 7-7 7M5 5l7 7-7 7"
+                      />
+                    </svg>
+                  </button>
+                  <DocumentPreview data={data} onDataChange={updateData} />
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowPreview(true)}
+                  className="w-full h-full flex flex-col items-center justify-center bg-gray-50 hover:bg-gray-100 border-2 border-dashed border-gray-300 hover:border-gray-400 rounded-lg transition-colors"
+                  title="הצג תצוגה מקדימה"
+                  aria-label="הצג תצוגה מקדימה"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-8 w-8 text-gray-400 mb-2"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
+                    />
+                  </svg>
+                  <span className="text-sm text-gray-500 font-medium">
+                    הצג תצוגה מקדימה
+                  </span>
+                </button>
+              )}
             </div>
           )}
         </div>
