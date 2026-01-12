@@ -1,25 +1,35 @@
 // Valuation Sessions Routes
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const { ShumaDB } = require('../models/ShumaDB');
-const logger = require('../config/logger');
+const { ShumaDB } = require("../models/ShumaDB");
+const logger = require("../config/logger");
+const { validateBody, schemas } = require("../middleware/validateRequest");
 
 // POST /api/sessions - Handle all session operations
-router.post('/', async (req, res) => {
+// Validation middleware checks request structure before processing
+router.post("/", validateBody(schemas.BaseSessionSchema), async (req, res) => {
   try {
-    const { action, sessionId, organizationId, userId, valuationData, gisData, garmushkaData } = req.body;
+    const {
+      action,
+      sessionId,
+      organizationId,
+      userId,
+      valuationData,
+      gisData,
+      garmushkaData,
+    } = req.body;
 
     switch (action) {
-      case 'save_to_db': {
+      case "save_to_db": {
         // Save complete valuation data to database
-        const orgId = organizationId || 'default-org';
-        const usrId = userId || 'system';
+        const orgId = organizationId || "default-org";
+        const usrId = userId || "system";
 
         const result = await ShumaDB.saveShumaFromSession(
           sessionId,
           orgId,
           usrId,
-          valuationData
+          valuationData,
         );
 
         if (result.error) {
@@ -28,11 +38,11 @@ router.post('/', async (req, res) => {
 
         return res.json({
           success: true,
-          shumaId: result.shumaId
+          shumaId: result.shumaId,
         });
       }
 
-      case 'load_from_db': {
+      case "load_from_db": {
         // Load valuation data from database
         const loadResult = await ShumaDB.loadShumaForWizard(sessionId);
 
@@ -42,36 +52,40 @@ router.post('/', async (req, res) => {
 
         return res.json({
           success: true,
-          valuationData: loadResult.valuationData
+          valuationData: loadResult.valuationData,
         });
       }
 
-      case 'save_gis_data': {
+      case "save_gis_data": {
         // Save GIS data
         try {
           const gisResult = await ShumaDB.saveGISData(sessionId, gisData);
 
           if (gisResult.error) {
-            logger.error('GIS data save error:', gisResult.error);
-            return res.status(500).json({ 
+            logger.error("GIS data save error:", gisResult.error);
+            return res.status(500).json({
               error: gisResult.error,
-              message: 'Failed to save GIS screenshots to database'
+              message: "Failed to save GIS screenshots to database",
             });
           }
 
           return res.json({ success: true });
         } catch (error) {
-          logger.error('Unexpected error saving GIS data:', error);
-          return res.status(500).json({ 
-            error: error.message || 'Internal server error',
-            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+          logger.error("Unexpected error saving GIS data:", error);
+          return res.status(500).json({
+            error: error.message || "Internal server error",
+            stack:
+              process.env.NODE_ENV === "development" ? error.stack : undefined,
           });
         }
       }
 
-      case 'save_garmushka': {
+      case "save_garmushka": {
         // Save Garmushka measurements
-        const garmushkaResult = await ShumaDB.saveGarmushkaData(sessionId, garmushkaData);
+        const garmushkaResult = await ShumaDB.saveGarmushkaData(
+          sessionId,
+          garmushkaData,
+        );
 
         if (garmushkaResult.error) {
           return res.status(500).json({ error: garmushkaResult.error });
@@ -80,10 +94,14 @@ router.post('/', async (req, res) => {
         return res.json({ success: true });
       }
 
-      case 'save_permit_extraction': {
+      case "save_permit_extraction": {
         // Save building permit extraction
         const { sessionId: permitSessionId, extractedData } = req.body;
-        const permitResult = await ShumaDB.savePermitExtraction(permitSessionId, extractedData, null);
+        const permitResult = await ShumaDB.savePermitExtraction(
+          permitSessionId,
+          extractedData,
+          null,
+        );
 
         if (permitResult.error) {
           return res.status(500).json({ error: permitResult.error });
@@ -92,10 +110,14 @@ router.post('/', async (req, res) => {
         return res.json({ success: true });
       }
 
-      case 'save_land_registry_extraction': {
+      case "save_land_registry_extraction": {
         // Save land registry extraction
         const { sessionId: lrSessionId, extractedData: lrData } = req.body;
-        const lrResult = await ShumaDB.saveLandRegistryExtraction(lrSessionId, lrData, null);
+        const lrResult = await ShumaDB.saveLandRegistryExtraction(
+          lrSessionId,
+          lrData,
+          null,
+        );
 
         if (lrResult.error) {
           return res.status(500).json({ error: lrResult.error });
@@ -104,10 +126,14 @@ router.post('/', async (req, res) => {
         return res.json({ success: true });
       }
 
-      case 'save_shared_building_extraction': {
+      case "save_shared_building_extraction": {
         // Save shared building order extraction
         const { sessionId: sbSessionId, extractedData: sbData } = req.body;
-        const sbResult = await ShumaDB.saveSharedBuildingExtraction(sbSessionId, sbData, null);
+        const sbResult = await ShumaDB.saveSharedBuildingExtraction(
+          sbSessionId,
+          sbData,
+          null,
+        );
 
         if (sbResult.error) {
           return res.status(500).json({ error: sbResult.error });
@@ -116,10 +142,13 @@ router.post('/', async (req, res) => {
         return res.json({ success: true });
       }
 
-      case 'save_final_results': {
+      case "save_final_results": {
         // Save final valuation results
         const { sessionId: finalSessionId, results } = req.body;
-        const finalResult = await ShumaDB.saveFinalResults(finalSessionId, results);
+        const finalResult = await ShumaDB.saveFinalResults(
+          finalSessionId,
+          results,
+        );
 
         if (finalResult.error) {
           return res.status(500).json({ error: finalResult.error });
@@ -132,13 +161,13 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ error: `Unknown action: ${action}` });
     }
   } catch (error) {
-    logger.error('Session operation error:', error);
+    logger.error("Session operation error:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
 // GET /api/sessions/:sessionId - Get session by ID
-router.get('/:sessionId', async (req, res) => {
+router.get("/:sessionId", async (req, res) => {
   try {
     const { sessionId } = req.params;
 
@@ -150,13 +179,12 @@ router.get('/:sessionId', async (req, res) => {
 
     res.json({
       success: true,
-      data: result.valuationData
+      data: result.valuationData,
     });
   } catch (error) {
-    logger.error('Get session error:', error);
+    logger.error("Get session error:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
 module.exports = router;
-
