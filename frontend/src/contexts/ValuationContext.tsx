@@ -11,9 +11,11 @@ import {
 } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-// Use the existing ValuationWizard types for backward compatibility with useShumaDB
-// TODO: Phase 3 will migrate useShumaDB to use @/types/valuation
-import { ValuationData } from "@/components/ValuationWizard";
+// Import from centralized types (single source of truth)
+import {
+  ValuationData,
+  initialValuationData as defaultInitialData,
+} from "@/types/valuation";
 import { useShumaDB } from "@/hooks/useShumaDB";
 
 // =============================================================================
@@ -37,42 +39,8 @@ interface SaveResult {
   skipped?: boolean;
 }
 
-// Initial data matching existing ValuationData interface
-const initialValuationData: ValuationData = {
-  street: "",
-  buildingNumber: "",
-  city: "",
-  neighborhood: "",
-  fullAddress: "",
-  rooms: 0,
-  floor: 0,
-  airDirections: "",
-  area: 0,
-  propertyEssence: "",
-  clientName: "",
-  clientTitle: "",
-  clientNote: "",
-  clientRelation: "",
-  visitDate: "",
-  valuationDate: "",
-  valuationEffectiveDate: "",
-  referenceNumber: "",
-  valuationType: "",
-  shamayName: "",
-  shamaySerialNumber: "",
-  appraiserLicenseNumber: "",
-  propertyImages: [],
-  selectedImageIndex: 0,
-  selectedImagePreview: null,
-  interiorImages: [],
-  signature: null,
-  signaturePreview: null,
-  comparableData: [],
-  finalValuation: 0,
-  pricePerSqm: 0,
-  isComplete: false,
-  uploads: [],
-};
+// Use centralized initial data from @/types/valuation
+const initialValuationData: ValuationData = defaultInitialData;
 
 // =============================================================================
 // TYPES

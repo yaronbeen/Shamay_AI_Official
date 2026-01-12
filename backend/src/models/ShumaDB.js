@@ -338,7 +338,55 @@ function formatDateForDB(dateString) {
 
 class ShumaDBEnhanced {
   /**
-   * Save complete shuma data + create references in extraction tables
+   * Save complete shuma data to database and create references in extraction tables.
+   *
+   * This is the primary save operation for valuation data. It:
+   * 1. Saves/updates the main shuma table (69+ columns)
+   * 2. Saves extracted data to normalized tables with references
+   * 3. Saves Garmushka measurements to garmushka table
+   * 4. Saves GIS screenshots to images table
+   *
+   * Uses a database transaction - all operations succeed or all fail.
+   * Clears the cache after successful save to ensure fresh data on next load.
+   *
+   * @param {string} sessionId - Unique session identifier (used as FK)
+   * @param {string} organizationId - Organization ID for multi-tenant isolation
+   * @param {string} userId - User ID who initiated the save
+   * @param {Object} valuationData - Complete valuation data object
+   * @param {string} [valuationData.street] - Street name
+   * @param {string} [valuationData.buildingNumber] - Building number
+   * @param {string} [valuationData.city] - City name
+   * @param {string} [valuationData.gush] - Block number (גוש)
+   * @param {string} [valuationData.chelka] - Parcel number (חלקה)
+   * @param {Object} [valuationData.extractedData] - AI extraction results
+   * @param {Object} [valuationData.garmushkaMeasurements] - Measurement data
+   * @param {Object} [valuationData.gisScreenshots] - GIS map screenshots
+   * @param {number} [valuationData.finalValuation] - Final valuation amount
+   * @param {number} [valuationData.pricePerSqm] - Price per square meter
+   *
+   * @returns {Promise<{success: boolean, shumaId?: number, error?: string}>}
+   *   - success: true if save completed successfully
+   *   - shumaId: The database ID of the saved/updated shuma record
+   *   - error: Error message if save failed
+   *
+   * @throws {Error} If extractedData cannot be serialized to JSON
+   *
+   * @example
+   * const result = await ShumaDB.saveShumaFromSession(
+   *   'session-123',
+   *   'org-456',
+   *   'user-789',
+   *   {
+   *     street: 'Herzl',
+   *     buildingNumber: '5',
+   *     city: 'Tel Aviv',
+   *     finalValuation: 2500000,
+   *     extractedData: { gush: '1234', chelka: '56' }
+   *   }
+   * );
+   * if (result.success) {
+   *   console.log('Saved with ID:', result.shumaId);
+   * }
    */
   static async saveShumaFromSession(
     sessionId,
@@ -1652,8 +1700,46 @@ class ShumaDBEnhanced {
   }
 
   /**
-   * Load shuma data for wizard
-   * Uses in-memory cache to reduce repeated database queries
+   * Load shuma data for the valuation wizard.
+   *
+   * This is the primary load operation for retrieving valuation data.
+   * Uses an in-memory cache with 5-second TTL to reduce database queries
+   * during rapid page navigation or component re-renders.
+   *
+   * The returned data is converted from database snake_case to frontend camelCase.
+   * All JSONB fields are safely parsed with fallback defaults.
+   *
+   * Cache behavior:
+   * - First request: Queries database, caches result
+   * - Subsequent requests within 5s: Returns cached data
+   * - After 5s: Queries database again, refreshes cache
+   * - After save: Cache is cleared to ensure fresh data
+   *
+   * @param {string} sessionId - The session ID to load data for
+   * @param {boolean} [skipCache=false] - If true, bypasses cache and queries DB directly
+   *
+   * @returns {Promise<{valuationData?: Object, success?: boolean, error?: string}>}
+   *   On success:
+   *   - valuationData: Complete valuation data object in camelCase format
+   *   - success: true
+   *
+   *   On not found:
+   *   - error: "Shuma not found"
+   *
+   *   On error:
+   *   - error: "Failed to load shuma"
+   *
+   * @example
+   * // Normal load (uses cache if available)
+   * const result = await ShumaDB.loadShumaForWizard('session-123');
+   * if (result.success) {
+   *   console.log('Address:', result.valuationData.street);
+   *   console.log('Valuation:', result.valuationData.finalValuation);
+   * }
+   *
+   * @example
+   * // Force fresh data from database
+   * const result = await ShumaDB.loadShumaForWizard('session-123', true);
    */
   static async loadShumaForWizard(sessionId, skipCache = false) {
     try {
@@ -1812,8 +1898,41 @@ class ShumaDBEnhanced {
   }
 
   /**
-   * Save GIS data to shuma + images table
-   * Merges with existing screenshots to avoid overwriting
+   * Save GIS screenshots and analysis data to the database.
+   *
+   * This method handles GIS map screenshots captured from the wizard.
+   * It intelligently merges new screenshots with existing ones to avoid
+   * data loss during incremental saves.
+   *
+   * Screenshot processing:
+   * - URL strings (from file storage) are used directly
+   * - Base64 strings are converted to file URLs (backward compatibility)
+   * - Stored in both shuma.gis_screenshots (JSONB) and images table
+   *
+   * Uses a database transaction - all operations succeed or all fail.
+   * Clears the cache after successful save.
+   *
+   * @param {string} sessionId - The session ID to save GIS data for
+   * @param {Object} gisData - GIS screenshot data object
+   * @param {string} [gisData.cropMode0] - Clean map screenshot (URL or base64)
+   * @param {string} [gisData.cropMode1] - Taba map screenshot (URL or base64)
+   * @param {Object} [gisData.analysis] - GIS analysis results
+   *
+   * @returns {Promise<{success: boolean, screenshotUrls?: Object, error?: string}>}
+   *   On success:
+   *   - success: true
+   *   - screenshotUrls: Object with screenshot keys and their URLs
+   *
+   *   On error:
+   *   - error: Error message
+   *
+   * @throws {Error} If shuma not found for session
+   *
+   * @example
+   * const result = await ShumaDB.saveGISData('session-123', {
+   *   cropMode0: 'https://storage.example.com/clean-map.png',
+   *   cropMode1: 'https://storage.example.com/taba-map.png'
+   * });
    */
   static async saveGISData(sessionId, gisData) {
     const client = await db.client();
@@ -1945,8 +2064,51 @@ class ShumaDBEnhanced {
   }
 
   /**
-   * Save Garmushka data to shuma + garmushka table
-   * Converts base64 pngExport to file URL before saving
+   * Save Garmushka measurement data to the database.
+   *
+   * Garmushka is the property measurement tool that captures floor plan
+   * measurements. This method saves the measurement data and associated
+   * PNG exports to both the shuma table (JSONB) and the garmushka table.
+   *
+   * Image processing:
+   * - URL strings are used directly (no conversion)
+   * - Base64 strings are converted to file URLs before saving
+   * - This reduces database bloat from storing large base64 strings
+   *
+   * Uses a database transaction - all operations succeed or all fail.
+   * Clears the cache after successful save.
+   *
+   * @param {string} sessionId - The session ID to save Garmushka data for
+   * @param {Object} garmushkaData - Garmushka measurement data
+   * @param {number} [garmushkaData.totalArea] - Total measured area (sq meters)
+   * @param {number} [garmushkaData.mainArea] - Main apartment area
+   * @param {number} [garmushkaData.balconyArea] - Balcony area
+   * @param {number} [garmushkaData.storageArea] - Storage area
+   * @param {Array} [garmushkaData.rooms] - Array of room measurements
+   * @param {string} [garmushkaData.pngExport] - Floor plan image (URL or base64)
+   * @param {Array} [garmushkaData.pngExports] - Multiple floor plan images
+   *
+   * @returns {Promise<{success: boolean, error?: string}>}
+   *   On success:
+   *   - success: true
+   *
+   *   On error:
+   *   - error: Error message
+   *
+   * @throws {Error} If shuma not found for session
+   *
+   * @example
+   * const result = await ShumaDB.saveGarmushkaData('session-123', {
+   *   totalArea: 120.5,
+   *   mainArea: 100.0,
+   *   balconyArea: 12.5,
+   *   storageArea: 8.0,
+   *   rooms: [
+   *     { name: 'Living Room', area: 35.0 },
+   *     { name: 'Bedroom 1', area: 18.0 }
+   *   ],
+   *   pngExport: 'https://storage.example.com/floor-plan.png'
+   * });
    */
   static async saveGarmushkaData(sessionId, garmushkaData) {
     const client = await db.client();
@@ -2487,7 +2649,44 @@ class ShumaDBEnhanced {
   }
 
   /**
-   * Search shumas by organization, search term, and status
+   * Search and list valuations (shumas) for an organization.
+   *
+   * Supports filtering by text search and status. Search matches against
+   * address, client name, street, and city fields (case-insensitive).
+   *
+   * Results are ordered by most recently updated first.
+   *
+   * @param {string} organizationId - Organization ID for multi-tenant isolation
+   * @param {string} [search] - Optional search term to filter results
+   * @param {string} [status] - Optional status filter: 'complete' | 'draft'
+   *
+   * @returns {Promise<{success: boolean, shumas?: Array, error?: string}>}
+   *   On success:
+   *   - success: true
+   *   - shumas: Array of valuation summaries with fields:
+   *     - id: Database ID
+   *     - sessionId: Session identifier
+   *     - address: Full address string
+   *     - clientName: Client name
+   *     - rooms: Number of rooms
+   *     - area: Property area
+   *     - isComplete: Completion status
+   *     - createdAt: Creation timestamp
+   *     - updatedAt: Last update timestamp
+   *
+   *   On error:
+   *   - error: Error message
+   *
+   * @example
+   * // List all valuations for an organization
+   * const result = await ShumaDB.searchShumas('org-123');
+   *
+   * @example
+   * // Search with filter
+   * const result = await ShumaDB.searchShumas('org-123', 'Tel Aviv', 'complete');
+   * if (result.success) {
+   *   console.log('Found', result.shumas.length, 'valuations');
+   * }
    */
   static async searchShumas(organizationId, search, status) {
     const client = await db.client();
@@ -2568,7 +2767,41 @@ class ShumaDBEnhanced {
   }
 
   /**
-   * Get a single shuma by ID
+   * Get a single valuation (shuma) by its database ID.
+   *
+   * Returns a summary view of the valuation suitable for display in lists
+   * or detail pages. Does not return the full ValuationData object - use
+   * loadShumaForWizard for that.
+   *
+   * @param {number|string} shumaId - The database ID of the shuma
+   *
+   * @returns {Promise<{success: boolean, shuma?: Object, error?: string}>}
+   *   On success:
+   *   - success: true
+   *   - shuma: Valuation summary object with fields:
+   *     - id: Database ID
+   *     - sessionId: Session identifier
+   *     - address: Full address
+   *     - clientName: Client name
+   *     - rooms, floor, area: Property details
+   *     - visitDate, valuationDate: Date fields
+   *     - gush, parcel: Legal identifiers
+   *     - isComplete: Completion status
+   *     - uploads: Uploaded files (JSONB)
+   *     - gisScreenshots: GIS images (JSONB)
+   *     - createdAt, updatedAt: Timestamps
+   *
+   *   On not found:
+   *   - error: "Shuma not found"
+   *
+   *   On error:
+   *   - error: Error message
+   *
+   * @example
+   * const result = await ShumaDB.getShumaById(123);
+   * if (result.success) {
+   *   console.log('Address:', result.shuma.address);
+   * }
    */
   static async getShumaById(shumaId) {
     const client = await db.client();
@@ -2638,7 +2871,49 @@ class ShumaDBEnhanced {
   }
 
   /**
-   * Save AI extraction result (original, unmodified data)
+   * Save AI extraction result for auditing and history tracking.
+   *
+   * This method stores the raw AI response along with extracted fields
+   * in the ai_extractions table. It enables:
+   * - Audit trail of all AI extractions
+   * - Ability to restore previous extraction results
+   * - Tracking of AI model costs and performance
+   *
+   * Each new extraction is marked as 'active'. Previous extractions
+   * for the same session/type are automatically deactivated.
+   *
+   * @param {string} sessionId - Session identifier
+   * @param {string} extractionType - Type of extraction (e.g., 'tabu', 'permit', 'garmushka')
+   * @param {Object} aiResponse - Raw response from AI model
+   * @param {Object} extractedFields - Parsed/structured fields from AI response
+   * @param {Object} [metadata={}] - Additional metadata
+   * @param {string} [metadata.aiModel] - AI model used (default: 'gpt-4-vision-preview')
+   * @param {number} [metadata.processingCost] - Cost in tokens/cents
+   * @param {number} [metadata.confidenceScore] - Extraction confidence (0-1)
+   * @param {number} [metadata.processingTimeMs] - Processing duration
+   * @param {string} [metadata.documentFilename] - Source document name
+   * @param {string} [metadata.documentPath] - Source document path/URL
+   *
+   * @returns {Promise<{success: boolean, extractionId?: number, error?: string}>}
+   *   On success:
+   *   - success: true
+   *   - extractionId: Database ID of the new extraction record
+   *
+   *   On error:
+   *   - error: Error message
+   *
+   * @example
+   * const result = await ShumaDB.saveAIExtraction(
+   *   'session-123',
+   *   'tabu',
+   *   { raw: '...AI response...' },
+   *   { gush: '1234', chelka: '56', owners: [...] },
+   *   {
+   *     aiModel: 'claude-3-opus',
+   *     confidenceScore: 0.95,
+   *     documentFilename: 'nesach-tabu.pdf'
+   *   }
+   * );
    */
   static async saveAIExtraction(
     sessionId,
@@ -2897,4 +3172,31 @@ class ShumaDBEnhanced {
   }
 }
 
-module.exports = { db, ShumaDB: ShumaDBEnhanced, formatDateForDB };
+// =============================================================================
+// NEW DOMAIN SERVICES (use these for new code)
+// =============================================================================
+// The services below are the new modular architecture.
+// Existing code can continue using ShumaDBEnhanced (backward compatible).
+// New code should import services directly for better separation of concerns.
+
+const {
+  ValuationService,
+  GISService,
+  GarmushkaService,
+  ExtractionService,
+  FileStorageService,
+} = require("../services");
+
+module.exports = {
+  // Legacy exports (backward compatible)
+  db,
+  ShumaDB: ShumaDBEnhanced,
+  formatDateForDB,
+
+  // New domain services (preferred for new code)
+  ValuationService,
+  GISService,
+  GarmushkaService,
+  ExtractionService,
+  FileStorageService,
+};
