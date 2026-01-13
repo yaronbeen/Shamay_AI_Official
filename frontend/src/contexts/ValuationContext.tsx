@@ -15,6 +15,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   ValuationData,
   initialValuationData as defaultInitialData,
+  GISScreenshots,
+  GarmushkaMeasurements,
+  ComparableProperty,
+  PropertyAnalysis,
 } from "@/types/valuation";
 import { useShumaDB } from "@/hooks/useShumaDB";
 
@@ -63,13 +67,15 @@ interface ValuationContextValue extends ValuationState {
   resetToSaved: () => void;
 
   // Specialized save operations
-  saveGISDataToDB: (gisData: unknown) => Promise<void>;
-  saveGarmushkaDataToDB: (garmushkaData: unknown) => Promise<void>;
+  saveGISDataToDB: (gisData: GISScreenshots) => Promise<void>;
+  saveGarmushkaDataToDB: (
+    garmushkaData: GarmushkaMeasurements,
+  ) => Promise<void>;
   saveFinalResultsToDB: (
     finalValuation: number,
     pricePerSqm: number,
-    comparableData: unknown,
-    propertyAnalysis: unknown,
+    comparableData: ComparableProperty[],
+    propertyAnalysis: PropertyAnalysis | null,
   ) => Promise<void>;
 
   // Step validation
@@ -595,7 +601,7 @@ export function ValuationProvider({ children }: ValuationProviderProps) {
   // ==========================================================================
 
   const saveGISDataToDB = useCallback(
-    async (gisData: unknown) => {
+    async (gisData: GISScreenshots) => {
       if (valuationId) {
         const result = await saveGISData(valuationId, gisData);
         if (result.success) {
@@ -612,7 +618,7 @@ export function ValuationProvider({ children }: ValuationProviderProps) {
   );
 
   const saveGarmushkaDataToDB = useCallback(
-    async (garmushkaData: unknown) => {
+    async (garmushkaData: GarmushkaMeasurements) => {
       if (valuationId) {
         const result = await saveGarmushkaData(valuationId, garmushkaData);
         if (result.success) {
@@ -632,8 +638,8 @@ export function ValuationProvider({ children }: ValuationProviderProps) {
     async (
       finalValuation: number,
       pricePerSqm: number,
-      comparableData: unknown,
-      propertyAnalysis: unknown,
+      comparableData: ComparableProperty[],
+      propertyAnalysis: PropertyAnalysis | null,
     ) => {
       if (valuationId) {
         const result = await saveFinalResults(

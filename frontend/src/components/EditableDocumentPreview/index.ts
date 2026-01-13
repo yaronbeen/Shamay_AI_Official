@@ -1,13 +1,10 @@
 /**
  * EditableDocumentPreview Component
  *
- * Re-exports the main component and types.
- * This folder structure enables future component splitting.
+ * Re-exports types and hooks.
+ * The main component is still at ../EditableDocumentPreview.tsx
+ * This folder contains extracted types and hooks for that component.
  */
-
-// Main component - still in parent directory for now
-// Will be moved here when fully split
-export { EditableDocumentPreview } from "../EditableDocumentPreview";
 
 // Types for external use
 export type {
@@ -24,3 +21,8 @@ export {
   MAX_IMAGE_FILE_SIZE,
   DOMPURIFY_CONFIG,
 } from "./types";
+
+// Hooks
+export { useFootnotes } from "./hooks/useFootnotes";
+export { useImageEditor } from "./hooks/useImageEditor";
+export { useTableEditor } from "./hooks/useTableEditor";

@@ -33,6 +33,12 @@ export interface StructuredFootnote {
   text: string;
 }
 
+export interface TableCellPosition {
+  tableId: string;
+  row: number;
+  col: number;
+}
+
 // Constants
 export const ALLOWED_IMAGE_MIME_TYPES = [
   "image/jpeg",

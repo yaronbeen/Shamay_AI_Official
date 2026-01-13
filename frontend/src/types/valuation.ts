@@ -42,10 +42,14 @@ export interface AdditionalArea {
 }
 
 export interface RoomAnalysis {
-  roomType: string;
-  sizeEstimate: string;
-  features: string;
-  condition: string;
+  // All fields optional during migration - both formats accepted
+  roomType?: string;
+  sizeEstimate?: string;
+  features?: string;
+  condition?: string;
+  // Backend snake_case aliases (for compatibility during migration)
+  room_type?: string;
+  size_estimate?: string;
 }
 
 export interface BuildingInfo {
@@ -214,6 +218,14 @@ export interface ComparableProperty {
   distance?: number;
   adjustmentFactor?: number;
   adjustedPricePerSqm?: number;
+  // Backend snake_case aliases (for compatibility)
+  sale_date?: string;
+  price?: number;
+  price_per_sqm?: number;
+  construction_year?: number;
+  declared_price?: number;
+  adjustment_factor?: number;
+  adjusted_price_per_sqm?: number;
   [key: string]: unknown;
 }
 
@@ -329,6 +341,10 @@ export interface ExtractedData {
   // Planning Information (Chapter 3)
   planningInformation?: PlanningInformation;
   planningRights?: PlanningRights;
+
+  // Index signature for snake_case field access during migration
+  // Backend returns snake_case, this allows flexible access without listing all aliases
+  [key: string]: unknown;
 }
 
 // =============================================================================

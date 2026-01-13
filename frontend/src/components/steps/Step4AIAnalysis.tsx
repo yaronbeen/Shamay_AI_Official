@@ -78,8 +78,10 @@ export function Step4AIAnalysis({
       Object.keys(data.marketAnalysis).length > 0
     ) {
       // Restore comparableDataAnalysis from marketAnalysis
+      // Note: MarketAnalysis is being used as a fallback for ComparableDataAnalysis
       updateData({
-        comparableDataAnalysis: data.marketAnalysis,
+        comparableDataAnalysis:
+          data.marketAnalysis as unknown as typeof data.comparableDataAnalysis,
       });
       console.log("✅ Restored comparableDataAnalysis from marketAnalysis");
     } else if (
@@ -329,9 +331,13 @@ export function Step4AIAnalysis({
               undefined;
 
             updateData({
-              comparableDataAnalysis: analysis,
-              comparableAnalysis: analysis, // Also store as comparableAnalysis for document-template compatibility
-              comparableData: analysis.comparables || [],
+              comparableDataAnalysis:
+                analysis as unknown as typeof data.comparableDataAnalysis,
+              comparableAnalysis:
+                analysis as unknown as typeof data.comparableAnalysis, // Also store as comparableAnalysis for document-template compatibility
+              comparableData:
+                (analysis.comparables as unknown as typeof data.comparableData) ||
+                [],
               pricePerSqm: avgPricePerSqm || data.pricePerSqm || 0,
               finalValuation: finalValuation, // Store finalValuation for Step5 and document
               marketAnalysis: {

@@ -75,7 +75,7 @@ export function useTableEditor({
           };
           const newLength = table.rows.length - 1;
           const newRowIndex = row >= newLength ? newLength - 1 : row;
-          setCurrentTableCell((prev) =>
+          setCurrentTableCell((prev: TableCellPosition | null) =>
             prev ? { ...prev, row: Math.max(0, newRowIndex) } : null,
           );
           break;
@@ -110,7 +110,7 @@ export function useTableEditor({
           };
           const newLength = table.headers.length - 1;
           const newColIndex = col >= newLength ? newLength - 1 : col;
-          setCurrentTableCell((prev) =>
+          setCurrentTableCell((prev: TableCellPosition | null) =>
             prev ? { ...prev, col: Math.max(0, newColIndex) } : null,
           );
           break;

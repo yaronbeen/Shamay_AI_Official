@@ -1,6 +1,55 @@
 // ShumaDB Hook - Complete valuation data management
 import { useState, useCallback } from "react";
-import { ValuationData } from "@/types/valuation";
+import {
+  ValuationData,
+  GISScreenshots,
+  GarmushkaMeasurements,
+  ExtractedData,
+  ComparableProperty,
+  PropertyAnalysis,
+} from "@/types/valuation";
+
+// Result types for hook returns
+interface HookResult {
+  success: boolean;
+  error?: string;
+}
+
+interface SaveShumaResult extends HookResult {
+  shumaId?: number;
+}
+
+interface LoadShumaResult extends HookResult {
+  valuationData?: ValuationData;
+}
+
+interface ExtractedDataResult extends HookResult {
+  data?: {
+    permits?: ExtractedData[];
+    landRegistry?: ExtractedData[];
+    sharedBuilding?: ExtractedData[];
+  };
+}
+
+interface ShumaListResult extends HookResult {
+  shumas?: ValuationData[];
+}
+
+interface ShumaResult extends HookResult {
+  shuma?: ValuationData;
+}
+
+interface PermitResult extends HookResult {
+  permitId?: number;
+}
+
+interface LandRegistryResult extends HookResult {
+  landRegistryId?: number;
+}
+
+interface SharedBuildingResult extends HookResult {
+  sharedBuildingId?: number;
+}
 
 export const useShumaDB = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -36,10 +85,12 @@ export const useShumaDB = () => {
         }
 
         return { success: true, shumaId: result.shumaId };
-      } catch (err: any) {
-        console.error("❌ [HOOK] Save error:", err.message);
-        setError(err.message);
-        return { success: false, error: err.message };
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : "Unknown error";
+        console.error("❌ [HOOK] Save error:", errorMessage);
+        setError(errorMessage);
+        return { success: false, error: errorMessage };
       } finally {
         setIsLoading(false);
       }
@@ -68,69 +119,9 @@ export const useShumaDB = () => {
       }
 
       return { success: true, valuationData: result.valuationData };
-    } catch (err: any) {
-      console.error("❌ [HOOK] Load error:", err.message);
-      setError(err.message);
-      return { success: false, error: err.message };
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  // Save GIS data
-  const saveGISData = useCallback(async (sessionId: string, gisData: any) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const response = await fetch("/api/sessions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "save_gis_data",
-          sessionId,
-          gisData,
-        }),
-      });
-
-      // Read response as text first (we can parse it as JSON later if needed)
-      const textResponse = await response.text();
-      let result: any;
-
-      // Try to parse as JSON
-      const contentType = response.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
-        try {
-          result = JSON.parse(textResponse);
-        } catch (jsonError) {
-          // If JSON parsing fails
-          console.error(
-            "❌ Failed to parse JSON response:",
-            textResponse.substring(0, 200),
-          );
-          throw new Error(`Server error: ${textResponse.substring(0, 100)}`);
-        }
-      } else {
-        // Non-JSON response (likely HTML error page)
-        console.error(
-          "❌ Non-JSON response received:",
-          textResponse.substring(0, 200),
-        );
-        throw new Error(
-          `Server returned non-JSON response: ${response.status} ${response.statusText}`,
-        );
-      }
-
-      if (!response.ok) {
-        throw new Error(
-          result?.error ||
-            `Failed to save GIS data: ${response.status} ${response.statusText}`,
-        );
-      }
-
-      return { success: true };
-    } catch (err: any) {
-      const errorMessage = err.message || "Failed to save GIS data";
-      console.error("❌ [HOOK] Save GIS data error:", errorMessage);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      console.error("❌ [HOOK] Load error:", errorMessage);
       setError(errorMessage);
       return { success: false, error: errorMessage };
     } finally {
@@ -138,9 +129,77 @@ export const useShumaDB = () => {
     }
   }, []);
 
+  // Save GIS data
+  const saveGISData = useCallback(
+    async (sessionId: string, gisData: GISScreenshots): Promise<HookResult> => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const response = await fetch("/api/sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "save_gis_data",
+            sessionId,
+            gisData,
+          }),
+        });
+
+        // Read response as text first (we can parse it as JSON later if needed)
+        const textResponse = await response.text();
+        let result: { error?: string };
+
+        // Try to parse as JSON
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          try {
+            result = JSON.parse(textResponse);
+          } catch (jsonError) {
+            // If JSON parsing fails
+            console.error(
+              "❌ Failed to parse JSON response:",
+              textResponse.substring(0, 200),
+            );
+            throw new Error(`Server error: ${textResponse.substring(0, 100)}`);
+          }
+        } else {
+          // Non-JSON response (likely HTML error page)
+          console.error(
+            "❌ Non-JSON response received:",
+            textResponse.substring(0, 200),
+          );
+          throw new Error(
+            `Server returned non-JSON response: ${response.status} ${response.statusText}`,
+          );
+        }
+
+        if (!response.ok) {
+          throw new Error(
+            result?.error ||
+              `Failed to save GIS data: ${response.status} ${response.statusText}`,
+          );
+        }
+
+        return { success: true };
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to save GIS data";
+        console.error("❌ [HOOK] Save GIS data error:", errorMessage);
+        setError(errorMessage);
+        return { success: false, error: errorMessage };
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [],
+  );
+
   // Save Garmushka data to garmushka table + shuma
   const saveGarmushkaData = useCallback(
-    async (sessionId: string, garmushkaData: any) => {
+    async (
+      sessionId: string,
+      garmushkaData: GarmushkaMeasurements,
+    ): Promise<HookResult> => {
       setIsLoading(true);
       setError(null);
       try {
@@ -161,9 +220,11 @@ export const useShumaDB = () => {
         }
 
         return { success: true };
-      } catch (err: any) {
-        setError(err.message);
-        return { success: false, error: err.message };
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to save Garmushka data";
+        setError(errorMessage);
+        return { success: false, error: errorMessage };
       } finally {
         setIsLoading(false);
       }
@@ -173,7 +234,11 @@ export const useShumaDB = () => {
 
   // Save building permit extraction to building_permit_extracts + shuma
   const savePermitExtraction = useCallback(
-    async (sessionId: string, permitData: any, documentFilename: string) => {
+    async (
+      sessionId: string,
+      permitData: ExtractedData,
+      documentFilename: string,
+    ): Promise<PermitResult> => {
       setIsLoading(true);
       setError(null);
       try {
@@ -195,9 +260,13 @@ export const useShumaDB = () => {
         }
 
         return { success: true, permitId: result.permitId };
-      } catch (err: any) {
-        setError(err.message);
-        return { success: false, error: err.message };
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error
+            ? err.message
+            : "Failed to save permit extraction";
+        setError(errorMessage);
+        return { success: false, error: errorMessage };
       } finally {
         setIsLoading(false);
       }
@@ -209,9 +278,9 @@ export const useShumaDB = () => {
   const saveLandRegistryExtraction = useCallback(
     async (
       sessionId: string,
-      landRegistryData: any,
+      landRegistryData: ExtractedData,
       documentFilename: string,
-    ) => {
+    ): Promise<LandRegistryResult> => {
       setIsLoading(true);
       setError(null);
       try {
@@ -235,9 +304,13 @@ export const useShumaDB = () => {
         }
 
         return { success: true, landRegistryId: result.landRegistryId };
-      } catch (err: any) {
-        setError(err.message);
-        return { success: false, error: err.message };
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error
+            ? err.message
+            : "Failed to save land registry extraction";
+        setError(errorMessage);
+        return { success: false, error: errorMessage };
       } finally {
         setIsLoading(false);
       }
@@ -249,9 +322,9 @@ export const useShumaDB = () => {
   const saveSharedBuildingExtraction = useCallback(
     async (
       sessionId: string,
-      sharedBuildingData: any,
+      sharedBuildingData: ExtractedData,
       documentFilename: string,
-    ) => {
+    ): Promise<SharedBuildingResult> => {
       setIsLoading(true);
       setError(null);
       try {
@@ -275,9 +348,13 @@ export const useShumaDB = () => {
         }
 
         return { success: true, sharedBuildingId: result.sharedBuildingId };
-      } catch (err: any) {
-        setError(err.message);
-        return { success: false, error: err.message };
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error
+            ? err.message
+            : "Failed to save shared building extraction";
+        setError(errorMessage);
+        return { success: false, error: errorMessage };
       } finally {
         setIsLoading(false);
       }
@@ -286,33 +363,38 @@ export const useShumaDB = () => {
   );
 
   // Get all extracted data from all tables
-  const getAllExtractedData = useCallback(async (sessionId: string) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const response = await fetch("/api/sessions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "get_all_extracted_data",
-          sessionId,
-        }),
-      });
+  const getAllExtractedData = useCallback(
+    async (sessionId: string): Promise<ExtractedDataResult> => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const response = await fetch("/api/sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "get_all_extracted_data",
+            sessionId,
+          }),
+        });
 
-      const result = await response.json();
+        const result = await response.json();
 
-      if (!response.ok) {
-        throw new Error(result.error || "Failed to get extracted data");
+        if (!response.ok) {
+          throw new Error(result.error || "Failed to get extracted data");
+        }
+
+        return { success: true, data: result.data };
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to get extracted data";
+        setError(errorMessage);
+        return { success: false, error: errorMessage };
+      } finally {
+        setIsLoading(false);
       }
-
-      return { success: true, data: result.data };
-    } catch (err: any) {
-      setError(err.message);
-      return { success: false, error: err.message };
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+    },
+    [],
+  );
 
   // Save final results
   const saveFinalResults = useCallback(
@@ -320,9 +402,9 @@ export const useShumaDB = () => {
       sessionId: string,
       finalValuation: number,
       pricePerSqm: number,
-      comparableData: any,
-      propertyAnalysis: any,
-    ) => {
+      comparableData: ComparableProperty[],
+      propertyAnalysis: PropertyAnalysis | null,
+    ): Promise<HookResult> => {
       setIsLoading(true);
       setError(null);
       try {
@@ -346,9 +428,11 @@ export const useShumaDB = () => {
         }
 
         return { success: true };
-      } catch (err: any) {
-        setError(err.message);
-        return { success: false, error: err.message };
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to save final results";
+        setError(errorMessage);
+        return { success: false, error: errorMessage };
       } finally {
         setIsLoading(false);
       }
@@ -357,7 +441,7 @@ export const useShumaDB = () => {
   );
 
   // Get user's shumas
-  const getUserShumas = useCallback(async () => {
+  const getUserShumas = useCallback(async (): Promise<ShumaListResult> => {
     setIsLoading(true);
     setError(null);
     try {
@@ -376,45 +460,52 @@ export const useShumaDB = () => {
       }
 
       return { success: true, shumas: result.shumas };
-    } catch (err: any) {
-      setError(err.message);
-      return { success: false, error: err.message };
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to get shumas";
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   // Get specific shuma
-  const getShumaById = useCallback(async (shumaId: string) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const response = await fetch(
-        `/api/valuation-session?action=get_valuation&valuationId=${shumaId}`,
-        {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-        },
-      );
+  const getShumaById = useCallback(
+    async (shumaId: string): Promise<ShumaResult> => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(
+          `/api/valuation-session?action=get_valuation&valuationId=${shumaId}`,
+          {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+          },
+        );
 
-      const result = await response.json();
+        const result = await response.json();
 
-      if (!response.ok) {
-        throw new Error(result.error || "Failed to get shuma");
+        if (!response.ok) {
+          throw new Error(result.error || "Failed to get shuma");
+        }
+
+        return { success: true, shuma: result.shuma };
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to get shuma";
+        setError(errorMessage);
+        return { success: false, error: errorMessage };
+      } finally {
+        setIsLoading(false);
       }
-
-      return { success: true, shuma: result.shuma };
-    } catch (err: any) {
-      setError(err.message);
-      return { success: false, error: err.message };
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+    },
+    [],
+  );
 
   // Search shumas
   const searchShumas = useCallback(
-    async (searchTerm?: string, status?: string) => {
+    async (searchTerm?: string, status?: string): Promise<ShumaListResult> => {
       setIsLoading(true);
       setError(null);
       try {
@@ -437,9 +528,11 @@ export const useShumaDB = () => {
         }
 
         return { success: true, shumas: result.shumas };
-      } catch (err: any) {
-        setError(err.message);
-        return { success: false, error: err.message };
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to search shumas";
+        setError(errorMessage);
+        return { success: false, error: errorMessage };
       } finally {
         setIsLoading(false);
       }

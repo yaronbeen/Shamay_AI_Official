@@ -31,6 +31,7 @@ describe("AIGeneratedField", () => {
           label="Test Field"
           value="Initial text"
           onChange={mockOnChange}
+          isLoading={false}
         />,
       );
 
@@ -44,6 +45,7 @@ describe("AIGeneratedField", () => {
           label="Test Field"
           value="Some text"
           onChange={mockOnChange}
+          isLoading={false}
         />,
       );
 
@@ -60,6 +62,7 @@ describe("AIGeneratedField", () => {
           label="Test Field"
           value="Initial"
           onChange={mockOnChange}
+          isLoading={false}
         />,
       );
 
@@ -76,6 +79,7 @@ describe("AIGeneratedField", () => {
           label="Test Field"
           value="Initial"
           onChange={mockOnChange}
+          isLoading={false}
         />,
       );
 
@@ -100,6 +104,7 @@ describe("AIGeneratedField", () => {
           label="Test Field"
           value="Initial"
           onChange={mockOnChange}
+          isLoading={false}
         />,
       );
 
@@ -140,6 +145,7 @@ describe("AIGeneratedField", () => {
           label="Test Field"
           value="Initial"
           onChange={mockOnChange}
+          isLoading={false}
         />,
       );
 
@@ -162,6 +168,7 @@ describe("AIGeneratedField", () => {
           label="Test Field"
           value="Initial"
           onChange={mockOnChange}
+          isLoading={false}
         />,
       );
 
@@ -191,6 +198,7 @@ describe("AIGeneratedField", () => {
           label="Test Field"
           value="Initial"
           onChange={mockOnChange}
+          isLoading={false}
         />,
       );
 
@@ -214,6 +222,7 @@ describe("AIGeneratedField", () => {
           label="Test Field"
           value="Initial"
           onChange={mockOnChange}
+          isLoading={false}
         />,
       );
 
