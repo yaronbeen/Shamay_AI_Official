@@ -1,7 +1,8 @@
 /**
  * Extraction Service
  *
- * Handles AI extraction operations including saving extraction results,
+ * Handles document extraction operations including saving extraction results
+ * to dedicated tables (permits, land registry, shared building orders),
  * retrieving extraction history, and managing extraction lifecycle.
  *
  * @module services/ExtractionService
@@ -10,9 +11,96 @@
 const { db, safeParseJSON } = require("./DatabaseClient");
 
 /**
- * Extraction Service - AI Extraction Management
+ * Helper function to format dates for PostgreSQL
+ * @param {string} dateString - Date string to format
+ * @returns {string|null} Formatted date (YYYY-MM-DD) or null
+ */
+function formatDateForDB(dateString) {
+  if (!dateString) return null;
+  if (dateString === "") return null;
+
+  // If it's already in YYYY-MM-DD format, return as is
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    return dateString;
+  }
+
+  // Try to parse and format the date
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return null;
+    return date.toISOString().split("T")[0]; // Returns YYYY-MM-DD
+  } catch (error) {
+    console.warn("Invalid date format:", dateString);
+    return null;
+  }
+}
+
+/**
+ * Extraction Service - Document Extraction Management
  */
 class ExtractionService {
+  /**
+   * Validate confidence values to prevent NaN errors
+   * @param {number|string} value - Confidence value
+   * @param {number} defaultValue - Default value if invalid
+   * @returns {number} Valid confidence value between 0 and 1
+   */
+  static _validateConfidence(value, defaultValue) {
+    if (
+      value === null ||
+      value === undefined ||
+      isNaN(value) ||
+      value === "NaN"
+    ) {
+      return defaultValue;
+    }
+    const numValue = parseFloat(value);
+    if (isNaN(numValue)) {
+      return defaultValue;
+    }
+    return Math.max(0, Math.min(1, numValue)); // Clamp between 0 and 1
+  }
+
+  /**
+   * Truncate string to fit in varchar field
+   * @param {string} value - String to truncate
+   * @param {number} maxLength - Maximum length (default 255)
+   * @returns {string|null} Truncated string or null
+   */
+  static _truncateString(value, maxLength = 255) {
+    if (!value) return null;
+    const str = String(value);
+    return str.length > maxLength ? str.substring(0, maxLength) : str;
+  }
+
+  /**
+   * Parse floor value to integer, handling ranges like "8-9" by taking the first number
+   * @param {string|number} floorsValue - Floor value to parse
+   * @returns {number|null} Parsed integer or null
+   */
+  static _parseFloorsToInteger(floorsValue) {
+    if (!floorsValue) return null;
+
+    // Handle string values like "8-9" by extracting the first number
+    if (typeof floorsValue === "string") {
+      // Extract first number from range like "8-9" -> 8
+      const match = floorsValue.match(/^(\d+)/);
+      if (match) {
+        return parseInt(match[1], 10);
+      }
+      // Try to parse the entire string as a number
+      const parsed = parseInt(floorsValue, 10);
+      return isNaN(parsed) ? null : parsed;
+    }
+
+    // If it's already a number, return it
+    if (typeof floorsValue === "number") {
+      return floorsValue;
+    }
+
+    return null;
+  }
+
   /**
    * Save AI extraction result for auditing and history tracking.
    *
@@ -263,13 +351,27 @@ class ExtractionService {
   }
 
   /**
-   * Save permit extraction data.
+   * Save building permit data to building_permit_extracts table.
+   *
+   * Saves extracted permit data to the dedicated extraction table with
+   * confidence scores, then updates the shuma table with the permit
+   * reference ID and key fields.
    *
    * @param {string} sessionId - Session identifier
    * @param {Object} permitData - Extracted permit data
-   * @param {string} [documentFilename] - Source document filename
+   * @param {string} [permitData.permitNumber] - Permit number
+   * @param {number} [permitData.permitNumberConfidence] - Confidence (0-1)
+   * @param {string} [permitData.permitDate] - Permit date
+   * @param {number} [permitData.permitDateConfidence] - Confidence (0-1)
+   * @param {string} [permitData.permittedUsage] - Permitted use/usage
+   * @param {string} [permitData.permittedUse] - Alias for permittedUsage
+   * @param {number} [permitData.permittedUsageConfidence] - Confidence (0-1)
+   * @param {string} [permitData.buildingDescription] - Building description
+   * @param {number} [permitData.buildingDescriptionConfidence] - Confidence (0-1)
+   * @param {string} [permitData.processingMethod] - Processing method (default: 'openai')
+   * @param {string} [documentFilename] - Source document filename/path
    *
-   * @returns {Promise<{success: boolean, error?: string}>}
+   * @returns {Promise<{success: boolean, permitId?: number, error?: string}>}
    */
   static async savePermitExtraction(sessionId, permitData, documentFilename) {
     const client = await db.client();
@@ -279,62 +381,119 @@ class ExtractionService {
 
       // Get shuma ID
       const shumaResult = await client.query(
-        "SELECT id, extracted_data FROM shuma WHERE session_id = $1",
+        "SELECT id FROM shuma WHERE session_id = $1",
         [sessionId],
       );
-
       if (shumaResult.rows.length === 0) {
         throw new Error("Shuma not found for session");
       }
-
       const shumaId = shumaResult.rows[0].id;
-      const existingExtracted = safeParseJSON(
-        shumaResult.rows[0].extracted_data,
-        {},
+
+      // Insert into building_permit_extracts
+      const result = await client.query(
+        `
+        INSERT INTO building_permit_extracts (
+          shuma_id, session_id,
+          permit_number, permit_number_confidence,
+          permit_date, permit_date_confidence,
+          permitted_use, permitted_use_confidence,
+          building_description, building_description_confidence,
+          pdf_path,
+          processing_method
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        RETURNING id
+      `,
+        [
+          shumaId,
+          sessionId,
+          this._truncateString(permitData.permitNumber, 255),
+          this._validateConfidence(permitData.permitNumberConfidence, 0.95),
+          formatDateForDB(permitData.permitDate),
+          this._validateConfidence(permitData.permitDateConfidence, 0.95),
+          this._truncateString(
+            permitData.permittedUsage || permitData.permittedUse,
+            255,
+          ),
+          this._validateConfidence(
+            permitData.permittedUsageConfidence ||
+              permitData.permittedUseConfidence,
+            0.95,
+          ),
+          permitData.buildingDescription, // TEXT field, no truncation needed
+          this._validateConfidence(
+            permitData.buildingDescriptionConfidence,
+            0.95,
+          ),
+          documentFilename, // Can be TEXT if path is long
+          this._truncateString(permitData.processingMethod || "openai", 50),
+        ],
       );
 
-      // Merge permit data into extracted_data
-      const updatedExtracted = {
-        ...existingExtracted,
-        building_permit: permitData,
-      };
+      const permitId = result.rows[0].id;
 
-      // Update shuma
+      // Update shuma with extracted permit data AND reference
       await client.query(
-        `UPDATE shuma SET extracted_data = $1, updated_at = NOW()
-         WHERE session_id = $2`,
-        [JSON.stringify(updatedExtracted), sessionId],
+        `
+        UPDATE shuma SET
+          building_permit_number = $1,
+          building_permit_date = $2,
+          extracted_data = jsonb_set(
+            COALESCE(extracted_data, '{}'::jsonb),
+            '{buildingPermitId}',
+            to_jsonb($3::integer)
+          ),
+          updated_at = NOW()
+        WHERE id = $4
+      `,
+        [
+          permitData.permitNumber,
+          formatDateForDB(permitData.permitDate),
+          permitId,
+          shumaId,
+        ],
       );
-
-      // Save to AI extractions for history
-      await this.saveAIExtraction(sessionId, "permit", permitData, permitData, {
-        documentFilename,
-      });
 
       await client.query("COMMIT");
-
-      return { success: true };
+      return { success: true, permitId };
     } catch (error) {
       await client.query("ROLLBACK");
       console.error("Error saving permit extraction:", error);
-      return { error: error.message };
+      return { error: error.message || "Failed to save permit extraction" };
     } finally {
       client.release();
     }
   }
 
   /**
-   * Save land registry (tabu) extraction data.
+   * Save land registry data to land_registry_extracts table.
+   *
+   * Saves extracted land registry (tabu) data to the dedicated extraction
+   * table with confidence scores, then updates the shuma table with the
+   * registry reference ID and key fields (gush, parcel, sub_parcel).
    *
    * @param {string} sessionId - Session identifier
-   * @param {Object} tabuData - Extracted tabu data
-   * @param {string} [documentFilename] - Source document filename
+   * @param {Object} landRegistryData - Extracted land registry data
+   * @param {string} [landRegistryData.gush] - Block number (gush)
+   * @param {number} [landRegistryData.gushConfidence] - Confidence (0-1)
+   * @param {string} [landRegistryData.parcel] - Parcel number (chelka)
+   * @param {number} [landRegistryData.parcelConfidence] - Confidence (0-1)
+   * @param {string} [landRegistryData.subParcel] - Sub-parcel number
+   * @param {number} [landRegistryData.subParcelConfidence] - Confidence (0-1)
+   * @param {string} [landRegistryData.registeredArea] - Registered area
+   * @param {number} [landRegistryData.registeredAreaConfidence] - Confidence (0-1)
+   * @param {string} [landRegistryData.registrationOffice] - Registration office
+   * @param {number} [landRegistryData.registrationOfficeConfidence] - Confidence (0-1)
+   * @param {string} [landRegistryData.ownershipType] - Type of ownership
+   * @param {number} [landRegistryData.ownershipTypeConfidence] - Confidence (0-1)
+   * @param {string} [landRegistryData.attachments] - Attachments info
+   * @param {number} [landRegistryData.attachmentsConfidence] - Confidence (0-1)
+   * @param {string} [documentFilename] - Source document filename/path
    *
-   * @returns {Promise<{success: boolean, error?: string}>}
+   * @returns {Promise<{success: boolean, landRegistryId?: number, error?: string}>}
    */
   static async saveLandRegistryExtraction(
     sessionId,
-    tabuData,
+    landRegistryData,
     documentFilename,
   ) {
     const client = await db.client();
@@ -344,73 +503,130 @@ class ExtractionService {
 
       // Get shuma ID
       const shumaResult = await client.query(
-        "SELECT id, extracted_data FROM shuma WHERE session_id = $1",
+        "SELECT id FROM shuma WHERE session_id = $1",
         [sessionId],
       );
-
       if (shumaResult.rows.length === 0) {
         throw new Error("Shuma not found for session");
       }
-
       const shumaId = shumaResult.rows[0].id;
-      const existingExtracted = safeParseJSON(
-        shumaResult.rows[0].extracted_data,
-        {},
-      );
 
-      // Merge tabu data into extracted_data
-      const updatedExtracted = {
-        ...existingExtracted,
-        land_registry: tabuData,
-        // Also populate top-level fields
-        gush: tabuData.gush || existingExtracted.gush,
-        chelka: tabuData.chelka || existingExtracted.chelka,
-        subChelka: tabuData.subChelka || existingExtracted.subChelka,
-      };
-
-      // Update shuma
-      await client.query(
-        `UPDATE shuma SET
-          extracted_data = $1,
-          gush = COALESCE($2, gush),
-          parcel = COALESCE($3, parcel),
-          sub_parcel = COALESCE($4, sub_parcel),
-          updated_at = NOW()
-         WHERE session_id = $5`,
+      // Insert into land_registry_extracts
+      const result = await client.query(
+        `
+        INSERT INTO land_registry_extracts (
+          shuma_id, session_id, pdf_path,
+          gush, gush_confidence,
+          parcel, parcel_confidence,
+          sub_parcel, sub_parcel_confidence,
+          registered_area, registered_area_confidence,
+          registration_office, registration_office_confidence,
+          ownership_type, ownership_type_confidence,
+          attachments, attachments_confidence,
+          raw_extraction
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        RETURNING id
+      `,
         [
-          JSON.stringify(updatedExtracted),
-          tabuData.gush,
-          tabuData.chelka,
-          tabuData.subChelka,
+          shumaId,
           sessionId,
+          documentFilename,
+          landRegistryData.gush || null,
+          this._validateConfidence(landRegistryData.gushConfidence, 0.95),
+          landRegistryData.parcel || null,
+          this._validateConfidence(landRegistryData.parcelConfidence, 0.95),
+          landRegistryData.subParcel || null,
+          this._validateConfidence(landRegistryData.subParcelConfidence, 0.95),
+          landRegistryData.registeredArea || null,
+          this._validateConfidence(
+            landRegistryData.registeredAreaConfidence,
+            0.95,
+          ),
+          landRegistryData.registrationOffice || null,
+          this._validateConfidence(
+            landRegistryData.registrationOfficeConfidence,
+            0.95,
+          ),
+          landRegistryData.ownershipType || null,
+          this._validateConfidence(
+            landRegistryData.ownershipTypeConfidence,
+            0.95,
+          ),
+          landRegistryData.attachments || null,
+          this._validateConfidence(
+            landRegistryData.attachmentsConfidence,
+            0.95,
+          ),
+          JSON.stringify(landRegistryData),
         ],
       );
 
-      // Save to AI extractions for history
-      await this.saveAIExtraction(sessionId, "tabu", tabuData, tabuData, {
-        documentFilename,
-      });
+      const landRegistryId = result.rows[0].id;
+
+      // Update shuma with extracted data AND reference
+      await client.query(
+        `
+        UPDATE shuma SET
+          gush = $1,
+          parcel = $2,
+          sub_parcel = $3,
+          registered_area = $4,
+          extracted_data = jsonb_set(
+            COALESCE(extracted_data, '{}'::jsonb),
+            '{landRegistryId}',
+            to_jsonb($5::integer)
+          ),
+          updated_at = NOW()
+        WHERE id = $6
+      `,
+        [
+          landRegistryData.gush,
+          landRegistryData.parcel,
+          landRegistryData.subParcel,
+          landRegistryData.registeredArea,
+          landRegistryId,
+          shumaId,
+        ],
+      );
 
       await client.query("COMMIT");
-
-      return { success: true };
+      return { success: true, landRegistryId };
     } catch (error) {
       await client.query("ROLLBACK");
       console.error("Error saving land registry extraction:", error);
-      return { error: error.message };
+      return {
+        error: error.message || "Failed to save land registry extraction",
+      };
     } finally {
       client.release();
     }
   }
 
   /**
-   * Save shared building order extraction data.
+   * Save shared building order data to shared_building_order table.
+   *
+   * Saves extracted shared building order (tzav bayit meshutaf) data to the
+   * dedicated table with confidence scores, then updates the shuma table
+   * with the reference ID and key fields.
    *
    * @param {string} sessionId - Session identifier
-   * @param {Object} sharedBuildingData - Extracted data
-   * @param {string} [documentFilename] - Source document filename
+   * @param {Object} sharedBuildingData - Extracted shared building data
+   * @param {string} [sharedBuildingData.buildingDescription] - Building description
+   * @param {string} [sharedBuildingData.building_description] - Alias
+   * @param {number} [sharedBuildingData.buildingDescriptionConfidence] - Confidence (0-1)
+   * @param {string|number} [sharedBuildingData.buildingFloors] - Number of floors
+   * @param {string|number} [sharedBuildingData.building_floors] - Alias
+   * @param {number} [sharedBuildingData.buildingFloorsConfidence] - Confidence (0-1)
+   * @param {number} [sharedBuildingData.buildingSubPlotsCount] - Number of units
+   * @param {number} [sharedBuildingData.building_sub_plots_count] - Alias
+   * @param {number} [sharedBuildingData.total_sub_plots] - Alias
+   * @param {number} [sharedBuildingData.buildingSubPlotsCountConfidence] - Confidence (0-1)
+   * @param {string} [sharedBuildingData.buildingAddress] - Building address (common areas)
+   * @param {string} [sharedBuildingData.building_address] - Alias
+   * @param {number} [sharedBuildingData.confidence] - General confidence (0-1)
+   * @param {string} [documentFilename] - Source document filename/path
    *
-   * @returns {Promise<{success: boolean, error?: string}>}
+   * @returns {Promise<{success: boolean, sharedBuildingId?: number, error?: string}>}
    */
   static async saveSharedBuildingExtraction(
     sessionId,
@@ -422,76 +638,180 @@ class ExtractionService {
     try {
       await client.query("BEGIN");
 
+      // Get shuma ID
       const shumaResult = await client.query(
-        "SELECT id, extracted_data FROM shuma WHERE session_id = $1",
+        "SELECT id FROM shuma WHERE session_id = $1",
         [sessionId],
       );
-
       if (shumaResult.rows.length === 0) {
         throw new Error("Shuma not found for session");
       }
+      const shumaId = shumaResult.rows[0].id;
 
-      const existingExtracted = safeParseJSON(
-        shumaResult.rows[0].extracted_data,
-        {},
+      // Insert into shared_building_order
+      // Production schema has shuma_id and session_id, not filename
+      const result = await client.query(
+        `
+        INSERT INTO shared_building_order (
+          shuma_id, session_id,
+          building_description, building_description_confidence,
+          number_of_floors, number_of_floors_confidence,
+          number_of_units, number_of_units_confidence,
+          common_areas, common_areas_confidence,
+          raw_extraction
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING id
+      `,
+        [
+          shumaId,
+          sessionId,
+          sharedBuildingData.buildingDescription ||
+            sharedBuildingData.building_description,
+          this._validateConfidence(
+            sharedBuildingData.buildingDescriptionConfidence ||
+              sharedBuildingData.confidence,
+            0.95,
+          ),
+          this._parseFloorsToInteger(
+            sharedBuildingData.buildingFloors ||
+              sharedBuildingData.building_floors,
+          ),
+          this._validateConfidence(
+            sharedBuildingData.buildingFloorsConfidence ||
+              sharedBuildingData.confidence,
+            0.95,
+          ),
+          sharedBuildingData.buildingSubPlotsCount ||
+            sharedBuildingData.building_sub_plots_count ||
+            sharedBuildingData.total_sub_plots,
+          this._validateConfidence(
+            sharedBuildingData.buildingSubPlotsCountConfidence ||
+              sharedBuildingData.confidence,
+            0.95,
+          ),
+          sharedBuildingData.buildingAddress ||
+            sharedBuildingData.building_address ||
+            null,
+          this._validateConfidence(sharedBuildingData.confidence, 0.95),
+          JSON.stringify(sharedBuildingData), // Store all raw data
+        ],
       );
 
-      const updatedExtracted = {
-        ...existingExtracted,
-        shared_building: sharedBuildingData,
-      };
+      const sharedBuildingId = result.rows[0].id;
 
+      // Update shuma with extracted data AND reference
       await client.query(
-        `UPDATE shuma SET extracted_data = $1, updated_at = NOW()
-         WHERE session_id = $2`,
-        [JSON.stringify(updatedExtracted), sessionId],
-      );
-
-      await this.saveAIExtraction(
-        sessionId,
-        "shared_building",
-        sharedBuildingData,
-        sharedBuildingData,
-        { documentFilename },
+        `
+        UPDATE shuma SET
+          building_description = $1,
+          building_floors = $2,
+          building_units = $3,
+          extracted_data = jsonb_set(
+            COALESCE(extracted_data, '{}'::jsonb),
+            '{sharedBuildingId}',
+            to_jsonb($4::integer)
+          ),
+          updated_at = NOW()
+        WHERE id = $5
+      `,
+        [
+          sharedBuildingData.buildingDescription,
+          sharedBuildingData.buildingFloors,
+          sharedBuildingData.totalSubPlots,
+          sharedBuildingId,
+          shumaId,
+        ],
       );
 
       await client.query("COMMIT");
-
-      return { success: true };
+      return { success: true, sharedBuildingId };
     } catch (error) {
       await client.query("ROLLBACK");
       console.error("Error saving shared building extraction:", error);
-      return { error: error.message };
+      return {
+        error: error.message || "Failed to save shared building extraction",
+      };
     } finally {
       client.release();
     }
   }
 
   /**
-   * Get all extracted data for a session (from all sources).
+   * Get all extracted data for a session (from all tables).
+   *
+   * Retrieves extracted data from all dedicated extraction tables
+   * (land_registry_extracts, building_permit_extracts, shared_building_order,
+   * garmushka) using the reference IDs stored in shuma.extracted_data.
    *
    * @param {string} sessionId - Session identifier
    *
    * @returns {Promise<{success: boolean, data?: Object, error?: string}>}
+   * @returns {Object} data.landRegistry - Land registry extraction data or null
+   * @returns {Object} data.buildingPermit - Building permit extraction data or null
+   * @returns {Object} data.sharedBuilding - Shared building order data or null
+   * @returns {Object} data.garmushka - Garmushka measurements data or null
    */
   static async getAllExtractedData(sessionId) {
     try {
-      const result = await db.query(
-        "SELECT extracted_data FROM shuma WHERE session_id = $1",
+      // Get shuma
+      const shumaResult = await db.query(
+        "SELECT id, extracted_data FROM shuma WHERE session_id = $1",
         [sessionId],
       );
-
-      if (result.rows.length === 0) {
+      if (shumaResult.rows.length === 0) {
         return { error: "Shuma not found" };
       }
 
-      return {
-        success: true,
-        data: safeParseJSON(result.rows[0].extracted_data, {}),
+      const shuma = shumaResult.rows[0];
+      const extractedDataRefs = shuma.extracted_data || {};
+
+      // Get related extractions
+      const allData = {
+        landRegistry: null,
+        buildingPermit: null,
+        sharedBuilding: null,
+        garmushka: null,
       };
+
+      // Load land registry if reference exists
+      if (extractedDataRefs.landRegistryId) {
+        const result = await db.query(
+          "SELECT * FROM land_registry_extracts WHERE id = $1",
+          [extractedDataRefs.landRegistryId],
+        );
+        allData.landRegistry = result.rows[0] || null;
+      }
+
+      // Load building permit if reference exists
+      if (extractedDataRefs.buildingPermitId) {
+        const result = await db.query(
+          "SELECT * FROM building_permit_extracts WHERE id = $1",
+          [extractedDataRefs.buildingPermitId],
+        );
+        allData.buildingPermit = result.rows[0] || null;
+      }
+
+      // Load shared building if reference exists
+      if (extractedDataRefs.sharedBuildingId) {
+        const result = await db.query(
+          "SELECT * FROM shared_building_order WHERE id = $1",
+          [extractedDataRefs.sharedBuildingId],
+        );
+        allData.sharedBuilding = result.rows[0] || null;
+      }
+
+      // Load garmushka if reference exists
+      if (extractedDataRefs.garmushkaId) {
+        const result = await db.query("SELECT * FROM garmushka WHERE id = $1", [
+          extractedDataRefs.garmushkaId,
+        ]);
+        allData.garmushka = result.rows[0] || null;
+      }
+
+      return { success: true, data: allData };
     } catch (error) {
       console.error("Error getting all extracted data:", error);
-      return { error: error.message };
+      return { error: error.message || "Failed to get extracted data" };
     }
   }
 }

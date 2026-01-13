@@ -26,3 +26,7 @@ export {
 export { useFootnotes } from "./hooks/useFootnotes";
 export { useImageEditor } from "./hooks/useImageEditor";
 export { useTableEditor } from "./hooks/useTableEditor";
+
+// Components
+export { FloatingToolbar } from "./FloatingToolbar";
+export type { FloatingToolbarProps } from "./FloatingToolbar";

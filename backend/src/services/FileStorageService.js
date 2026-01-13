@@ -2,170 +2,202 @@
  * File Storage Service
  *
  * Handles file storage operations including base64 to file conversion.
- * Supports both local filesystem and Vercel Blob storage.
+ * Supports both local filesystem (development) and Vercel Blob storage (production).
+ *
+ * Extracted from ShumaDB.js for better separation of concerns.
  *
  * @module services/FileStorageService
  */
 
-const crypto = require("crypto");
-const path = require("path");
 const fs = require("fs").promises;
+const path = require("path");
 
 /**
  * File Storage Service
  */
 class FileStorageService {
   /**
-   * Save a base64 image to file storage.
+   * Convert base64 image to Buffer and save to file storage.
+   * Uses Vercel Blob in production, local filesystem in development.
+   * Returns URL instead of base64 to reduce DB size.
    *
-   * Automatically chooses between Vercel Blob (production) and
-   * local filesystem (development) based on environment.
-   *
-   * @param {string} base64Data - Base64 encoded image data
+   * @param {string} base64Data - Base64 encoded image data (with or without data URI prefix)
    * @param {string} sessionId - Session identifier for organizing files
    * @param {string} filename - Target filename
    *
-   * @returns {Promise<{url: string, size: number}>}
+   * @returns {Promise<{url: string, path: string, size: number}>}
    */
-  static async saveBase64Image(base64Data, sessionId, filename) {
-    // Extract base64 content
-    const base64Match = base64Data.match(/^data:([^;]+);base64,(.+)$/);
-    if (!base64Match) {
-      throw new Error("Invalid base64 image format");
-    }
+  static async saveBase64ImageToFile(base64Data, sessionId, filename) {
+    try {
+      // Extract base64 data (remove data:image/png;base64, prefix if present)
+      const base64String = base64Data.includes(",")
+        ? base64Data.split(",")[1]
+        : base64Data;
 
-    const mimeType = base64Match[1];
-    const base64Content = base64Match[2];
-    const buffer = Buffer.from(base64Content, "base64");
+      // Convert base64 to Buffer
+      const buffer = Buffer.from(base64String, "base64");
 
-    // Determine storage method based on environment
-    const isProduction = process.env.NODE_ENV === "production";
-    const hasVercelBlob = !!process.env.BLOB_READ_WRITE_TOKEN;
+      // Check if we're in Vercel production
+      // In Vercel, process.env.VERCEL is truthy (typically '1')
+      // ALWAYS try Blob first if we're in Vercel, regardless of token (token might be auto-detected)
+      const isVercel =
+        !!process.env.VERCEL || process.env.VERCEL_ENV === "production";
 
-    if (isProduction && hasVercelBlob) {
-      return await this.saveToVercelBlob(buffer, sessionId, filename, mimeType);
-    } else {
+      console.log("🔍 [SAVE] Environment check:", {
+        isVercel,
+        VERCEL: process.env.VERCEL,
+        VERCEL_ENV: process.env.VERCEL_ENV,
+        hasBlobToken: !!process.env.BLOB_READ_WRITE_TOKEN,
+        NODE_ENV: process.env.NODE_ENV,
+      });
+
+      // ALWAYS try Vercel Blob first if in Vercel (primary storage method)
+      if (isVercel) {
+        try {
+          console.log("🚀 [SAVE] In Vercel - Attempting Blob upload...");
+          return await this.saveToVercelBlob(buffer, sessionId, filename);
+        } catch (blobError) {
+          console.error("❌ [SAVE] Vercel Blob failed:", blobError.message);
+          // In Vercel, we should NOT fall back to local filesystem
+          // Vercel filesystem is read-only except /tmp, and files won't persist
+          throw new Error(
+            `Failed to save to Vercel Blob: ${blobError.message}. This is required in Vercel production.`,
+          );
+        }
+      }
+
+      // Use local filesystem in development ONLY
+      console.log("📁 [SAVE] Using local filesystem (development)...");
       return await this.saveToLocalFilesystem(buffer, sessionId, filename);
+    } catch (error) {
+      console.error(`❌ Error saving image file:`, error);
+      throw error;
     }
   }
 
   /**
-   * Save buffer to Vercel Blob storage.
+   * Save file to Vercel Blob (Production).
+   * This is the PRIMARY method for production/Vercel deployments.
    *
-   * @param {Buffer} buffer - File buffer
+   * @param {Buffer} buffer - File buffer to upload
    * @param {string} sessionId - Session identifier
    * @param {string} filename - Target filename
-   * @param {string} [mimeType='image/png'] - MIME type
    *
-   * @returns {Promise<{url: string, size: number}>}
+   * @returns {Promise<{url: string, path: string, size: number}>}
    */
-  static async saveToVercelBlob(
-    buffer,
-    sessionId,
-    filename,
-    mimeType = "image/png",
-  ) {
+  static async saveToVercelBlob(buffer, sessionId, filename) {
     try {
-      const { put } = require("@vercel/blob");
+      // Try to use @vercel/blob
+      let put;
+      try {
+        const blobModule = require("@vercel/blob");
+        put = blobModule.put;
+        console.log("✅ [BLOB] @vercel/blob module loaded successfully");
+      } catch (e) {
+        const errorMsg =
+          "@vercel/blob not available. Please install: npm install @vercel/blob";
+        console.error("❌ [BLOB] Module load error:", errorMsg);
+        throw new Error(errorMsg);
+      }
 
-      const blobPath = `sessions/${sessionId}/${filename}`;
-      const blob = await put(blobPath, buffer, {
-        access: "public",
-        contentType: mimeType,
+      // Check for required token
+      if (!process.env.BLOB_READ_WRITE_TOKEN) {
+        throw new Error(
+          "BLOB_READ_WRITE_TOKEN environment variable is not set",
+        );
+      }
+
+      const pathname = `${sessionId}/${filename}`;
+
+      console.log("🔍 [BLOB] Uploading file:", {
+        sessionId,
+        filename,
+        pathname,
+        size: buffer.length,
+        hasToken: !!process.env.BLOB_READ_WRITE_TOKEN,
       });
 
-      console.log(`✅ Saved to Vercel Blob: ${blob.url}`);
+      // CRITICAL: Allow overwrite in case blob already exists (for updates/re-saves)
+      const blob = await put(pathname, buffer, {
+        access: "public",
+        addRandomSuffix: false,
+        allowOverwrite: true, // Allow overwriting existing blobs
+      });
+
+      console.log("✅ [BLOB] File uploaded successfully:", {
+        url: blob.url,
+        pathname: blob.pathname || pathname,
+        size: buffer.length,
+      });
 
       return {
         url: blob.url,
+        path: blob.pathname || pathname,
         size: buffer.length,
       };
     } catch (error) {
-      console.error("Error saving to Vercel Blob:", error);
+      console.error("❌ [BLOB] Upload error:", {
+        message: error.message,
+        stack: error.stack,
+        hasToken: !!process.env.BLOB_READ_WRITE_TOKEN,
+      });
+      // Re-throw error so caller can handle fallback
       throw error;
     }
   }
 
   /**
-   * Save buffer to local filesystem.
+   * Save file to local filesystem (Development ONLY).
+   * Saves to frontend/uploads when running locally (since frontend serves from there).
+   * NOTE: This should NEVER be used in Vercel production - use saveToVercelBlob instead.
    *
-   * @param {Buffer} buffer - File buffer
+   * @param {Buffer} buffer - File buffer to save
    * @param {string} sessionId - Session identifier
    * @param {string} filename - Target filename
    *
-   * @returns {Promise<{url: string, size: number}>}
+   * @returns {Promise<{url: string, path: string, size: number}>}
    */
   static async saveToLocalFilesystem(buffer, sessionId, filename) {
-    try {
-      // Determine upload directory
-      const uploadsDir =
-        process.env.UPLOADS_DIR ||
-        path.join(process.cwd(), "public", "uploads", "sessions", sessionId);
-
-      // Ensure directory exists
-      await fs.mkdir(uploadsDir, { recursive: true });
-
-      // Generate unique filename to avoid collisions
-      const uniqueFilename = `${Date.now()}-${filename}`;
-      const filePath = path.join(uploadsDir, uniqueFilename);
-
-      // Write file
-      await fs.writeFile(filePath, buffer);
-
-      // Generate URL
-      const url = `/api/files/sessions/${sessionId}/${uniqueFilename}`;
-
-      console.log(`✅ Saved to local filesystem: ${url}`);
-
-      return {
-        url,
-        size: buffer.length,
-      };
-    } catch (error) {
-      console.error("Error saving to local filesystem:", error);
-      throw error;
+    // Warn if called in production (should not happen)
+    if (process.env.VERCEL === "1") {
+      console.warn(
+        "⚠️ [LOCAL] WARNING: saveToLocalFilesystem called in Vercel! This should use Blob instead.",
+      );
     }
-  }
 
-  /**
-   * Delete a file from storage.
-   *
-   * @param {string} url - File URL to delete
-   *
-   * @returns {Promise<{success: boolean}>}
-   */
-  static async deleteFile(url) {
-    try {
-      if (url.startsWith("https://") && url.includes("vercel-storage.com")) {
-        // Vercel Blob
-        const { del } = require("@vercel/blob");
-        await del(url);
-      } else if (url.startsWith("/api/files/")) {
-        // Local file
-        const relativePath = url.replace("/api/files/", "");
-        const filePath = path.join(
-          process.cwd(),
-          "public",
-          "uploads",
-          relativePath,
-        );
-        await fs.unlink(filePath);
-      }
+    // Local dev: Always save to frontend/uploads
+    // Use path.resolve to get absolute path from backend/src/services to project root
+    // __dirname = backend/src/services
+    // Go up 3 levels: services -> src -> backend -> project root
+    const projectRoot = path.resolve(__dirname, "../../..");
+    const uploadsDir = path.join(projectRoot, "frontend", "uploads", sessionId);
 
-      return { success: true };
-    } catch (error) {
-      console.error("Error deleting file:", error);
-      return { success: false, error: error.message };
-    }
-  }
+    // Ensure directory exists
+    await fs.mkdir(uploadsDir, { recursive: true });
+    console.log(`📁 [LOCAL] Using upload directory: ${uploadsDir}`);
 
-  /**
-   * Generate a unique file identifier.
-   *
-   * @returns {string} Unique identifier
-   */
-  static generateFileId() {
-    return crypto.randomBytes(16).toString("hex");
+    // Save file
+    const filePath = path.join(uploadsDir, filename);
+    await fs.writeFile(filePath, buffer);
+
+    // Get file stats
+    const stats = await fs.stat(filePath);
+
+    // Return URL for local access
+    // Use /uploads/ path to match the upload route format
+    // This is served by the frontend Next.js app
+    const url = `/uploads/${sessionId}/${filename}`;
+
+    console.log(
+      `✅ [LOCAL] Saved image file: ${filePath} (${stats.size} bytes)`,
+    );
+    console.log(`📁 [LOCAL] File URL: ${url}`);
+
+    return {
+      url,
+      path: `${sessionId}/${filename}`,
+      size: stats.size,
+    };
   }
 }
 

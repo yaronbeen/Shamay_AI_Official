@@ -16,6 +16,7 @@ const GISService = require("./GISService");
 const GarmushkaService = require("./GarmushkaService");
 const ExtractionService = require("./ExtractionService");
 const FileStorageService = require("./FileStorageService");
+const AIExtractionService = require("./AIExtractionService");
 
 module.exports = {
   // Database utilities
@@ -29,4 +30,5 @@ module.exports = {
   GarmushkaService,
   ExtractionService,
   FileStorageService,
+  AIExtractionService,
 };

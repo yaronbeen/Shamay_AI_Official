@@ -1,45 +1,143 @@
 /**
  * Table editing hook for EditableDocumentPreview
- * Handles custom table CRUD operations
+ * Handles custom table CRUD operations including:
+ * - Insert custom table from CSV
+ * - Export table to CSV
+ * - Table operations (add/delete rows/columns, delete table)
  */
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { TableCellPosition, ToolbarState } from "../types";
 import { CustomTable, ValuationData } from "@/types/valuation";
+
+/**
+ * Table operation types
+ */
+export type TableOperation =
+  | "addRow"
+  | "deleteRow"
+  | "addColumn"
+  | "deleteColumn"
+  | "deleteTable";
 
 interface UseTableEditorProps {
   data: ValuationData;
   onDataChange: (updates: Partial<ValuationData>) => void;
+  getFrameDocument: () => Document | null;
+  toolbarState: ToolbarState;
+  setToolbarState: React.Dispatch<React.SetStateAction<ToolbarState>>;
+  saveOverrideForElement: (element: HTMLElement) => void;
+}
+
+interface UseTableEditorReturn {
+  /** Current selected table cell position */
   currentTableCell: TableCellPosition | null;
+  /** Set current table cell position */
   setCurrentTableCell: React.Dispatch<
     React.SetStateAction<TableCellPosition | null>
   >;
-  setToolbarState: React.Dispatch<React.SetStateAction<ToolbarState>>;
+  /** Insert a new custom table from CSV data */
+  handleInsertCustomTable: (table: CustomTable) => void;
+  /** Export the currently selected table to CSV file */
+  handleExportTableToCSV: () => void;
+  /** Perform table operation (add/delete row/column, delete table) */
+  handleTableOperation: (operation: TableOperation) => void;
+}
+
+/**
+ * Escape a CSV field value properly
+ * Handles commas, quotes, and newlines within field values
+ */
+function escapeCSVField(field: string): string {
+  if (field.includes(",") || field.includes('"') || field.includes("\n")) {
+    return `"${field.replace(/"/g, '""')}"`;
+  }
+  return field;
 }
 
 export function useTableEditor({
   data,
   onDataChange,
-  currentTableCell,
-  setCurrentTableCell,
+  getFrameDocument,
+  toolbarState,
   setToolbarState,
-}: UseTableEditorProps) {
+  saveOverrideForElement,
+}: UseTableEditorProps): UseTableEditorReturn {
+  // Track current table cell for table operations
+  const [currentTableCell, setCurrentTableCell] =
+    useState<TableCellPosition | null>(null);
+
+  /**
+   * Handle inserting a custom table from CSV
+   */
+  const handleInsertCustomTable = useCallback(
+    (table: CustomTable) => {
+      const existingTables: CustomTable[] = data.customTables || [];
+      const updatedTables = [...existingTables, table];
+
+      onDataChange({
+        customTables: updatedTables,
+      });
+
+      alert(
+        `✅ טבלה "${table.title || "ללא כותרת"}" נוספה בהצלחה! (${table.rows.length} שורות)`,
+      );
+    },
+    [data.customTables, onDataChange],
+  );
+
+  /**
+   * Export current table to CSV file
+   * Creates a downloadable CSV file with BOM for Hebrew support in Excel
+   */
+  const handleExportTableToCSV = useCallback(() => {
+    if (!currentTableCell) {
+      alert("יש לבחור תא בטבלה לפני ייצוא");
+      return;
+    }
+
+    const existingTables: CustomTable[] = data.customTables || [];
+    const table = existingTables.find((t) => t.id === currentTableCell.tableId);
+
+    if (!table) {
+      alert("לא נמצאה הטבלה לייצוא");
+      return;
+    }
+
+    // Build CSV content with proper escaping
+    const headerRow = table.headers.map(escapeCSVField).join(",");
+    const dataRows = table.rows.map((row) => row.map(escapeCSVField).join(","));
+    const csvContent = [headerRow, ...dataRows].join("\n");
+
+    // Add BOM for Hebrew support in Excel
+    const BOM = "\uFEFF";
+    const blob = new Blob([BOM + csvContent], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    // Download the file
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${table.title || "table"}-export.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, [currentTableCell, data.customTables]);
+
+  /**
+   * Handle table operations: add/delete rows/columns, delete table
+   */
   const handleTableOperation = useCallback(
-    (
-      operation:
-        | "addRow"
-        | "deleteRow"
-        | "addColumn"
-        | "deleteColumn"
-        | "deleteTable",
-    ) => {
+    (operation: TableOperation) => {
       if (!currentTableCell) {
         alert("יש לבחור תא בטבלה");
         return;
       }
 
       const { tableId, row, col } = currentTableCell;
-      const existingTables: CustomTable[] = (data as any).customTables || [];
+      const existingTables: CustomTable[] = data.customTables || [];
       const tableIndex = existingTables.findIndex((t) => t.id === tableId);
 
       if (tableIndex === -1) {
@@ -63,6 +161,7 @@ export function useTableEditor({
           };
           break;
         }
+
         case "deleteRow": {
           if (row < 0 || table.rows.length <= 1) {
             alert("לא ניתן למחוק את השורה היחידה");
@@ -73,13 +172,16 @@ export function useTableEditor({
             rows: table.rows.filter((_, idx) => idx !== row),
             updatedAt: new Date().toISOString(),
           };
-          const newLength = table.rows.length - 1;
-          const newRowIndex = row >= newLength ? newLength - 1 : row;
-          setCurrentTableCell((prev: TableCellPosition | null) =>
+          // Update currentTableCell to reflect deleted row
+          // After deletion, new length = table.rows.length - 1, so max valid index = table.rows.length - 2
+          const newRowLength = table.rows.length - 1;
+          const newRowIndex = row >= newRowLength ? newRowLength - 1 : row;
+          setCurrentTableCell((prev) =>
             prev ? { ...prev, row: Math.max(0, newRowIndex) } : null,
           );
           break;
         }
+
         case "addColumn": {
           const insertIndex = col >= 0 ? col + 1 : table.headers.length;
           const newHeaders = [...table.headers];
@@ -97,6 +199,7 @@ export function useTableEditor({
           };
           break;
         }
+
         case "deleteColumn": {
           if (col < 0 || table.headers.length <= 1) {
             alert("לא ניתן למחוק את העמודה היחידה");
@@ -108,19 +211,22 @@ export function useTableEditor({
             rows: table.rows.map((r) => r.filter((_, idx) => idx !== col)),
             updatedAt: new Date().toISOString(),
           };
-          const newLength = table.headers.length - 1;
-          const newColIndex = col >= newLength ? newLength - 1 : col;
-          setCurrentTableCell((prev: TableCellPosition | null) =>
+          // Update currentTableCell to reflect deleted column
+          // After deletion, new length = table.headers.length - 1, so max valid index = table.headers.length - 2
+          const newColLength = table.headers.length - 1;
+          const newColIndex = col >= newColLength ? newColLength - 1 : col;
+          setCurrentTableCell((prev) =>
             prev ? { ...prev, col: Math.max(0, newColIndex) } : null,
           );
           break;
         }
+
         case "deleteTable": {
           if (!confirm("האם אתה בטוח שברצונך למחוק את הטבלה?")) {
             return;
           }
           const updatedTables = existingTables.filter((t) => t.id !== tableId);
-          onDataChange({ customTables: updatedTables } as any);
+          onDataChange({ customTables: updatedTables });
           setCurrentTableCell(null);
           setToolbarState((prev) => ({ ...prev, mode: "text" }));
           return;
@@ -130,37 +236,17 @@ export function useTableEditor({
       if (updatedTable) {
         const updatedTables = [...existingTables];
         updatedTables[tableIndex] = updatedTable;
-        onDataChange({ customTables: updatedTables } as any);
+        onDataChange({ customTables: updatedTables });
       }
     },
-    [
-      currentTableCell,
-      data,
-      onDataChange,
-      setCurrentTableCell,
-      setToolbarState,
-    ],
-  );
-
-  // Handle inserting a custom table from CSV
-  const handleInsertCustomTable = useCallback(
-    (table: CustomTable) => {
-      const existingTables = (data as any).customTables || [];
-      const updatedTables = [...existingTables, table];
-
-      onDataChange({
-        customTables: updatedTables,
-      } as any);
-
-      alert(
-        `✅ טבלה "${table.title || "ללא כותרת"}" נוספה בהצלחה! (${table.rows.length} שורות)`,
-      );
-    },
-    [data, onDataChange],
+    [currentTableCell, data.customTables, onDataChange, setToolbarState],
   );
 
   return {
-    handleTableOperation,
+    currentTableCell,
+    setCurrentTableCell,
     handleInsertCustomTable,
+    handleExportTableToCSV,
+    handleTableOperation,
   };
 }

@@ -9,7 +9,13 @@ import {
   CompanySettings,
 } from "../lib/document-template";
 import { CSVUploadDialog } from "./ui/CSVUploadDialog";
-import { useFootnotes, useImageEditor } from "./EditableDocumentPreview/hooks";
+import {
+  useFootnotes,
+  useImageEditor,
+  useTableEditor,
+  useExport,
+} from "./EditableDocumentPreview/hooks";
+import { FloatingToolbar } from "./EditableDocumentPreview/FloatingToolbar";
 
 // Security: Allowed MIME types for image uploads
 const ALLOWED_IMAGE_MIME_TYPES = [
@@ -112,7 +118,6 @@ export function EditableDocumentPreview({
     Record<string, string>
   >({});
   const [isSaving, setIsSaving] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
   const [showCSVUploadDialog, setShowCSVUploadDialog] = useState(false);
   // Track current table cell for table operations
   const [currentTableCell, setCurrentTableCell] = useState<{
@@ -154,6 +159,12 @@ export function EditableDocumentPreview({
     onDataChange,
     previewFrameRef,
     setCustomHtmlOverrides,
+  });
+
+  // Use the extracted export hook
+  const { isExporting, handleExportPDF, handleExportDOCX } = useExport({
+    data,
+    customHtmlOverrides,
   });
 
   const updateIframeHeight = useCallback((frame: HTMLIFrameElement | null) => {
@@ -1336,115 +1347,7 @@ export function EditableDocumentPreview({
     [currentTableCell, data, onDataChange],
   );
 
-  const handleExportPDF = useCallback(
-    async (useReactPdf: boolean = false) => {
-      const sessionId = (data as any).sessionId;
-      if (!sessionId) {
-        alert("לא ניתן לייצא - חסר מזהה סשן");
-        return;
-      }
-
-      setIsExporting(true);
-      try {
-        const mergedEdits = {
-          ...((data as any).customDocumentEdits ||
-            (data as any).propertyAnalysis?.__customDocumentEdits ||
-            {}),
-          ...customHtmlOverrides,
-        };
-
-        // Choose endpoint based on PDF engine preference
-        const endpoint = useReactPdf
-          ? `/api/session/${sessionId}/export-pdf-react`
-          : `/api/session/${sessionId}/export-pdf`;
-
-        const response = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            customDocumentEdits: mergedEdits,
-          }),
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Failed to export PDF: ${errorText}`);
-        }
-
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `shamay-valuation-${sessionId}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-
-        alert(
-          `✅ PDF הורד בהצלחה! (${useReactPdf ? "React-PDF" : "Puppeteer"})`,
-        );
-      } catch (error) {
-        console.error("Error exporting PDF:", error);
-        alert(
-          `❌ שגיאה בייצוא PDF: ${error instanceof Error ? error.message : "Unknown error"}`,
-        );
-      } finally {
-        setIsExporting(false);
-      }
-    },
-    [data, customHtmlOverrides],
-  );
-
-  const handleExportDOCX = useCallback(async () => {
-    const sessionId = (data as any).sessionId;
-    if (!sessionId) {
-      alert("לא ניתן לייצא - חסר מזהה סשן");
-      return;
-    }
-
-    setIsExporting(true);
-    try {
-      const mergedEdits = {
-        ...((data as any).customDocumentEdits ||
-          (data as any).propertyAnalysis?.__customDocumentEdits ||
-          {}),
-        ...customHtmlOverrides,
-      };
-
-      const response = await fetch(`/api/session/${sessionId}/export-docx`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          customDocumentEdits: mergedEdits,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to export DOCX: ${errorText}`);
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `shamay-valuation-${sessionId}.docx`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-
-      alert("✅ קובץ Word הורד בהצלחה!");
-    } catch (error) {
-      console.error("Error exporting DOCX:", error);
-      alert(
-        `❌ שגיאה בייצוא Word: ${error instanceof Error ? error.message : "Unknown error"}`,
-      );
-    } finally {
-      setIsExporting(false);
-    }
-  }, [data, customHtmlOverrides]);
+  // handleExportPDF and handleExportDOCX are now provided by useExport hook
 
   const handleManualRefresh = useCallback(async () => {
     const sessionId = (data as any).sessionId;
@@ -1711,268 +1614,18 @@ export function EditableDocumentPreview({
             onLoad={handleIframeLoad}
           />
         )}
-        {isEditMode && toolbarState.visible && (
-          <div
-            data-edit-toolbar="true"
-            role="toolbar"
-            aria-label="כלי עריכת טקסט"
-            aria-orientation="horizontal"
-            className="fixed top-20 sm:top-24 right-2 sm:right-8 z-[1200] flex flex-wrap items-center gap-1 rounded-lg border border-gray-300 bg-white px-2 sm:px-3 py-2 shadow-xl max-w-[calc(100vw-1rem)] sm:max-w-none"
-            style={{ direction: "rtl" }}
-            onKeyDown={(e) => {
-              const buttons = e.currentTarget.querySelectorAll(
-                "button:not([disabled])",
-              );
-              const currentIndex = Array.from(buttons).indexOf(
-                document.activeElement as HTMLButtonElement,
-              );
-              if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-                e.preventDefault();
-                const direction = e.key === "ArrowRight" ? -1 : 1;
-                const nextIndex =
-                  (currentIndex + direction + buttons.length) % buttons.length;
-                (buttons[nextIndex] as HTMLButtonElement).focus();
-              } else if (e.key === "Escape") {
-                hideToolbar();
-              }
-            }}
-          >
-            {toolbarState.mode === "text" ? (
-              <>
-                {textToolbarButtons.map((btn) => {
-                  const disabled =
-                    toolbarState.mode !== "text" ||
-                    !toolbarState.targetSelector;
-                  return (
-                    <button
-                      key={btn.command}
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => executeCommand(btn.command)}
-                      disabled={disabled}
-                      aria-label={btn.label}
-                      className={`min-w-[36px] rounded-md border px-2 py-1 text-xs font-semibold ${
-                        disabled
-                          ? "border-gray-200 text-gray-400 cursor-not-allowed"
-                          : "border-gray-200 text-gray-700 hover:border-blue-400 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      }`}
-                      title={btn.label}
-                    >
-                      {btn.icon}
-                    </button>
-                  );
-                })}
-                <button
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => adjustFontSize("up")}
-                  disabled={
-                    toolbarState.mode !== "text" || !toolbarState.targetSelector
-                  }
-                  className={`rounded-md border px-2 py-1 text-xs font-semibold ${
-                    toolbarState.mode !== "text" || !toolbarState.targetSelector
-                      ? "border-gray-200 text-gray-400 cursor-not-allowed"
-                      : "border-gray-200 text-gray-700 hover:border-blue-400 hover:text-blue-600"
-                  }`}
-                  title="הגדל גופן"
-                >
-                  A+
-                </button>
-                <button
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => adjustFontSize("down")}
-                  disabled={
-                    toolbarState.mode !== "text" || !toolbarState.targetSelector
-                  }
-                  className={`rounded-md border px-2 py-1 text-xs font-semibold ${
-                    toolbarState.mode !== "text" || !toolbarState.targetSelector
-                      ? "border-gray-200 text-gray-400 cursor-not-allowed"
-                      : "border-gray-200 text-gray-700 hover:border-blue-400 hover:text-blue-600"
-                  }`}
-                  title="הקטן גופן"
-                >
-                  A-
-                </button>
-                <button
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => executeCommand("hiliteColor", "#fff3bf")}
-                  disabled={
-                    toolbarState.mode !== "text" || !toolbarState.targetSelector
-                  }
-                  className={`rounded-md border px-2 py-1 text-xs font-semibold ${
-                    toolbarState.mode !== "text" || !toolbarState.targetSelector
-                      ? "border-gray-200 text-gray-400 cursor-not-allowed"
-                      : "border-gray-200 text-gray-700 hover:border-amber-400 hover:text-amber-600"
-                  }`}
-                  title="סמן טקסט"
-                >
-                  🖍️
-                </button>
-                <button
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={hideToolbar}
-                  className="rounded-md border border-gray-200 px-2 py-1 text-xs font-semibold text-gray-600 hover:border-red-400 hover:text-red-600"
-                  title="הסתרת סרגל"
-                >
-                  ✖
-                </button>
-              </>
-            ) : toolbarState.mode === "table" ? (
-              <>
-                <span className="text-xs text-gray-500 ml-2">פעולות טבלה:</span>
-                <button
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => handleTableOperation("addRow")}
-                  className="rounded-md border border-green-300 bg-green-50 px-2 py-1 text-xs font-semibold text-green-700 hover:bg-green-100"
-                  title="הוסף שורה מתחת לשורה הנוכחית"
-                >
-                  ➕ שורה
-                </button>
-                <button
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => handleTableOperation("deleteRow")}
-                  className="rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
-                  title="מחק שורה נוכחית"
-                >
-                  ➖ שורה
-                </button>
-                <button
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => handleTableOperation("addColumn")}
-                  className="rounded-md border border-green-300 bg-green-50 px-2 py-1 text-xs font-semibold text-green-700 hover:bg-green-100"
-                  title="הוסף עמודה אחרי העמודה הנוכחית"
-                >
-                  ➕ עמודה
-                </button>
-                <button
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => handleTableOperation("deleteColumn")}
-                  className="rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
-                  title="מחק עמודה נוכחית"
-                >
-                  ➖ עמודה
-                </button>
-                <button
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => handleTableOperation("deleteTable")}
-                  className="rounded-md border border-red-400 bg-red-100 px-2 py-1 text-xs font-semibold text-red-800 hover:bg-red-200"
-                  title="מחק את כל הטבלה"
-                >
-                  🗑️ מחק טבלה
-                </button>
-                <button
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={handleExportTableToCSV}
-                  className="rounded-md border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-                  title="ייצוא טבלה ל-CSV"
-                >
-                  📥 ייצוא CSV
-                </button>
-                <button
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={hideToolbar}
-                  className="rounded-md border border-gray-200 px-2 py-1 text-xs font-semibold text-gray-600 hover:border-red-400 hover:text-red-600"
-                  title="הסתרת סרגל"
-                >
-                  ✖
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={handleImageReplace}
-                  disabled={
-                    toolbarState.mode !== "image" ||
-                    !toolbarState.targetSelector
-                  }
-                  className={`rounded-md border px-3 py-1 text-xs font-semibold ${
-                    toolbarState.mode !== "image" ||
-                    !toolbarState.targetSelector
-                      ? "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed"
-                      : "border-blue-400 bg-blue-50 text-blue-700 hover:bg-blue-100"
-                  }`}
-                  title="החלפת תמונה"
-                >
-                  החלף תמונה
-                </button>
-                <button
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => handleImageResize("full")}
-                  disabled={
-                    toolbarState.mode !== "image" ||
-                    !toolbarState.targetSelector
-                  }
-                  className={`rounded-md border px-2 py-1 text-xs font-semibold ${
-                    toolbarState.mode !== "image" ||
-                    !toolbarState.targetSelector
-                      ? "border-gray-200 text-gray-400 cursor-not-allowed"
-                      : "border-gray-200 text-gray-700 hover:border-blue-400 hover:text-blue-600"
-                  }`}
-                  title="רוחב מלא"
-                >
-                  100%
-                </button>
-                <button
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => handleImageResize("half")}
-                  disabled={
-                    toolbarState.mode !== "image" ||
-                    !toolbarState.targetSelector
-                  }
-                  className={`rounded-md border px-2 py-1 text-xs font-semibold ${
-                    toolbarState.mode !== "image" ||
-                    !toolbarState.targetSelector
-                      ? "border-gray-200 text-gray-400 cursor-not-allowed"
-                      : "border-gray-200 text-gray-700 hover:border-blue-400 hover:text-blue-600"
-                  }`}
-                  title="חצי רוחב"
-                >
-                  50%
-                </button>
-                <button
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => handleImageResize("third")}
-                  disabled={
-                    toolbarState.mode !== "image" ||
-                    !toolbarState.targetSelector
-                  }
-                  className={`rounded-md border px-2 py-1 text-xs font-semibold ${
-                    toolbarState.mode !== "image" ||
-                    !toolbarState.targetSelector
-                      ? "border-gray-200 text-gray-400 cursor-not-allowed"
-                      : "border-gray-200 text-gray-700 hover:border-blue-400 hover:text-blue-600"
-                  }`}
-                  title="שליש רוחב"
-                >
-                  33%
-                </button>
-                <button
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={handleImageReset}
-                  disabled={
-                    toolbarState.mode !== "image" ||
-                    !toolbarState.targetSelector
-                  }
-                  className={`rounded-md border px-2 py-1 text-xs font-semibold ${
-                    toolbarState.mode !== "image" ||
-                    !toolbarState.targetSelector
-                      ? "border-gray-200 text-gray-400 cursor-not-allowed"
-                      : "border-gray-200 text-gray-700 hover:border-green-400 hover:text-green-600"
-                  }`}
-                  title="איפוס התאמות"
-                >
-                  איפוס
-                </button>
-                <button
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={hideToolbar}
-                  className="rounded-md border border-gray-200 px-2 py-1 text-xs font-semibold text-gray-600 hover:border-red-400 hover:text-red-600"
-                  title="הסתרת סרגל"
-                >
-                  ✖
-                </button>
-              </>
-            )}
-          </div>
+        {isEditMode && (
+          <FloatingToolbar
+            toolbarState={toolbarState}
+            onHide={hideToolbar}
+            onExecuteCommand={executeCommand}
+            onAdjustFontSize={adjustFontSize}
+            onTableOperation={handleTableOperation}
+            onExportTableToCSV={handleExportTableToCSV}
+            onImageResize={handleImageResize}
+            onImageReplace={handleImageReplace}
+            onImageReset={handleImageReset}
+          />
         )}
         <style jsx global>{`
           iframe {
