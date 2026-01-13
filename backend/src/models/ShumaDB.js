@@ -538,13 +538,15 @@ class ShumaDBEnhanced {
           market_analysis, risk_assessment, recommendations,
           extracted_data, comparable_data, final_valuation,
           price_per_sqm, is_complete, uploads, gis_analysis, gis_screenshots,
-          garmushka_measurements, land_contamination, land_contamination_note, structured_footnotes
+          garmushka_measurements, land_contamination, land_contamination_note, structured_footnotes,
+          appraiser_license_number, custom_tables, custom_document_edits
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
           $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26,
           $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38,
           $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50,
-          $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69
+          $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69,
+          $70, $71, $72
         ) RETURNING id
       `,
         [
@@ -621,6 +623,9 @@ class ShumaDBEnhanced {
           valuationData.landContamination ?? false,
           valuationData.landContaminationNote ?? null,
           JSON.stringify(valuationData.structuredFootnotes || []),
+          valuationData.appraiserLicenseNumber ?? null,
+          JSON.stringify(valuationData.customTables || []),
+          JSON.stringify(valuationData.customDocumentEdits || {}),
         ],
       );
 
@@ -732,8 +737,11 @@ class ShumaDBEnhanced {
           land_contamination = COALESCE($64, land_contamination),
           land_contamination_note = CASE WHEN $65::text IS NOT NULL THEN $65::text ELSE land_contamination_note END,
           structured_footnotes = CASE WHEN $66::text != '[]' THEN $66::jsonb ELSE structured_footnotes END,
+          appraiser_license_number = COALESCE(NULLIF($67, ''), appraiser_license_number),
+          custom_tables = CASE WHEN $68::text != '[]' THEN $68::jsonb ELSE custom_tables END,
+          custom_document_edits = CASE WHEN $69::text != '{}' THEN $69::jsonb ELSE custom_document_edits END,
           updated_at = NOW()
-        WHERE id = $67
+        WHERE id = $70
       `,
         [
           valuationData.street,
@@ -808,6 +816,9 @@ class ShumaDBEnhanced {
           valuationData.landContamination ?? false,
           valuationData.landContaminationNote ?? null,
           JSON.stringify(valuationData.structuredFootnotes || []),
+          valuationData.appraiserLicenseNumber ?? null,
+          JSON.stringify(valuationData.customTables || []),
+          JSON.stringify(valuationData.customDocumentEdits || {}),
           shumaId,
         ],
       );
@@ -1872,6 +1883,15 @@ class ShumaDBEnhanced {
 
         // Structured Footnotes
         structuredFootnotes: safeParseJSON(shuma.structured_footnotes, []),
+
+        // Appraiser License Number
+        appraiserLicenseNumber: shuma.appraiser_license_number || "",
+
+        // Custom Tables (uploaded CSV)
+        customTables: safeParseJSON(shuma.custom_tables, []),
+
+        // Custom Document Edits (user edits in preview)
+        customDocumentEdits: safeParseJSON(shuma.custom_document_edits, {}),
       };
 
       const resultData = { valuationData, success: true };
