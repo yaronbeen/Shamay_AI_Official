@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { Loader2, Trash2, Table, Save } from "lucide-react";
-import { ValuationData } from "@/types/valuation";
+import { ValuationData, ExtractedData } from "@/types/valuation";
 
 // Planning Information Section Component (Chapter 3)
 export function PlanningInformationSection({
@@ -12,7 +12,7 @@ export function PlanningInformationSection({
   sessionId,
 }: {
   data: ValuationData;
-  extractedData: any;
+  extractedData?: ExtractedData;
   updateData: (
     updates: Partial<ValuationData>,
     options?: { skipAutoSave?: boolean },

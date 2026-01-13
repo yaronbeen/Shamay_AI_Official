@@ -9,6 +9,7 @@ import {
   CompanySettings,
 } from "../lib/document-template";
 import { CSVUploadDialog } from "./ui/CSVUploadDialog";
+import { useFootnotes, useImageEditor } from "./EditableDocumentPreview/hooks";
 
 // Security: Allowed MIME types for image uploads
 const ALLOWED_IMAGE_MIME_TYPES = [
@@ -141,13 +142,19 @@ export function EditableDocumentPreview({
     selectedImagePreview: null,
     interiorImages: [],
   });
-  // Refs for footnote handlers to avoid stale closures in event listeners
-  const handleEditFootnoteRef = useRef<
-    ((footnoteP: HTMLElement, pageNumber: number) => void) | null
-  >(null);
-  const handleDeleteFootnoteRef = useRef<
-    ((footnoteP: HTMLElement, pageNumber: number) => void) | null
-  >(null);
+  // Use the extracted footnotes hook
+  const {
+    handleAddFootnote,
+    handleEditFootnote,
+    handleDeleteFootnote,
+    handleEditFootnoteRef,
+    handleDeleteFootnoteRef,
+  } = useFootnotes({
+    data,
+    onDataChange,
+    previewFrameRef,
+    setCustomHtmlOverrides,
+  });
 
   const updateIframeHeight = useCallback((frame: HTMLIFrameElement | null) => {
     if (!frame) {
@@ -1148,322 +1155,7 @@ export function EditableDocumentPreview({
     }
   }, [customHtmlOverrides, data, onDataChange]);
 
-  // Edit existing footnote
-  const handleEditFootnote = useCallback(
-    (footnoteP: HTMLElement, pageNumber: number) => {
-      const numberSpan = footnoteP.querySelector(".footnote-number");
-      const footnoteNumber = parseInt(
-        numberSpan?.textContent?.replace(".", "") || "0",
-        10,
-      );
-      if (!footnoteNumber) return;
-
-      // Get current text (everything after the number span)
-      const currentText =
-        footnoteP.textContent?.replace(/^\d+\.\s*/, "").trim() || "";
-
-      const newText = prompt("ערוך את הערת השוליים:", currentText);
-      if (newText === null) return; // Cancelled
-      if (newText.trim() === "") {
-        alert("טקסט הערת השוליים לא יכול להיות ריק");
-        return;
-      }
-
-      // Update the DOM
-      const textNode = Array.from(footnoteP.childNodes).find(
-        (n) => n.nodeType === Node.TEXT_NODE,
-      );
-      if (textNode) {
-        textNode.textContent = ` ${newText.trim()}`;
-      }
-
-      // Update customHtmlOverrides
-      const footnotesContainer = footnoteP.closest(".page-footnotes");
-      if (footnotesContainer) {
-        const pageSelector = `section:nth-of-type(${pageNumber})`;
-        setCustomHtmlOverrides((prev) => ({
-          ...prev,
-          [`${pageSelector} .page-footnotes`]: DOMPurify.sanitize(
-            footnotesContainer.innerHTML,
-            DOMPURIFY_CONFIG,
-          ),
-        }));
-      }
-
-      // Update structuredFootnotes
-      const existingFootnotes = (data as any).structuredFootnotes || [];
-      const updatedFootnotes = existingFootnotes.map((fn: any) =>
-        fn.pageNumber === pageNumber && fn.footnoteNumber === footnoteNumber
-          ? { ...fn, text: newText.trim() }
-          : fn,
-      );
-      onDataChange({ structuredFootnotes: updatedFootnotes } as any);
-
-      alert(`✅ הערת שוליים מספר ${footnoteNumber} עודכנה בהצלחה`);
-    },
-    [data, onDataChange],
-  );
-
-  // Delete existing footnote
-  const handleDeleteFootnote = useCallback(
-    (footnoteP: HTMLElement, pageNumber: number) => {
-      const numberSpan = footnoteP.querySelector(".footnote-number");
-      const footnoteNumber = parseInt(
-        numberSpan?.textContent?.replace(".", "") || "0",
-        10,
-      );
-      if (!footnoteNumber) return;
-
-      if (!confirm(`האם למחוק את הערת שוליים מספר ${footnoteNumber}?`)) return;
-
-      const doc = previewFrameRef.current?.contentDocument;
-      if (!doc) return;
-
-      // Find the page
-      const allPages = doc.querySelectorAll(".page");
-      const currentPage = allPages[pageNumber - 1];
-      if (!currentPage) return;
-
-      // Remove the superscript reference from the text
-      const supRefs = currentPage.querySelectorAll("sup.footnote-ref");
-      supRefs.forEach((sup) => {
-        if (sup.textContent === String(footnoteNumber)) {
-          sup.remove();
-        }
-      });
-
-      // Remove the footnote paragraph
-      footnoteP.remove();
-
-      // Update customHtmlOverrides
-      const footnotesContainer = currentPage.querySelector(".page-footnotes");
-      const pageSelector = `section:nth-of-type(${pageNumber})`;
-
-      if (footnotesContainer && footnotesContainer.children.length > 0) {
-        setCustomHtmlOverrides((prev) => ({
-          ...prev,
-          [`${pageSelector} .page-footnotes`]: DOMPurify.sanitize(
-            footnotesContainer.innerHTML,
-            DOMPURIFY_CONFIG,
-          ),
-        }));
-      } else {
-        // Remove the footnotes container if empty
-        footnotesContainer?.remove();
-        setCustomHtmlOverrides((prev) => {
-          const updated = { ...prev };
-          delete updated[`${pageSelector} .page-footnotes`];
-          return updated;
-        });
-      }
-
-      // Also update the parent text block that contained the superscript
-      const editableElements = currentPage.querySelectorAll(
-        "[data-edit-selector]",
-      );
-      editableElements.forEach((el) => {
-        const selector = el.getAttribute("data-edit-selector");
-        if (selector) {
-          setCustomHtmlOverrides((prev) => ({
-            ...prev,
-            [selector]: DOMPurify.sanitize(el.innerHTML, DOMPURIFY_CONFIG),
-          }));
-        }
-      });
-
-      // Update structuredFootnotes
-      const existingFootnotes = (data as any).structuredFootnotes || [];
-      const updatedFootnotes = existingFootnotes.filter(
-        (fn: any) =>
-          !(
-            fn.pageNumber === pageNumber && fn.footnoteNumber === footnoteNumber
-          ),
-      );
-      onDataChange({ structuredFootnotes: updatedFootnotes } as any);
-
-      alert(`✅ הערת שוליים מספר ${footnoteNumber} נמחקה בהצלחה`);
-    },
-    [data, onDataChange],
-  );
-
-  // Keep refs updated to avoid stale closures in event listeners
-  useEffect(() => {
-    handleEditFootnoteRef.current = handleEditFootnote;
-    handleDeleteFootnoteRef.current = handleDeleteFootnote;
-  }, [handleEditFootnote, handleDeleteFootnote]);
-
-  // Footnote handling - add new footnote
-  const handleAddFootnote = useCallback(() => {
-    const frame = previewFrameRef.current;
-    if (!frame) {
-      alert("לא ניתן להוסיף הערת שוליים - המסמך לא נטען");
-      return;
-    }
-
-    const doc = frame.contentDocument || frame.contentWindow?.document;
-    if (!doc) {
-      alert("לא ניתן להוסיף הערת שוליים - המסמך לא נטען");
-      return;
-    }
-
-    const selection = doc.getSelection();
-    if (!selection || selection.rangeCount === 0) {
-      alert("יש לבחור מיקום בטקסט להוספת הערת שוליים");
-      return;
-    }
-
-    // Check if text is selected (not just cursor position)
-    if (!selection.isCollapsed) {
-      const selectedText = selection.toString().trim();
-      if (selectedText.length > 0) {
-        const confirmDelete = confirm(
-          `הטקסט "${selectedText.substring(0, 50)}${selectedText.length > 50 ? "..." : ""}" יימחק. להמשיך?`,
-        );
-        if (!confirmDelete) {
-          return;
-        }
-      }
-    }
-
-    const footnoteText = prompt("הכנס את טקסט הערת השוליים:");
-    if (!footnoteText || footnoteText.trim() === "") {
-      return;
-    }
-
-    // Find the current page element
-    const range = selection.getRangeAt(0);
-    let currentPage = range.startContainer as Element;
-    while (currentPage && !currentPage.classList?.contains("page")) {
-      currentPage = currentPage.parentElement as Element;
-    }
-
-    if (!currentPage) {
-      alert("לא ניתן לזהות את העמוד הנוכחי");
-      return;
-    }
-
-    // Get the page number (1-indexed) for nth-of-type selector
-    const allPages = doc.querySelectorAll(".page");
-    let pageNumber = 1;
-    allPages.forEach((page, idx) => {
-      if (page === currentPage) {
-        pageNumber = idx + 1;
-      }
-    });
-
-    // Get or create footnotes container for this page
-    let footnotesContainer = currentPage.querySelector(".page-footnotes");
-
-    // Count ALL existing footnote references on the page (both built-in and user-added)
-    // Include both .footnote-ref class and plain <sup> inside .page-note (built-in footnotes)
-    const existingFootnoteRefs = currentPage.querySelectorAll(
-      "sup.footnote-ref, .page-note sup",
-    );
-    const existingFootnoteNumbers = new Set(
-      Array.from(existingFootnoteRefs)
-        .map((el) => parseInt(el.textContent || "0", 10))
-        .filter((n) => !isNaN(n) && n > 0),
-    );
-
-    // Also check footnote container for existing numbers
-    if (footnotesContainer) {
-      footnotesContainer.querySelectorAll(".footnote-number").forEach((el) => {
-        const num = parseInt(el.textContent?.replace(".", "") || "0", 10);
-        if (!isNaN(num) && num > 0) {
-          existingFootnoteNumbers.add(num);
-        }
-      });
-    }
-
-    // Find the first available footnote number (fills gaps instead of always using max+1)
-    let footnoteNumber = 1;
-    while (existingFootnoteNumbers.has(footnoteNumber)) {
-      footnoteNumber++;
-    }
-
-    // Build page selector using nth-of-type for export compatibility
-    // This matches the structure in document-template.ts export mode
-    const pageSelector = `section:nth-of-type(${pageNumber})`;
-
-    if (!footnotesContainer) {
-      footnotesContainer = doc.createElement("div");
-      footnotesContainer.className = "page-footnotes";
-      footnotesContainer.setAttribute(
-        "data-edit-selector",
-        `${pageSelector} .page-footnotes`,
-      );
-      currentPage.appendChild(footnotesContainer);
-    }
-
-    // Insert superscript reference at cursor position
-    const supElement = doc.createElement("sup");
-    supElement.className = "footnote-ref";
-    supElement.textContent = String(footnoteNumber);
-    supElement.style.cssText =
-      "font-size: 8pt; color: #1e3a8a; cursor: pointer;";
-
-    // Collapse selection to avoid deleting selected text unexpectedly
-    range.collapse(false);
-    range.insertNode(supElement);
-
-    // Add footnote text to footer using safe DOM methods (not innerHTML)
-    const footnoteP = doc.createElement("p");
-    const numberSpan = doc.createElement("span");
-    numberSpan.className = "footnote-number";
-    numberSpan.style.fontWeight = "bold";
-    numberSpan.textContent = `${footnoteNumber}.`;
-    const textNode = doc.createTextNode(` ${footnoteText}`);
-    footnoteP.appendChild(numberSpan);
-    footnoteP.appendChild(textNode);
-    footnotesContainer.appendChild(footnoteP);
-
-    // Save the changes to customHtmlOverrides - use nth-of-type selector for export
-
-    // Find the parent element containing the superscript to persist it
-    const editableParent = supElement.closest(
-      "[data-edit-selector]",
-    ) as Element | null;
-
-    // Security: Sanitize HTML before storing to prevent XSS on retrieval
-    const updates: Record<string, string> = {
-      [`${pageSelector} .page-footnotes`]: DOMPurify.sanitize(
-        footnotesContainer!.innerHTML,
-        DOMPURIFY_CONFIG,
-      ),
-    };
-
-    // Also save the text block containing the superscript reference
-    if (editableParent && editableParent.getAttribute("data-edit-selector")) {
-      const parentSelector = editableParent.getAttribute("data-edit-selector")!;
-      updates[parentSelector] = DOMPurify.sanitize(
-        editableParent.innerHTML,
-        DOMPURIFY_CONFIG,
-      );
-    }
-
-    setCustomHtmlOverrides((prev) => ({
-      ...prev,
-      ...updates,
-    }));
-
-    // Store structured footnote data for DOCX export
-    // This allows DOCX to render footnotes properly without parsing HTML
-    const existingFootnotes = (data as any).structuredFootnotes || [];
-    const newFootnote = {
-      id: `fn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      pageNumber,
-      footnoteNumber,
-      text: footnoteText.trim(),
-    };
-    onDataChange({
-      structuredFootnotes: [...existingFootnotes, newFootnote],
-    } as any);
-
-    // Clear selection
-    selection.removeAllRanges();
-
-    alert(`✅ הערת שוליים מספר ${footnoteNumber} נוספה בהצלחה`);
-  }, [data, onDataChange]);
+  // Footnotes are handled by useFootnotes hook (imported above)
 
   // Handle inserting a custom table from CSV
   const handleInsertCustomTable = useCallback(

@@ -20,6 +20,7 @@ import type {
   ProcessingStatus,
   ProcessingStatusType,
 } from "../../lib/session-store-global";
+import type { ValuationData, ExtractedData } from "../../types/valuation";
 
 interface DocumentUpload {
   id: string;
@@ -33,7 +34,7 @@ interface DocumentUpload {
     | "interior_image";
   status: "uploading" | "processing" | "completed" | "error";
   progress: number;
-  extractedData?: any;
+  extractedData?: ExtractedData;
   error?: string;
   preview?: string;
   url?: string;
@@ -43,8 +44,10 @@ interface DocumentUpload {
 }
 
 interface Step2DocumentsProps {
-  data: any;
-  updateData: (updates: any) => void;
+  data: ValuationData;
+  // NOTE: Using Record<string, unknown> because actual values don't match
+  // ValuationData exactly (e.g., propertyImages is File[] but we pass URL objects)
+  updateData: (updates: Record<string, unknown>) => void;
   onValidationChange: (isValid: boolean) => void;
   sessionId?: string;
 }

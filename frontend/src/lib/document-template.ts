@@ -402,7 +402,7 @@ const summarizeAttachments = (data: ValuationData): string => {
 
   // Count by type
   const counts: Record<string, number> = {};
-  attachmentItems.forEach((item: any) => {
+  attachmentItems.forEach((item) => {
     const type = (item?.type || item?.description || "").toLowerCase();
     if (
       type.includes("חניה") ||
@@ -976,7 +976,7 @@ const resolveLandRegistryData = (data: ValuationData) => {
     (data as any).landRegistry,
   );
 
-  const owners = toArray((mergedRegistry as any).owners).map((owner: any) => ({
+  const owners = toArray((mergedRegistry as any).owners).map((owner) => ({
     name: owner?.name || owner?.owner_name,
     idNumber: owner?.id_number || owner?.idNumber,
     share: owner?.ownership_share || owner?.share || "שלמות",
@@ -2360,7 +2360,7 @@ export function generateDocumentHTML(
   const sharedBuildingEntries: string[] = toArray(
     sharedBuildingRaw?.buildings_info?.value,
   )
-    .map((info: any) => {
+    .map((info) => {
       const buildingNumber = info?.building_number || info?.buildingNumber;
       const floors = info?.floors;
       const addressText = info?.address;
@@ -3167,7 +3167,7 @@ export function generateDocumentHTML(
     : [];
   const combinedAttachments = dedupeByKey(
     [...extractedAttachmentsArray, ...attachments],
-    (item) => {
+    (item: any) => {
       return [
         item.type || "",
         item.area || "",
@@ -3188,7 +3188,7 @@ export function generateDocumentHTML(
     : [];
   const combinedOwners = dedupeByKey(
     [...extractedOwnersArray, ...owners],
-    (item) => {
+    (item: any) => {
       return [item.name || "", item.idNumber || "", item.share || ""].join("|");
     },
   );
@@ -3208,7 +3208,7 @@ export function generateDocumentHTML(
     : [];
   const combinedMortgages = dedupeByKey(
     [...extractedMortgagesArray, ...mortgages],
-    (item) => {
+    (item: any) => {
       return [
         item.rank || "",
         item.lenders || "",
@@ -3467,10 +3467,10 @@ export function generateDocumentHTML(
           combinedNotes.length > 0
             ? `
           <div class="section-block">
-            <div class="sub-title">הערות${combinedNotes.some((n: any) => n.isSubChelka) ? " - הערות לתת חלקה והערות כלליות" : ""}</div>
+            <div class="sub-title">הערות${combinedNotes.some((n) => n.isSubChelka) ? " - הערות לתת חלקה והערות כלליות" : ""}</div>
             <ul class="legal-list">
               ${combinedNotes
-                .map((note: any) => {
+                .map((note) => {
                   const prefix = note.isSubChelka
                     ? "<strong>הערות לתת חלקה:</strong> "
                     : "";

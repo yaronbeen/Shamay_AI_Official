@@ -88,6 +88,8 @@ export interface PlanningPlan {
 export interface PlanningInformation {
   rights?: PlanningRights;
   plans?: PlanningPlan[];
+  // Alias for plans (some backends use "schemes")
+  schemes?: PlanningPlan[];
 }
 
 // =============================================================================
@@ -341,6 +343,11 @@ export interface ExtractedData {
   // Planning Information (Chapter 3)
   planningInformation?: PlanningInformation;
   planningRights?: PlanningRights;
+  // snake_case aliases for backend compatibility
+  planning_information?: PlanningInformation;
+  planning_rights?: PlanningRights;
+  planning_plans?: PlanningPlan[];
+  planningPlans?: PlanningPlan[];
 
   // Index signature for snake_case field access during migration
   // Backend returns snake_case, this allows flexible access without listing all aliases
