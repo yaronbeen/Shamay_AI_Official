@@ -275,8 +275,8 @@ export function EditableDocumentPreview({
     }
 
     const mergedEdits = {
-      ...((data as any).customDocumentEdits ||
-        (data as any).propertyAnalysis?.__customDocumentEdits ||
+      ...(data.customDocumentEdits ||
+        data.propertyAnalysis?.__customDocumentEdits ||
         {}),
       ...customHtmlOverrides,
     };
@@ -563,7 +563,7 @@ export function EditableDocumentPreview({
           img.src = result;
           saveOverrideForElement(container);
           if (container.classList.contains("cover-image-frame")) {
-            onDataChange({ selectedImagePreview: result as any });
+            onDataChange({ selectedImagePreview: result });
           }
         }
       };
@@ -671,7 +671,7 @@ export function EditableDocumentPreview({
     // If images changed, update immediately (no debounce)
     if (imageDataChanged) {
       const mergedEdits = {
-        ...((data as any).customDocumentEdits || {}),
+        ...(data.customDocumentEdits || {}),
         ...debouncedOverrides,
       };
 
@@ -693,7 +693,7 @@ export function EditableDocumentPreview({
     // This allows the user to type without reloading images on every keystroke
     htmlUpdateTimerRef.current = setTimeout(() => {
       const mergedEdits = {
-        ...((data as any).customDocumentEdits || {}),
+        ...(data.customDocumentEdits || {}),
         ...debouncedOverrides,
       };
 
@@ -720,8 +720,8 @@ export function EditableDocumentPreview({
   useEffect(() => {
     if (!isEditMode) {
       const existing =
-        (data as any).customDocumentEdits ||
-        (data as any).propertyAnalysis?.__customDocumentEdits ||
+        data.customDocumentEdits ||
+        data.propertyAnalysis?.__customDocumentEdits ||
         {};
       setCustomHtmlOverrides(existing);
       setDebouncedOverrides(existing);
@@ -1050,7 +1050,7 @@ export function EditableDocumentPreview({
   ]);
 
   const handleSave = useCallback(async () => {
-    const sessionId = (data as any).sessionId;
+    const sessionId = data.sessionId;
     if (!sessionId) {
       alert("לא ניתן לשמור - חסר מזהה סשן");
       return;
@@ -1063,7 +1063,7 @@ export function EditableDocumentPreview({
         ...data,
         customDocumentEdits: customHtmlOverrides,
         propertyAnalysis: {
-          ...(data as any).propertyAnalysis,
+          ...data.propertyAnalysis,
           __customDocumentEdits: customHtmlOverrides,
         },
       };
@@ -1081,7 +1081,7 @@ export function EditableDocumentPreview({
       }
 
       // Update data with saved edits
-      onDataChange({ customDocumentEdits: customHtmlOverrides } as any);
+      onDataChange({ customDocumentEdits: customHtmlOverrides });
 
       alert("✅ השינויים נשמרו בהצלחה!");
       setLastRefreshTime(new Date());
@@ -1097,7 +1097,7 @@ export function EditableDocumentPreview({
   }, [customHtmlOverrides, data, onDataChange]);
 
   const handleRevert = useCallback(async () => {
-    const sessionId = (data as any).sessionId;
+    const sessionId = data.sessionId;
     if (!sessionId) {
       alert("לא ניתן לבטל - חסר מזהה סשן");
       return;
@@ -1105,8 +1105,8 @@ export function EditableDocumentPreview({
 
     const hasLocalChanges = Object.keys(customHtmlOverrides).length > 0;
     const hasSavedChanges =
-      !!(data as any).customDocumentEdits ||
-      !!(data as any).propertyAnalysis?.__customDocumentEdits;
+      !!data.customDocumentEdits ||
+      !!data.propertyAnalysis?.__customDocumentEdits;
 
     if (!hasLocalChanges && !hasSavedChanges) {
       alert("אין שינויים לביטול");
@@ -1127,7 +1127,7 @@ export function EditableDocumentPreview({
         ...data,
         customDocumentEdits: {},
         propertyAnalysis: {
-          ...(data as any).propertyAnalysis,
+          ...data.propertyAnalysis,
           __customDocumentEdits: {},
         },
       };
@@ -1149,7 +1149,7 @@ export function EditableDocumentPreview({
       setDebouncedOverrides({});
 
       // Update parent component data
-      onDataChange({ customDocumentEdits: {} } as any);
+      onDataChange({ customDocumentEdits: {} });
 
       // Reload document without overrides
       setLastRefreshTime(new Date());
@@ -1171,12 +1171,12 @@ export function EditableDocumentPreview({
   // Handle inserting a custom table from CSV
   const handleInsertCustomTable = useCallback(
     (table: CustomTable) => {
-      const existingTables = (data as any).customTables || [];
+      const existingTables = data.customTables || [];
       const updatedTables = [...existingTables, table];
 
       onDataChange({
         customTables: updatedTables,
-      } as any);
+      });
 
       alert(
         `✅ טבלה "${table.title || "ללא כותרת"}" נוספה בהצלחה! (${table.rows.length} שורות)`,
@@ -1192,7 +1192,7 @@ export function EditableDocumentPreview({
       return;
     }
 
-    const existingTables: CustomTable[] = (data as any).customTables || [];
+    const existingTables: CustomTable[] = data.customTables || [];
     const table = existingTables.find((t) => t.id === currentTableCell.tableId);
 
     if (!table) {
@@ -1245,7 +1245,7 @@ export function EditableDocumentPreview({
       }
 
       const { tableId, row, col } = currentTableCell;
-      const existingTables: CustomTable[] = (data as any).customTables || [];
+      const existingTables: CustomTable[] = data.customTables || [];
       const tableIndex = existingTables.findIndex((t) => t.id === tableId);
 
       if (tableIndex === -1) {
@@ -1331,7 +1331,7 @@ export function EditableDocumentPreview({
             return;
           }
           const updatedTables = existingTables.filter((t) => t.id !== tableId);
-          onDataChange({ customTables: updatedTables } as any);
+          onDataChange({ customTables: updatedTables });
           setCurrentTableCell(null);
           setToolbarState((prev) => ({ ...prev, mode: "text" }));
           return;
@@ -1341,7 +1341,7 @@ export function EditableDocumentPreview({
       if (updatedTable) {
         const updatedTables = [...existingTables];
         updatedTables[tableIndex] = updatedTable;
-        onDataChange({ customTables: updatedTables } as any);
+        onDataChange({ customTables: updatedTables });
       }
     },
     [currentTableCell, data, onDataChange],
@@ -1350,7 +1350,7 @@ export function EditableDocumentPreview({
   // handleExportPDF and handleExportDOCX are now provided by useExport hook
 
   const handleManualRefresh = useCallback(async () => {
-    const sessionId = (data as any).sessionId;
+    const sessionId = data.sessionId;
     if (!sessionId) {
       return;
     }
@@ -1368,7 +1368,7 @@ export function EditableDocumentPreview({
       if (
         freshData.gisScreenshots &&
         JSON.stringify(freshData.gisScreenshots) !==
-          JSON.stringify((data as any).gisScreenshots)
+          JSON.stringify(data.gisScreenshots)
       ) {
         onDataChange({ gisScreenshots: freshData.gisScreenshots });
       }
@@ -1431,7 +1431,7 @@ export function EditableDocumentPreview({
           )}
         </div>
         <div className="flex items-center gap-3">
-          {(data as any).sessionId && (
+          {data.sessionId && (
             <>
               {/* Export buttons group */}
               <div className="flex items-center gap-1.5 border-l border-gray-300 pl-3">
@@ -1536,14 +1536,14 @@ export function EditableDocumentPreview({
                 disabled={
                   isSaving ||
                   (Object.keys(customHtmlOverrides).length === 0 &&
-                    !(data as any).customDocumentEdits &&
-                    !(data as any).propertyAnalysis?.__customDocumentEdits)
+                    !data.customDocumentEdits &&
+                    !data.propertyAnalysis?.__customDocumentEdits)
                 }
                 className={`h-8 px-3 text-xs font-medium rounded-md transition-all ${
                   isSaving ||
                   (Object.keys(customHtmlOverrides).length === 0 &&
-                    !(data as any).customDocumentEdits &&
-                    !(data as any).propertyAnalysis?.__customDocumentEdits)
+                    !data.customDocumentEdits &&
+                    !data.propertyAnalysis?.__customDocumentEdits)
                     ? "bg-gray-200 text-gray-400 cursor-not-allowed"
                     : "bg-white text-red-600 border border-red-300 hover:bg-red-50"
                 }`}
@@ -1593,11 +1593,11 @@ export function EditableDocumentPreview({
                 טוען את התצוגה המקדימה...
               </h3>
               <p className="text-gray-500 text-sm">
-                {!(data as any).sessionId
+                {!data.sessionId
                   ? "לא נמצא מזהה סשן. יש לחזור לשלב קודם ולהתחיל מחדש."
                   : "המסמך בתהליך הכנה. אנא המתן..."}
               </p>
-              {!(data as any).sessionId && (
+              {!data.sessionId && (
                 <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-sm">
                   שגיאה: חסר מזהה סשן. לא ניתן לטעון את המסמך.
                 </div>
