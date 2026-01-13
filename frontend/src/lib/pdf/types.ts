@@ -1,3 +1,27 @@
+/**
+ * Types for PDF/Document generation
+ */
+
+// Company settings for document customization
+export interface CompanySettings {
+  companyLogo?: string;
+  footerLogo?: string;
+  companyName?: string;
+  companySlogan?: string;
+  companyAddress?: string;
+  companyPhone?: string;
+  companyEmail?: string;
+  companyWebsite?: string;
+  associationMembership?: string;
+  services?: string[];
+  signature?: string;
+  // Font settings
+  fontFamily?: "david" | "noto-sans-hebrew" | "rubik";
+  fontSize?: number; // default 12
+}
+
+export type FontFamily = "david" | "noto-sans-hebrew" | "rubik";
+
 export type ReportData = {
   meta: {
     documentTitle: string;                 // [DocumentTitle] חובה
