@@ -54,17 +54,18 @@ Shamay.AI is a Hebrew real estate valuation wizard application. It guides proper
 | **Data Transform**    | `frontend/src/lib/transformers/valuation-transformer.ts` | ~530  | camelCase ↔ snake_case           |
 | **State**             | `frontend/src/contexts/ValuationContext.tsx`             | ~720  | Global state management          |
 | **DB Hook**           | `frontend/src/hooks/useShumaDB.ts`                       | ~560  | Database operations              |
-| **PDF Utils**         | `frontend/src/lib/pdf/`                                  | ~2500 | Modular PDF generation           |
-| **Document Template** | `frontend/src/lib/document-template.ts`                  | ~4500 | HTML document generation         |
+| **PDF Utils**         | `frontend/src/lib/pdf/`                                  | ~3500 | Modular PDF generation           |
+| **Document Template** | `frontend/src/lib/document-template.ts`                  | ~1500 | HTML document orchestration      |
 | **Backend DB**        | `backend/src/models/ShumaDB.js`                          | ~2700 | Database operations              |
 
 ### Files to Avoid Modifying Directly
 
-| File                   | Lines  | Reason                                         |
-| ---------------------- | ------ | ---------------------------------------------- |
-| `document-template.ts` | 4,570  | Too large - use extracted pdf/ modules instead |
-| `ShumaDB.js`           | 2,700+ | Monolithic - prefer using services             |
-| `Step3FieldsPanel.tsx` | 2,900+ | 69 fields - easy to break                      |
+| File                   | Lines  | Reason                             |
+| ---------------------- | ------ | ---------------------------------- |
+| `ShumaDB.js`           | 2,700+ | Monolithic - prefer using services |
+| `Step3FieldsPanel.tsx` | 2,900+ | 69 fields - easy to break          |
+
+> **Note**: `document-template.ts` was refactored from 4,570 to ~1,500 lines. Chapter content is now in `pdf/chapters/` modules.
 
 ---
 
@@ -126,7 +127,7 @@ shamay_shalom_18dev/
 │   │   │   ├── useChat.ts       # Chat interface
 │   │   │   └── useProvenance.ts # Field source tracking
 │   │   ├── lib/
-│   │   │   ├── pdf/             # PDF generation modules
+│   │   │   ├── pdf/             # PDF generation modules (~3500 lines total)
 │   │   │   │   ├── index.ts           # Main exports
 │   │   │   │   ├── types.ts           # CompanySettings, FontFamily
 │   │   │   │   ├── constants.ts       # FONT_FAMILIES, text constants
@@ -135,10 +136,16 @@ shamay_shalom_18dev/
 │   │   │   │   ├── images/            # cover, interior images
 │   │   │   │   ├── styles/            # document CSS
 │   │   │   │   ├── scripts/           # pagination scripts
-│   │   │   │   └── chapters/          # chapter context
+│   │   │   │   └── chapters/          # Chapter generators (6 files)
+│   │   │   │       ├── chapter1-property.ts   # Property, GIS, interior
+│   │   │   │       ├── chapter2-legal.ts      # Legal status, ownership
+│   │   │   │       ├── chapter3-planning.ts   # Planning rights
+│   │   │   │       ├── chapter4-factors.ts    # Valuation factors
+│   │   │   │       ├── chapter5-calculations.ts # Methodology
+│   │   │   │       └── chapter6-valuation.ts  # Final valuation
 │   │   │   ├── transformers/
 │   │   │   │   └── valuation-transformer.ts  # camelCase ↔ snake_case
-│   │   │   └── document-template.ts  # HTML document generation
+│   │   │   └── document-template.ts  # HTML orchestration (~1500 lines)
 │   │   ├── types/
 │   │   │   └── valuation.ts     # TypeScript definitions (SINGLE SOURCE)
 │   │   └── __tests__/           # Vitest unit tests
@@ -1198,8 +1205,9 @@ const myNewFieldValue = getValueFromPaths(data, [
 
 ### Modifying Document Generation
 
-**Primary File**: `frontend/src/lib/document-template.ts` (4500+ lines)
-**Modular Approach**: Use `frontend/src/lib/pdf/` modules
+**Orchestrator**: `frontend/src/lib/document-template.ts` (~1500 lines)
+**Chapter Modules**: `frontend/src/lib/pdf/chapters/` (6 chapter generators)
+**Utilities**: `frontend/src/lib/pdf/utils/`, `tables/`, `images/`, `styles/`
 
 #### Using PDF Modules (Recommended)
 
@@ -1229,7 +1237,7 @@ frontend/src/lib/pdf/
 ├── constants.ts          # FONT_FAMILIES, hebrewMonths, text constants
 ├── utils/
 │   ├── formatters.ts     # formatNumber, formatDateHebrew, formatCurrency
-│   ├── text.ts           # normalizeText, escapeHtmlForTable
+│   ├── text.ts           # normalizeText, escapeHtmlForTable, toRichHtml
 │   └── data-resolvers.ts # getValueFromPaths, getAddress, getSubParcelValue
 ├── tables/
 │   ├── details-table.ts  # createDetailsTable (70+ fields)
@@ -1243,8 +1251,17 @@ frontend/src/lib/pdf/
 ├── scripts/
 │   └── pagination.ts     # pageNumberScript, autoPaginateScript
 └── chapters/
-    └── chapter-context.ts # createChapterContext
+    ├── index.ts              # Re-exports all chapter modules
+    ├── chapter-context.ts    # createChapterContext, ChapterContext interface
+    ├── chapter1-property.ts  # Property description, GIS, interior (~420 lines)
+    ├── chapter2-legal.ts     # Legal status, ownership, notes (~220 lines)
+    ├── chapter3-planning.ts  # Planning rights and status (~180 lines)
+    ├── chapter4-factors.ts   # Valuation factors analysis (~150 lines)
+    ├── chapter5-calculations.ts # Calculation methodology (~170 lines)
+    └── chapter6-valuation.ts # Final valuation and summary (~120 lines)
 ```
+
+**Chapter Generator Pattern**: Each chapter exports a `generateChapterN(ctx: ChapterContext, params?)` function that returns HTML string. The `ChapterContext` bundles all data and helper functions needed by chapters.
 
 #### Adding a New Section to Document
 
@@ -1602,8 +1619,8 @@ fetch("/api/sessions", {
 | `frontend/src/contexts/ValuationContext.tsx`             | Global state management                   | ~720  |
 | `frontend/src/hooks/useShumaDB.ts`                       | Database operations hook                  | ~560  |
 | `frontend/src/lib/transformers/valuation-transformer.ts` | camelCase ↔ snake_case                    | ~530  |
-| `frontend/src/lib/document-template.ts`                  | HTML document generation                  | ~4500 |
-| `frontend/src/lib/pdf/index.ts`                          | PDF utilities export                      | ~50   |
+| `frontend/src/lib/document-template.ts`                  | HTML document orchestration               | ~1500 |
+| `frontend/src/lib/pdf/`                                  | PDF utilities + chapter generators        | ~3500 |
 | `backend/src/models/ShumaDB.js`                          | Database operations                       | ~2700 |
 | `backend/src/routes/sessions.js`                         | API endpoints                             | ~500  |
 
@@ -1661,5 +1678,5 @@ bd close <id>            # Close issue
 
 ---
 
-_Last updated: 2026-01-14_
+_Last updated: 2026-01-14 (Chapter extraction refactor complete)_
 _For additional context, see CLAUDE.md_

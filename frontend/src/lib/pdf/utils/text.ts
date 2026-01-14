@@ -24,10 +24,11 @@ export const escapeHtmlForTable = (text: string): string => {
 
 /**
  * Normalizes text by returning the value if it exists, or a fallback placeholder.
+ * Safely handles unknown types from data resolvers.
  *
- * @param value - The text value to normalize (optional)
+ * @param value - The text value to normalize (accepts unknown for flexibility with data resolvers)
  * @param fallbackText - The fallback text to use if value is falsy (defaults to em-dash)
- * @returns The original value if truthy, otherwise the fallback text
+ * @returns The original value as string if truthy, otherwise the fallback text
  *
  * @example
  * normalizeText('Hello') // Returns: 'Hello'
@@ -35,13 +36,13 @@ export const escapeHtmlForTable = (text: string): string => {
  * normalizeText(undefined, 'N/A') // Returns: 'N/A'
  */
 export const normalizeText = (
-  value?: string,
+  value?: unknown,
   fallbackText: string = "—",
 ): string => {
   if (!value) {
     return fallbackText;
   }
-  return value;
+  return String(value);
 };
 
 /**

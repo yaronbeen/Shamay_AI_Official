@@ -17,7 +17,7 @@ import {
   parseNumeric,
   formatCurrency,
 } from "../utils/formatters";
-import { normalizeText, escapeHtmlForTable } from "../utils/text";
+import { normalizeText, escapeHtmlForTable, toRichHtml } from "../utils/text";
 import {
   toArray,
   getValueFromPaths,
@@ -83,6 +83,7 @@ export interface ChapterContext {
   formatCurrency: typeof formatCurrency;
   normalizeText: typeof normalizeText;
   escapeHtmlForTable: typeof escapeHtmlForTable;
+  toRichHtml: typeof toRichHtml;
   toArray: typeof toArray;
   getValueFromPaths: typeof getValueFromPaths;
   getSubParcelValue: typeof getSubParcelValue;
@@ -217,6 +218,7 @@ export function createChapterContext(
     formatCurrency,
     normalizeText,
     escapeHtmlForTable,
+    toRichHtml,
     toArray,
     getValueFromPaths,
     getSubParcelValue,
