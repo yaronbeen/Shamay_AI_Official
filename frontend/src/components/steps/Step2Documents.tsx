@@ -129,6 +129,18 @@ export function Step2Documents({
       permit: "pending",
     });
 
+  // Keep a ref to track Object URLs for cleanup on unmount
+  const objectUrlsRef = useRef<Set<string>>(new Set());
+
+  // Cleanup all Object URLs on unmount to prevent memory leaks
+  useEffect(() => {
+    const urls = objectUrlsRef.current;
+    return () => {
+      urls.forEach((url) => URL.revokeObjectURL(url));
+      urls.clear();
+    };
+  }, []);
+
   // Load uploads from session on mount
   useEffect(() => {
     const loadUploadsFromSession = async () => {
@@ -321,6 +333,14 @@ export function Step2Documents({
   ) => {
     if (!sessionId) return;
 
+    // Guard: Don't trigger if already processing this doc type
+    if (backgroundProcessing[docType] === "processing") {
+      console.log(
+        `⚠️ ${docType} already processing, skipping duplicate trigger`,
+      );
+      return;
+    }
+
     console.log(`🚀 Triggering background processing for ${docType}`);
 
     // Update local status
@@ -365,7 +385,7 @@ export function Step2Documents({
     }
   };
 
-  // Poll for processing status updates
+  // Poll for processing status updates with exponential backoff
   useEffect(() => {
     if (!sessionId) return;
 
@@ -377,10 +397,16 @@ export function Step2Documents({
 
     console.log("🔄 Starting processing status polling...");
 
-    const pollInterval = setInterval(async () => {
+    let pollDelay = 1000; // Start at 1s
+    const maxDelay = 5000; // Max 5s between polls
+    let timeoutId: NodeJS.Timeout;
+    const abortController = new AbortController();
+
+    const poll = async () => {
       try {
         const response = await fetch(
           `/api/session/${sessionId}/processing-status`,
+          { signal: abortController.signal },
         );
         if (response.ok) {
           const {
@@ -409,16 +435,39 @@ export function Step2Documents({
           // Stop polling if all complete
           if (allComplete) {
             console.log("✅ All background processing complete");
-            clearInterval(pollInterval);
+            return; // Don't schedule next poll
           }
+
+          // Reset delay on success
+          pollDelay = 1000;
+        } else if (response.status === 429) {
+          // Rate limited - back off more aggressively
+          pollDelay = Math.min(pollDelay * 2, maxDelay);
         }
       } catch (error) {
+        // Ignore abort errors - they're expected on cleanup
+        if (error instanceof Error && error.name === "AbortError") {
+          return;
+        }
         console.error("❌ Error polling processing status:", error);
+        // Exponential backoff on error
+        pollDelay = Math.min(pollDelay * 1.5, maxDelay);
       }
-    }, 3000); // Poll every 3 seconds
 
-    return () => clearInterval(pollInterval);
-  }, [sessionId, backgroundProcessing, extractedData, updateData]);
+      // Schedule next poll
+      timeoutId = setTimeout(poll, pollDelay);
+    };
+
+    // Start polling
+    poll();
+
+    return () => {
+      clearTimeout(timeoutId);
+      abortController.abort();
+    };
+    // Note: extractedData removed from deps - the functional update pattern handles stale closures
+    // and having it here causes the effect to restart on every data update, creating a tight polling loop
+  }, [sessionId, backgroundProcessing, updateData]);
 
   // Process documents using AI services
   const processDocuments = async (
@@ -1258,28 +1307,25 @@ export function Step2Documents({
         previewReady: false,
       };
 
-      // Create preview for images immediately
+      // Create preview for images immediately using Object URL (much lighter than base64)
       if (
         (type === "building_image" || type === "interior_image") &&
         file.type.startsWith("image/")
       ) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const base64 = e.target?.result as string;
-          setUploads((prev) => {
-            const updated = prev.map((u) =>
-              u.id === uploadId
-                ? { ...u, preview: base64, previewReady: true }
-                : u,
-            );
-            const processed = updateImageData(updated);
-            if (type === "building_image" && i === 0) {
-              updateData({ selectedImagePreview: base64 });
-            }
-            return processed || updated;
-          });
-        };
-        reader.readAsDataURL(file);
+        const objectUrl = URL.createObjectURL(file);
+        objectUrlsRef.current.add(objectUrl); // Track for cleanup on unmount
+        setUploads((prev) => {
+          const updated = prev.map((u) =>
+            u.id === uploadId
+              ? { ...u, preview: objectUrl, previewReady: true }
+              : u,
+          );
+          const processed = updateImageData(updated);
+          if (type === "building_image" && i === 0) {
+            updateData({ selectedImagePreview: objectUrl });
+          }
+          return processed || updated;
+        });
       }
 
       newUploads.push(upload);
@@ -1287,13 +1333,28 @@ export function Step2Documents({
 
     setUploads((prev) => [...prev, ...newUploads]);
 
-    // Simulate upload process
-    for (const upload of newUploads) {
-      await simulateUpload(upload);
+    // Upload ALL files in PARALLEL (not sequential)
+    // Pass skipProcessing=true to avoid triggering background processing per-file
+    await Promise.allSettled(
+      newUploads.map((upload) =>
+        simulateUpload(upload, { skipProcessing: true }),
+      ),
+    );
+
+    // After ALL uploads complete, trigger background processing ONCE for this type
+    // This avoids race conditions from multiple parallel processing triggers
+    if (type === "tabu" || type === "condo" || type === "permit") {
+      console.log(
+        `🚀 All uploads complete - triggering background processing for ${type} once`,
+      );
+      triggerBackgroundProcessing(type as "tabu" | "condo" | "permit");
     }
   };
 
-  const simulateUpload = async (upload: DocumentUpload) => {
+  const simulateUpload = async (
+    upload: DocumentUpload,
+    options?: { skipProcessing?: boolean },
+  ) => {
     if (!sessionId) {
       console.error("❌ No session ID for upload");
       setUploads((prev) =>
@@ -1396,10 +1457,12 @@ export function Step2Documents({
 
       // 🚀 FIRE BACKGROUND PROCESSING IMMEDIATELY AFTER UPLOAD
       // For document types (tabu, condo, permit), trigger AI extraction right away
+      // Skip if called with skipProcessing=true (parallel uploads handle this at batch level)
       if (
-        upload.type === "tabu" ||
-        upload.type === "condo" ||
-        upload.type === "permit"
+        !options?.skipProcessing &&
+        (upload.type === "tabu" ||
+          upload.type === "condo" ||
+          upload.type === "permit")
       ) {
         console.log(
           `🚀 Upload complete - firing background processing for ${upload.type}`,
@@ -1595,6 +1658,12 @@ export function Step2Documents({
     if (!upload) return;
 
     console.log(`🗑️ Removing upload ${uploadId} (${upload.type})`);
+
+    // Revoke Object URL to free memory (only for blob: URLs, not server URLs)
+    if (upload.preview?.startsWith("blob:")) {
+      URL.revokeObjectURL(upload.preview);
+      objectUrlsRef.current.delete(upload.preview);
+    }
 
     // Call the API to delete from DB, blob storage, and images table in parallel
     try {
