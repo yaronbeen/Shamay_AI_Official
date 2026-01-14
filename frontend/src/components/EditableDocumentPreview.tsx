@@ -17,6 +17,11 @@ import {
 } from "./EditableDocumentPreview/hooks";
 import { FloatingToolbar } from "./EditableDocumentPreview/FloatingToolbar";
 
+// Type helper for PropertyAnalysis with potential __customDocumentEdits
+type PropertyAnalysisWithEdits = ValuationData["propertyAnalysis"] & {
+  __customDocumentEdits?: Record<string, string>;
+};
+
 // Security: Allowed MIME types for image uploads
 const ALLOWED_IMAGE_MIME_TYPES = [
   "image/jpeg",
@@ -276,7 +281,13 @@ export function EditableDocumentPreview({
 
     const mergedEdits = {
       ...(data.customDocumentEdits ||
-        data.propertyAnalysis?.__customDocumentEdits ||
+        (
+          data.propertyAnalysis as
+            | (typeof data.propertyAnalysis & {
+                __customDocumentEdits?: Record<string, string>;
+              })
+            | undefined
+        )?.__customDocumentEdits ||
         {}),
       ...customHtmlOverrides,
     };
@@ -721,7 +732,13 @@ export function EditableDocumentPreview({
     if (!isEditMode) {
       const existing =
         data.customDocumentEdits ||
-        data.propertyAnalysis?.__customDocumentEdits ||
+        (
+          data.propertyAnalysis as
+            | (typeof data.propertyAnalysis & {
+                __customDocumentEdits?: Record<string, string>;
+              })
+            | undefined
+        )?.__customDocumentEdits ||
         {};
       setCustomHtmlOverrides(existing);
       setDebouncedOverrides(existing);
@@ -1106,7 +1123,8 @@ export function EditableDocumentPreview({
     const hasLocalChanges = Object.keys(customHtmlOverrides).length > 0;
     const hasSavedChanges =
       !!data.customDocumentEdits ||
-      !!data.propertyAnalysis?.__customDocumentEdits;
+      !!(data.propertyAnalysis as PropertyAnalysisWithEdits | undefined)
+        ?.__customDocumentEdits;
 
     if (!hasLocalChanges && !hasSavedChanges) {
       alert("אין שינויים לביטול");
@@ -1537,13 +1555,21 @@ export function EditableDocumentPreview({
                   isSaving ||
                   (Object.keys(customHtmlOverrides).length === 0 &&
                     !data.customDocumentEdits &&
-                    !data.propertyAnalysis?.__customDocumentEdits)
+                    !(
+                      data.propertyAnalysis as
+                        | PropertyAnalysisWithEdits
+                        | undefined
+                    )?.__customDocumentEdits)
                 }
                 className={`h-8 px-3 text-xs font-medium rounded-md transition-all ${
                   isSaving ||
                   (Object.keys(customHtmlOverrides).length === 0 &&
                     !data.customDocumentEdits &&
-                    !data.propertyAnalysis?.__customDocumentEdits)
+                    !(
+                      data.propertyAnalysis as
+                        | PropertyAnalysisWithEdits
+                        | undefined
+                    )?.__customDocumentEdits)
                     ? "bg-gray-200 text-gray-400 cursor-not-allowed"
                     : "bg-white text-red-600 border border-red-300 hover:bg-red-50"
                 }`}
