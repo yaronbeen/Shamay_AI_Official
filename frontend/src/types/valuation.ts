@@ -265,6 +265,8 @@ export interface ExtractedData {
   // Property Characteristics
   propertyCondition?: string;
   finishLevel?: string;
+  parking?: boolean | string;
+  elevator?: boolean | string;
 
   // Owners
   owners?: Owner[];
