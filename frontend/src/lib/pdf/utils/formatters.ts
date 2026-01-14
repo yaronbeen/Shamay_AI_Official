@@ -242,7 +242,7 @@ export const formatCurrency = (value?: number | string): string => {
 /**
  * Formats a number using Hebrew locale
  *
- * @param value - Number or string to format
+ * @param value - Number, string, or any value to format (unknown values are safely handled)
  * @param fallbackText - Text to show for invalid/empty values (default: "—")
  * @returns Locale-formatted number string or fallback
  *
@@ -252,7 +252,7 @@ export const formatCurrency = (value?: number | string): string => {
  * formatNumber(undefined) // "—"
  */
 export const formatNumber = (
-  value?: number | string,
+  value?: unknown,
   fallbackText: string = "—",
 ): string => {
   if (value === undefined || value === null || value === "") {
