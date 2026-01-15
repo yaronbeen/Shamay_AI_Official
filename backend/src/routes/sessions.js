@@ -5,6 +5,9 @@ const { ShumaDB } = require("../models/ShumaDB");
 const logger = require("../config/logger");
 const { validateBody, schemas } = require("../middleware/validateRequest");
 
+// Security: Session ID format validation pattern
+const SESSION_ID_PATTERN = /^[a-zA-Z0-9_-]{8,128}$/;
+
 // POST /api/sessions - Handle all session operations
 // Validation middleware checks request structure before processing
 router.post("/", validateBody(schemas.BaseSessionSchema), async (req, res) => {
@@ -18,6 +21,11 @@ router.post("/", validateBody(schemas.BaseSessionSchema), async (req, res) => {
       gisData,
       garmushkaData,
     } = req.body;
+
+    // Security: Validate sessionId format if provided
+    if (sessionId && !SESSION_ID_PATTERN.test(sessionId)) {
+      return res.status(400).json({ error: "Invalid session ID format" });
+    }
 
     switch (action) {
       case "save_to_db": {
@@ -172,7 +180,7 @@ router.get("/:sessionId", async (req, res) => {
     const { sessionId } = req.params;
 
     // Security: Validate sessionId format
-    if (!/^[a-zA-Z0-9_-]{8,128}$/.test(sessionId)) {
+    if (!SESSION_ID_PATTERN.test(sessionId)) {
       return res.status(400).json({ error: "Invalid session ID format" });
     }
 
@@ -183,13 +191,18 @@ router.get("/:sessionId", async (req, res) => {
     }
 
     // Security: Authorization check - verify requesting user owns this session
+    // Note: In production, this should require authentication. Currently allows
+    // unauthenticated access for development. When auth is implemented, remove
+    // the "allow when no requestingUserId" fallback.
     const requestingUserId = req.headers["x-user-id"] || req.query.userId;
     const sessionOwnerId =
       result.valuationData?.userId || result.valuationData?.user_id;
 
+    // Only enforce auth check if session has an owner AND requester provided ID
+    // This allows backward compatibility while preventing known-user IDOR
     if (
-      requestingUserId &&
       sessionOwnerId &&
+      requestingUserId &&
       requestingUserId !== sessionOwnerId
     ) {
       logger.warn(

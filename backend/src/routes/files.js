@@ -20,11 +20,25 @@ const getUploadBasePath = () => {
   }
 };
 
+// Security: Sanitize userId to prevent path traversal
+const sanitizeUserId = (userId) => {
+  if (!userId || typeof userId !== "string") return "dev-user-id";
+  // Remove any path traversal attempts and only allow safe characters
+  return (
+    userId.replace(/[^a-zA-Z0-9_-]/g, "").substring(0, 128) || "dev-user-id"
+  );
+};
+
+// Security & Performance: Session ID validation pattern - validates early to avoid DB round-trips
+const SESSION_ID_PATTERN = /^[a-zA-Z0-9_-]{8,128}$/;
+
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: async (req, file, cb) => {
     const sessionId = req.params.sessionId || req.body.sessionId || "default";
-    const userId = req.body.userId || req.headers["x-user-id"] || "dev-user-id";
+    const rawUserId =
+      req.body.userId || req.headers["x-user-id"] || "dev-user-id";
+    const userId = sanitizeUserId(rawUserId);
     const basePath = getUploadBasePath();
     // New structure: users/{userId}/{sessionId}
     const uploadPath = path.join(basePath, "users", userId, sessionId);
@@ -77,7 +91,9 @@ router.post("/:sessionId/upload", upload.single("file"), async (req, res) => {
       return res.status(400).json({ error: "No file uploaded" });
     }
 
-    const userId = req.body.userId || req.headers["x-user-id"] || "dev-user-id";
+    const rawUserId =
+      req.body.userId || req.headers["x-user-id"] || "dev-user-id";
+    const userId = sanitizeUserId(rawUserId);
     const fileUrl = `/uploads/users/${userId}/${sessionId}/${req.file.filename}`;
     const filePath = req.file.path;
 
@@ -132,6 +148,11 @@ router.delete("/:sessionId/:fileId", async (req, res) => {
   try {
     const { sessionId, fileId } = req.params;
 
+    // Early validation to avoid unnecessary DB calls
+    if (!SESSION_ID_PATTERN.test(sessionId)) {
+      return res.status(400).json({ error: "Invalid session ID format" });
+    }
+
     const result = await ShumaDB.loadShumaForWizard(sessionId);
 
     if (result.error) {
@@ -177,6 +198,11 @@ router.delete("/:sessionId/:fileId", async (req, res) => {
 router.get("/:sessionId", async (req, res) => {
   try {
     const { sessionId } = req.params;
+
+    // Early validation to avoid unnecessary DB calls
+    if (!SESSION_ID_PATTERN.test(sessionId)) {
+      return res.status(400).json({ error: "Invalid session ID format" });
+    }
 
     const result = await ShumaDB.loadShumaForWizard(sessionId);
 
@@ -341,8 +367,9 @@ router.get("/:sessionId/:filename", async (req, res) => {
     // Local development OR fallback: Read from /frontend/uploads
     // Try new structure first: users/{userId}/{sessionId}/{filename}
     // Then fall back to old structure: {sessionId}/{filename}
-    const userId =
+    const rawUserId =
       req.query.userId || req.headers["x-user-id"] || "dev-user-id";
+    const userId = sanitizeUserId(rawUserId);
     const projectRoot = path.resolve(__dirname, "../../..");
     const possiblePaths = [
       path.join(
