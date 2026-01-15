@@ -1,49 +1,49 @@
 // File Upload Routes
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs').promises;
-const { ShumaDB } = require('../models/ShumaDB');
-const logger = require('../config/logger');
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs").promises;
+const { ShumaDB } = require("../models/ShumaDB");
+const logger = require("../config/logger");
 
 // Determine upload base path: /tmp for Vercel, local uploads for dev
 const getUploadBasePath = () => {
   if (process.env.VERCEL) {
-    return '/tmp';
+    return "/tmp";
   } else {
     // Local dev: Always save to frontend/uploads
     // __dirname = backend/src/routes
     // Go up 2 levels to backend, then up to project root, then to frontend/uploads
-    const projectRoot = path.resolve(__dirname, '../../..');
-    return path.join(projectRoot, 'frontend', 'uploads');
+    const projectRoot = path.resolve(__dirname, "../../..");
+    return path.join(projectRoot, "frontend", "uploads");
   }
 };
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: async (req, file, cb) => {
-    const sessionId = req.params.sessionId || req.body.sessionId || 'default';
-    const userId = req.body.userId || req.headers['x-user-id'] || 'dev-user-id';
+    const sessionId = req.params.sessionId || req.body.sessionId || "default";
+    const userId = req.body.userId || req.headers["x-user-id"] || "dev-user-id";
     const basePath = getUploadBasePath();
     // New structure: users/{userId}/{sessionId}
-    const uploadPath = path.join(basePath, 'users', userId, sessionId);
-    
+    const uploadPath = path.join(basePath, "users", userId, sessionId);
+
     // Create directory if it doesn't exist
     try {
       await fs.mkdir(uploadPath, { recursive: true });
       cb(null, uploadPath);
     } catch (error) {
-      logger.error('Error creating upload directory:', error);
+      logger.error("Error creating upload directory:", error);
       cb(error);
     }
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
     const ext = path.extname(file.originalname);
     const basename = path.basename(file.originalname, ext);
     cb(null, `${basename}-${uniqueSuffix}${ext}`);
-  }
+  },
 });
 
 const upload = multer({
@@ -54,28 +54,30 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     // Allow PDFs and images
     const allowedTypes = /pdf|jpeg|jpg|png|gif/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const extname = allowedTypes.test(
+      path.extname(file.originalname).toLowerCase(),
+    );
     const mimetype = allowedTypes.test(file.mimetype);
 
     if (extname && mimetype) {
       return cb(null, true);
     } else {
-      cb(new Error('Only PDF and image files are allowed'));
+      cb(new Error("Only PDF and image files are allowed"));
     }
-  }
+  },
 });
 
 // POST /api/files/:sessionId/upload - Upload file
-router.post('/:sessionId/upload', upload.single('file'), async (req, res) => {
+router.post("/:sessionId/upload", upload.single("file"), async (req, res) => {
   try {
     const { sessionId } = req.params;
     const { type } = req.body; // Document type: tabu, permit, condo, building_image, interior_image
 
     if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
+      return res.status(400).json({ error: "No file uploaded" });
     }
 
-    const userId = req.body.userId || req.headers['x-user-id'] || 'dev-user-id';
+    const userId = req.body.userId || req.headers["x-user-id"] || "dev-user-id";
     const fileUrl = `/uploads/users/${userId}/${sessionId}/${req.file.filename}`;
     const filePath = req.file.path;
 
@@ -89,8 +91,8 @@ router.post('/:sessionId/upload', upload.single('file'), async (req, res) => {
       url: fileUrl,
       size: req.file.size,
       mimeType: req.file.mimetype,
-      status: 'completed',
-      uploadedAt: new Date().toISOString()
+      status: "completed",
+      uploadedAt: new Date().toISOString(),
     };
 
     // Load current session data
@@ -102,9 +104,9 @@ router.post('/:sessionId/upload', upload.single('file'), async (req, res) => {
       // Update session with new upload
       await ShumaDB.saveShumaFromSession(
         sessionId,
-        loadResult.valuationData.organizationId || 'default-org',
-        loadResult.valuationData.userId || 'system',
-        { ...loadResult.valuationData, uploads: currentUploads }
+        loadResult.valuationData.organizationId || "default-org",
+        loadResult.valuationData.userId || "system",
+        { ...loadResult.valuationData, uploads: currentUploads },
       );
     }
 
@@ -116,17 +118,17 @@ router.post('/:sessionId/upload', upload.single('file'), async (req, res) => {
         fileName: req.file.filename,
         size: req.file.size,
         type: req.file.mimetype,
-        uploadedAt: new Date().toISOString()
-      }
+        uploadedAt: new Date().toISOString(),
+      },
     });
   } catch (error) {
-    logger.error('File upload error:', error);
+    logger.error("File upload error:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
 // DELETE /api/files/:sessionId/:fileId - Delete file (must come before GET with :filename)
-router.delete('/:sessionId/:fileId', async (req, res) => {
+router.delete("/:sessionId/:fileId", async (req, res) => {
   try {
     const { sessionId, fileId } = req.params;
 
@@ -137,10 +139,10 @@ router.delete('/:sessionId/:fileId', async (req, res) => {
     }
 
     const uploads = result.valuationData.uploads || [];
-    const fileToDelete = uploads.find(u => u.id === fileId);
+    const fileToDelete = uploads.find((u) => u.id === fileId);
 
     if (!fileToDelete) {
-      return res.status(404).json({ error: 'File not found' });
+      return res.status(404).json({ error: "File not found" });
     }
 
     // Delete physical file
@@ -148,31 +150,31 @@ router.delete('/:sessionId/:fileId', async (req, res) => {
       try {
         await fs.unlink(fileToDelete.path);
       } catch (err) {
-        logger.warn('Could not delete physical file:', err);
+        logger.warn("Could not delete physical file:", err);
       }
     }
 
     // Update database
-    const updatedUploads = uploads.filter(u => u.id !== fileId);
+    const updatedUploads = uploads.filter((u) => u.id !== fileId);
     await ShumaDB.saveShumaFromSession(
       sessionId,
-      result.valuationData.organizationId || 'default-org',
-      result.valuationData.userId || 'system',
-      { ...result.valuationData, uploads: updatedUploads }
+      result.valuationData.organizationId || "default-org",
+      result.valuationData.userId || "system",
+      { ...result.valuationData, uploads: updatedUploads },
     );
 
     res.json({
       success: true,
-      message: 'File deleted successfully'
+      message: "File deleted successfully",
     });
   } catch (error) {
-    logger.error('Delete file error:', error);
+    logger.error("Delete file error:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
 // GET /api/files/:sessionId - Get all files for session
-router.get('/:sessionId', async (req, res) => {
+router.get("/:sessionId", async (req, res) => {
   try {
     const { sessionId } = req.params;
 
@@ -184,22 +186,49 @@ router.get('/:sessionId', async (req, res) => {
 
     res.json({
       success: true,
-      uploads: result.valuationData.uploads || []
+      uploads: result.valuationData.uploads || [],
     });
   } catch (error) {
-    logger.error('Get files error:', error);
+    logger.error("Get files error:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
 // GET /api/files/:sessionId/:filename - Serve individual file
-router.get('/:sessionId/:filename', async (req, res) => {
+router.get("/:sessionId/:filename", async (req, res) => {
   try {
     const { sessionId, filename } = req.params;
-    
+
+    // Security: Sanitize inputs to prevent path traversal attacks
+    const sanitizedFilename = path.basename(filename);
+    const sanitizedSessionId = sessionId.replace(/[^a-zA-Z0-9_-]/g, "");
+
+    // Validate inputs
+    if (
+      sanitizedFilename !== filename ||
+      filename.includes("..") ||
+      filename.includes("\0")
+    ) {
+      logger.warn(
+        `⚠️ Potential path traversal attempt blocked: filename=${filename}`,
+      );
+      return res.status(400).json({ error: "Invalid filename" });
+    }
+    if (
+      sanitizedSessionId !== sessionId ||
+      sessionId.includes("..") ||
+      sessionId.length > 128
+    ) {
+      logger.warn(
+        `⚠️ Potential path traversal attempt blocked: sessionId=${sessionId}`,
+      );
+      return res.status(400).json({ error: "Invalid session ID" });
+    }
+
     // Check if we're in Vercel production
-    const isProduction = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production';
-    
+    const isProduction =
+      process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
+
     // In Vercel production, try to load file URL from database (might be Blob URL)
     if (isProduction && process.env.BLOB_READ_WRITE_TOKEN) {
       try {
@@ -208,23 +237,39 @@ router.get('/:sessionId/:filename', async (req, res) => {
         if (result.success && result.valuationData) {
           // Check uploads array for matching filename
           const uploads = result.valuationData.uploads || [];
-          const fileEntry = uploads.find(u => u.fileName === filename || u.url && u.url.includes(filename));
-          
+          const fileEntry = uploads.find(
+            (u) =>
+              u.fileName === filename || (u.url && u.url.includes(filename)),
+          );
+
           // Check gisScreenshots for matching filename
           let blobUrl = null;
-          if (fileEntry && fileEntry.url && (fileEntry.url.startsWith('http://') || fileEntry.url.startsWith('https://'))) {
+          if (
+            fileEntry &&
+            fileEntry.url &&
+            (fileEntry.url.startsWith("http://") ||
+              fileEntry.url.startsWith("https://"))
+          ) {
             blobUrl = fileEntry.url;
           } else {
             const gisScreenshots = result.valuationData.gisScreenshots || {};
-            if (gisScreenshots.cropMode0 && gisScreenshots.cropMode0.includes(filename) && 
-                (gisScreenshots.cropMode0.startsWith('http://') || gisScreenshots.cropMode0.startsWith('https://'))) {
+            if (
+              gisScreenshots.cropMode0 &&
+              gisScreenshots.cropMode0.includes(filename) &&
+              (gisScreenshots.cropMode0.startsWith("http://") ||
+                gisScreenshots.cropMode0.startsWith("https://"))
+            ) {
               blobUrl = gisScreenshots.cropMode0;
-            } else if (gisScreenshots.cropMode1 && gisScreenshots.cropMode1.includes(filename) &&
-                       (gisScreenshots.cropMode1.startsWith('http://') || gisScreenshots.cropMode1.startsWith('https://'))) {
+            } else if (
+              gisScreenshots.cropMode1 &&
+              gisScreenshots.cropMode1.includes(filename) &&
+              (gisScreenshots.cropMode1.startsWith("http://") ||
+                gisScreenshots.cropMode1.startsWith("https://"))
+            ) {
               blobUrl = gisScreenshots.cropMode1;
             }
           }
-          
+
           // If we found a Blob URL, download and serve it
           if (blobUrl) {
             try {
@@ -233,74 +278,89 @@ router.get('/:sessionId/:filename', async (req, res) => {
               if (!response.ok) {
                 throw new Error(`Failed to fetch blob: ${response.statusText}`);
               }
-              
+
               const buffer = await response.arrayBuffer();
               const fileBuffer = Buffer.from(buffer);
-              
+
               // Determine content type
               const ext = path.extname(filename).toLowerCase();
-              let contentType = 'application/octet-stream';
-              
+              let contentType = "application/octet-stream";
+
               switch (ext) {
-                case '.pdf':
-                  contentType = 'application/pdf';
+                case ".pdf":
+                  contentType = "application/pdf";
                   break;
-                case '.jpg':
-                case '.jpeg':
-                  contentType = 'image/jpeg';
+                case ".jpg":
+                case ".jpeg":
+                  contentType = "image/jpeg";
                   break;
-                case '.png':
-                  contentType = 'image/png';
+                case ".png":
+                  contentType = "image/png";
                   break;
-                case '.gif':
-                  contentType = 'image/gif';
+                case ".gif":
+                  contentType = "image/gif";
                   break;
-                case '.webp':
-                  contentType = 'image/webp';
+                case ".webp":
+                  contentType = "image/webp";
                   break;
-                case '.txt':
-                  contentType = 'text/plain';
+                case ".txt":
+                  contentType = "text/plain";
                   break;
-                case '.json':
-                  contentType = 'application/json';
+                case ".json":
+                  contentType = "application/json";
                   break;
               }
-              
-              logger.info(`✅ [BLOB] Serving file from Blob: ${blobUrl} (${fileBuffer.length} bytes, ${contentType})`);
-              
-              res.setHeader('Content-Type', contentType);
-              res.setHeader('Content-Length', fileBuffer.length);
-              res.setHeader('Cache-Control', 'public, max-age=3600');
-              res.setHeader('Access-Control-Allow-Origin', '*');
-              res.setHeader('Access-Control-Allow-Methods', 'GET');
-              
+
+              logger.info(
+                `✅ [BLOB] Serving file from Blob: ${blobUrl} (${fileBuffer.length} bytes, ${contentType})`,
+              );
+
+              res.setHeader("Content-Type", contentType);
+              res.setHeader("Content-Length", fileBuffer.length);
+              res.setHeader("Cache-Control", "public, max-age=3600");
+              res.setHeader("Access-Control-Allow-Origin", "*");
+              res.setHeader("Access-Control-Allow-Methods", "GET");
+
               return res.send(fileBuffer);
             } catch (blobError) {
-              logger.warn(`⚠️ [BLOB] Failed to download from Blob, falling back to local: ${blobError.message}`);
+              logger.warn(
+                `⚠️ [BLOB] Failed to download from Blob, falling back to local: ${blobError.message}`,
+              );
               // Fall through to local filesystem
             }
           }
         }
       } catch (dbError) {
-        logger.warn(`⚠️ [BLOB] Failed to load from DB, falling back to local: ${dbError.message}`);
+        logger.warn(
+          `⚠️ [BLOB] Failed to load from DB, falling back to local: ${dbError.message}`,
+        );
         // Fall through to local filesystem
       }
     }
-    
+
     // Local development OR fallback: Read from /frontend/uploads
     // Try new structure first: users/{userId}/{sessionId}/{filename}
     // Then fall back to old structure: {sessionId}/{filename}
-    const userId = req.query.userId || req.headers['x-user-id'] || 'dev-user-id';
-    const projectRoot = path.resolve(__dirname, '../../..');
+    const userId =
+      req.query.userId || req.headers["x-user-id"] || "dev-user-id";
+    const projectRoot = path.resolve(__dirname, "../../..");
     const possiblePaths = [
-      path.join(projectRoot, 'frontend', 'uploads', 'users', userId, sessionId, filename), // New structure
-      path.join(projectRoot, 'frontend', 'uploads', sessionId, filename), // Old structure (backward compatibility)
-      path.join(__dirname, '../../uploads', sessionId, filename), // backend/uploads (legacy)
-      path.join(process.cwd(), 'uploads', sessionId, filename) // from CWD (fallback)
+      path.join(
+        projectRoot,
+        "frontend",
+        "uploads",
+        "users",
+        userId,
+        sessionId,
+        filename,
+      ), // New structure
+      path.join(projectRoot, "frontend", "uploads", sessionId, filename), // Old structure (backward compatibility)
+      path.join(__dirname, "../../uploads", sessionId, filename), // backend/uploads (legacy)
+      path.join(process.cwd(), "uploads", sessionId, filename), // from CWD (fallback)
     ];
-    
+
     let filePath = null;
-    
+
     // Find the first path that exists
     for (const testPath of possiblePaths) {
       try {
@@ -311,69 +371,66 @@ router.get('/:sessionId/:filename', async (req, res) => {
         // Continue to next path
       }
     }
-    
+
     if (!filePath) {
+      // Log full details for debugging, but don't expose to client
       logger.error(`❌ [LOCAL] File not found in any location:`, possiblePaths);
-      return res.status(404).json({ 
-        error: 'File not found', 
-        filename,
-        sessionId,
-        searchedPaths: possiblePaths,
-        note: isProduction ? 'In production, ensure the file URL is stored correctly in the database' : 'Local file not found'
-      });
+      // Security: Don't expose internal paths in response
+      return res.status(404).json({ error: "File not found" });
     }
-    
+
     logger.info(`📁 [LOCAL] Serving file: ${filePath}`);
-    
+
     // Get file stats
     const stats = await fs.stat(filePath);
-    
+
     // Determine content type based on file extension
     const ext = path.extname(filename).toLowerCase();
-    let contentType = 'application/octet-stream';
-    
+    let contentType = "application/octet-stream";
+
     switch (ext) {
-      case '.pdf':
-        contentType = 'application/pdf';
+      case ".pdf":
+        contentType = "application/pdf";
         break;
-      case '.jpg':
-      case '.jpeg':
-        contentType = 'image/jpeg';
+      case ".jpg":
+      case ".jpeg":
+        contentType = "image/jpeg";
         break;
-      case '.png':
-        contentType = 'image/png';
+      case ".png":
+        contentType = "image/png";
         break;
-      case '.gif':
-        contentType = 'image/gif';
+      case ".gif":
+        contentType = "image/gif";
         break;
-      case '.webp':
-        contentType = 'image/webp';
+      case ".webp":
+        contentType = "image/webp";
         break;
-      case '.txt':
-        contentType = 'text/plain';
+      case ".txt":
+        contentType = "text/plain";
         break;
-      case '.json':
-        contentType = 'application/json';
+      case ".json":
+        contentType = "application/json";
         break;
     }
-    
+
     // Set headers
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Length', stats.size);
-    res.setHeader('Cache-Control', 'public, max-age=3600');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET');
-    
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Length", stats.size);
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET");
+
     // Stream file
-    const readStream = require('fs').createReadStream(filePath);
+    const readStream = require("fs").createReadStream(filePath);
     readStream.pipe(res);
-    
-    logger.info(`✅ [LOCAL] Served file: ${filename} (${stats.size} bytes, ${contentType})`);
+
+    logger.info(
+      `✅ [LOCAL] Served file: ${filename} (${stats.size} bytes, ${contentType})`,
+    );
   } catch (error) {
-    logger.error('❌ File serving error:', error);
+    logger.error("❌ File serving error:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
 module.exports = router;
-

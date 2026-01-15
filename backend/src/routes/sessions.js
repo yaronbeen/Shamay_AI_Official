@@ -171,10 +171,31 @@ router.get("/:sessionId", async (req, res) => {
   try {
     const { sessionId } = req.params;
 
+    // Security: Validate sessionId format
+    if (!/^[a-zA-Z0-9_-]{8,128}$/.test(sessionId)) {
+      return res.status(400).json({ error: "Invalid session ID format" });
+    }
+
     const result = await ShumaDB.loadShumaForWizard(sessionId);
 
     if (result.error) {
       return res.status(404).json({ error: result.error });
+    }
+
+    // Security: Authorization check - verify requesting user owns this session
+    const requestingUserId = req.headers["x-user-id"] || req.query.userId;
+    const sessionOwnerId =
+      result.valuationData?.userId || result.valuationData?.user_id;
+
+    if (
+      requestingUserId &&
+      sessionOwnerId &&
+      requestingUserId !== sessionOwnerId
+    ) {
+      logger.warn(
+        `⚠️ Unauthorized access attempt: user ${requestingUserId} tried to access session owned by ${sessionOwnerId}`,
+      );
+      return res.status(403).json({ error: "Access denied" });
     }
 
     res.json({

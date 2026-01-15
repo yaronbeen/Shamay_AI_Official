@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useCallback, useRef, useEffect } from "react";
+import toast from "react-hot-toast";
 import {
   Upload,
   FileText,
@@ -21,6 +22,14 @@ import type {
   ProcessingStatusType,
 } from "../../lib/session-store-global";
 import type { ValuationData, ExtractedData } from "../../types/valuation";
+
+// Production-safe logger - only logs in development mode
+const isDev = process.env.NODE_ENV === "development";
+const devLog = (...args: unknown[]) => {
+  if (isDev) {
+    console.log(...args);
+  }
+};
 
 interface DocumentUpload {
   id: string;
@@ -149,13 +158,13 @@ export function Step2Documents({
           const response = await fetch(`/api/session/${sessionId}`);
           if (response.ok) {
             const sessionData = await response.json();
-            console.log("📁 Session data received:", sessionData);
+            devLog("📁 Session data received:", sessionData);
 
             // The uploads are nested under sessionData.data.uploads
             const uploads =
               sessionData.data?.uploads || sessionData.uploads || [];
             if (Array.isArray(uploads) && uploads.length > 0) {
-              console.log("📁 Loading uploads from session:", uploads);
+              devLog("📁 Loading uploads from session:", uploads);
 
               // Convert session uploads to DocumentUpload format
               const sessionUploads: DocumentUpload[] = await Promise.all(
@@ -186,7 +195,7 @@ export function Step2Documents({
                           response.headers.get("content-length");
                         if (contentLength) {
                           fileSize = parseInt(contentLength);
-                          console.log(
+                          devLog(
                             `📁 Got file size from HTTP headers: ${fileSize} bytes`,
                           );
                         }
@@ -222,7 +231,7 @@ export function Step2Documents({
                     uploadUrl.trim().length > 0 &&
                     uploadUrl !== "data:,";
 
-                  console.log(
+                  devLog(
                     `📁 Loading upload ${upload.id}: type=${upload.type}, hasValidUrl=${hasValidUrl}, url=${uploadUrl?.substring(0, 50)}...`,
                   );
 
@@ -255,10 +264,8 @@ export function Step2Documents({
                 }),
               );
 
-              console.log(
-                `📁 Loaded ${sessionUploads.length} uploads from session`,
-              );
-              console.log(
+              devLog(`📁 Loaded ${sessionUploads.length} uploads from session`);
+              devLog(
                 `📁 Image uploads:`,
                 sessionUploads
                   .filter(
@@ -280,13 +287,11 @@ export function Step2Documents({
               // CRITICAL: Initialize image data after loading from session
               // Use setTimeout to ensure state is updated before calling updateImageData
               setTimeout(() => {
-                console.log(
-                  "📁 Initializing image data from session uploads...",
-                );
+                devLog("📁 Initializing image data from session uploads...");
                 updateImageData(sessionUploads);
               }, 100);
             } else {
-              console.log("📁 No uploads found in session data");
+              devLog("📁 No uploads found in session data");
             }
           }
         } catch (error) {
@@ -312,7 +317,7 @@ export function Step2Documents({
           if (extractions && extractions.length > 0) {
             const latestExtraction = extractions[0];
             setExistingAIExtraction(latestExtraction);
-            console.log("📚 Found existing AI extraction:", latestExtraction);
+            devLog("📚 Found existing AI extraction:", latestExtraction);
           }
         }
       } catch (error) {
@@ -335,13 +340,11 @@ export function Step2Documents({
 
     // Guard: Don't trigger if already processing this doc type
     if (backgroundProcessing[docType] === "processing") {
-      console.log(
-        `⚠️ ${docType} already processing, skipping duplicate trigger`,
-      );
+      devLog(`⚠️ ${docType} already processing, skipping duplicate trigger`);
       return;
     }
 
-    console.log(`🚀 Triggering background processing for ${docType}`);
+    devLog(`🚀 Triggering background processing for ${docType}`);
 
     // Update local status
     setBackgroundProcessing((prev) => ({
@@ -376,7 +379,7 @@ export function Step2Documents({
           }));
         });
 
-      console.log(`✅ Background processing triggered for ${docType}`);
+      devLog(`✅ Background processing triggered for ${docType}`);
     } catch (error) {
       console.error(
         `❌ Error triggering background processing for ${docType}:`,
@@ -395,7 +398,7 @@ export function Step2Documents({
     );
     if (!hasProcessing) return;
 
-    console.log("🔄 Starting processing status polling...");
+    devLog("🔄 Starting processing status polling...");
 
     let pollDelay = 1000; // Start at 1s
     const maxDelay = 5000; // Max 5s between polls
@@ -420,7 +423,7 @@ export function Step2Documents({
 
           // If we have new extracted data, update it
           if (newData && Object.keys(newData).length > 0) {
-            console.log(
+            devLog(
               "📦 Received extracted data from background processing:",
               Object.keys(newData),
             );
@@ -434,7 +437,7 @@ export function Step2Documents({
 
           // Stop polling if all complete
           if (allComplete) {
-            console.log("✅ All background processing complete");
+            devLog("✅ All background processing complete");
             return; // Don't schedule next poll
           }
 
@@ -485,7 +488,7 @@ export function Step2Documents({
       const uploadedTypes = new Set(
         data.uploads?.map((upload: any) => upload.type) || [],
       );
-      console.log("📋 Uploaded document types:", Array.from(uploadedTypes));
+      devLog("📋 Uploaded document types:", Array.from(uploadedTypes));
 
       // If reprocessSelection is provided, only process selected types
       // Otherwise, process all uploaded types
@@ -498,7 +501,7 @@ export function Step2Documents({
           uploadedTypes.has("interior_image"),
       };
 
-      console.log("🔄 Reprocessing selection:", shouldProcess);
+      devLog("🔄 Reprocessing selection:", shouldProcess);
 
       // Only call APIs for selected document types
       type ProcessingTask = {
@@ -510,7 +513,7 @@ export function Step2Documents({
       const tasks: ProcessingTask[] = [];
 
       if (uploadedTypes.has("tabu") && shouldProcess.tabu) {
-        console.log("🏛️ Enqueue land registry analysis task");
+        devLog("🏛️ Enqueue land registry analysis task");
         tasks.push({
           type: "tabu",
           label: "חילוץ נתוני טאבו",
@@ -519,7 +522,7 @@ export function Step2Documents({
       }
 
       if (uploadedTypes.has("permit") && shouldProcess.permit) {
-        console.log("🏗️ Enqueue building permit analysis task");
+        devLog("🏗️ Enqueue building permit analysis task");
         tasks.push({
           type: "permit",
           label: "חילוץ נתוני היתר בנייה",
@@ -528,7 +531,7 @@ export function Step2Documents({
       }
 
       if (uploadedTypes.has("condo") && shouldProcess.condo) {
-        console.log("🏢 Enqueue shared building analysis task");
+        devLog("🏢 Enqueue shared building analysis task");
         tasks.push({
           type: "condo",
           label: "חילוץ נתוני צו בית משותף",
@@ -541,7 +544,7 @@ export function Step2Documents({
           uploadedTypes.has("interior_image")) &&
         shouldProcess.images
       ) {
-        console.log("📸 Enqueue image analysis task");
+        devLog("📸 Enqueue image analysis task");
         tasks.push({
           type: "images",
           label: "ניתוח חזית ותמונות פנים",
@@ -551,21 +554,21 @@ export function Step2Documents({
 
       // If no relevant documents selected for processing, show message
       if (tasks.length === 0) {
-        console.log("⚠️ No documents selected for AI analysis");
+        devLog("⚠️ No documents selected for AI analysis");
         setIsProcessing(false);
         setProcessingProgress(0);
         setProcessingStage(null);
         return;
       }
 
-      console.log(`🚀 Processing ${tasks.length} document types with AI...`);
+      devLog(`🚀 Processing ${tasks.length} document types with AI...`);
       setProcessingStage("שולח מסמכים לניתוח AI");
       setProcessingProgress(12);
 
       // If reprocessing selectively, fetch latest data from database first
       let baseData = {};
       if (reprocessSelection) {
-        console.log(
+        devLog(
           "🔄 Selective reprocess - fetching latest data from database first...",
         );
         try {
@@ -576,10 +579,7 @@ export function Step2Documents({
               sessionData.data?.extractedData ||
               sessionData.extractedData ||
               {};
-            console.log(
-              "✅ Loaded base data from database:",
-              Object.keys(baseData),
-            );
+            devLog("✅ Loaded base data from database:", Object.keys(baseData));
           }
         } catch (error) {
           console.error(
@@ -591,7 +591,7 @@ export function Step2Documents({
       }
 
       // Execute ALL tasks in PARALLEL for faster processing
-      console.log(
+      devLog(
         `🚀 Starting PARALLEL processing of ${tasks.length} document types...`,
       );
       setProcessingStage("מעבד את כל המסמכים במקביל...");
@@ -600,9 +600,9 @@ export function Step2Documents({
       // Create promises that run in parallel
       const taskPromises = tasks.map(async (task) => {
         try {
-          console.log(`🚀 Starting parallel task: ${task.type}`);
+          devLog(`🚀 Starting parallel task: ${task.type}`);
           const value = await task.run();
-          console.log(`✅ Task ${task.type} completed successfully`);
+          devLog(`✅ Task ${task.type} completed successfully`);
           return { type: task.type, status: "fulfilled" as const, value };
         } catch (error) {
           console.error(`❌ Task ${task.type} failed:`, error);
@@ -635,50 +635,47 @@ export function Step2Documents({
         }
       });
 
-      console.log(`✅ All ${tasks.length} tasks completed in parallel`);
+      devLog(`✅ All ${tasks.length} tasks completed in parallel`);
       setProcessingProgress(80);
 
       // Start with base data (from DB if selective, empty if full reprocess)
       const combinedData: any = { ...baseData };
 
-      console.log(
+      devLog(
         "🔄 Starting with base data:",
         reprocessSelection
           ? "FROM DATABASE (selective)"
           : "EMPTY (full process)",
       );
-      console.log("🔄 Base data keys:", Object.keys(combinedData));
+      devLog("🔄 Base data keys:", Object.keys(combinedData));
 
       setProcessingStage("מאחד תוצאות מהמקורות השונים");
       setProcessingProgress((prev) => Math.max(prev, 82));
 
       results.forEach((result) => {
         if (result.status === "fulfilled" && result.value) {
-          console.log(`📦 Merging result for ${result.type}:`, result.value);
+          devLog(`📦 Merging result for ${result.type}:`, result.value);
           Object.assign(combinedData, result.value);
         } else if (result.status === "rejected") {
           console.error(`❌ Task ${result.type} failed:`, result.reason);
         }
       });
 
-      console.log(
-        "📦 Final combined data after merging all results:",
-        combinedData,
-      );
-      console.log("📦 Combined data keys:", Object.keys(combinedData));
+      devLog("📦 Final combined data after merging all results:", combinedData);
+      devLog("📦 Combined data keys:", Object.keys(combinedData));
 
       setExtractedData(combinedData);
 
       // Update parent data - only update extractedData to avoid overwriting other data
-      console.log(
+      devLog(
         "📊 About to update parent data with extracted data:",
         JSON.stringify(combinedData, null, 2),
       );
       updateData({
         extractedData: combinedData,
       });
-      console.log("📊 Updated parent data with extracted data");
-      console.log(
+      devLog("📊 Updated parent data with extracted data");
+      devLog(
         "📊 Extracted data keys in combinedData:",
         Object.keys(combinedData),
       );
@@ -694,7 +691,7 @@ export function Step2Documents({
               extractedData: combinedData,
             },
           };
-          console.log(
+          devLog(
             "💾 Saving to session API. Payload:",
             JSON.stringify(savePayload, null, 2),
           );
@@ -707,9 +704,9 @@ export function Step2Documents({
 
           if (response.ok) {
             const savedData = await response.json();
-            console.log("✅ Extracted data saved to session successfully");
-            console.log("✅ Server response:", savedData);
-            console.log("✅ Keys that were saved:", Object.keys(combinedData));
+            devLog("✅ Extracted data saved to session successfully");
+            devLog("✅ Server response:", savedData);
+            devLog("✅ Keys that were saved:", Object.keys(combinedData));
           } else {
             const errorText = await response.text();
             console.error(
@@ -720,7 +717,7 @@ export function Step2Documents({
           }
 
           // Also save original AI extractions for potential revert
-          console.log("💾 Saving original AI extractions for future revert...");
+          devLog("💾 Saving original AI extractions for future revert...");
           await fetch(`/api/session/${sessionId}/ai-extractions`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -733,7 +730,7 @@ export function Step2Documents({
               },
             }),
           });
-          console.log("✅ Original AI extractions saved for revert capability");
+          devLog("✅ Original AI extractions saved for revert capability");
         } catch (error) {
           console.error("❌ Error saving extracted data to session:", error);
         }
@@ -741,9 +738,11 @@ export function Step2Documents({
 
       setProcessingStage("העיבוד הושלם בהצלחה");
       setProcessingProgress(100);
+      toast.success("העיבוד הושלם בהצלחה! הנתונים נשמרו.");
     } catch (error) {
       console.error("Error processing documents:", error);
       setProcessingStage("אירעה שגיאה במהלך עיבוד המסמכים");
+      toast.error("אירעה שגיאה במהלך עיבוד המסמכים");
     } finally {
       setIsProcessing(false);
       setTimeout(() => {
@@ -753,7 +752,7 @@ export function Step2Documents({
 
       // Add a small delay to ensure extracted data is saved before uploads useEffect runs
       setTimeout(() => {
-        console.log("✅ Processing complete, extracted data should be saved");
+        devLog("✅ Processing complete, extracted data should be saved");
       }, 1000);
     }
   };
@@ -769,14 +768,14 @@ export function Step2Documents({
         throw new Error("No tabu document available");
       }
 
-      console.log(`📄 Found ${tabuUploads.length} tabu documents to process`);
+      devLog(`📄 Found ${tabuUploads.length} tabu documents to process`);
 
       // Process ALL tabu documents and merge results
       const allResults: any[] = [];
 
       for (const upload of tabuUploads) {
         const fileUrl = upload.url;
-        console.log(`📄 Extracting from tabu file: ${fileUrl}`);
+        devLog(`📄 Extracting from tabu file: ${fileUrl}`);
 
         const response = await fetch(
           `/api/session/${sessionId}/land-registry-analysis`,
@@ -789,7 +788,7 @@ export function Step2Documents({
 
         if (response.ok) {
           const result = await response.json();
-          console.log("🏛️ Land registry API response:", result);
+          devLog("🏛️ Land registry API response:", result);
 
           if (result.success) {
             allResults.push(result);
@@ -825,7 +824,7 @@ export function Step2Documents({
         });
       }
 
-      console.log(`📦 Merged data from ${allResults.length} tabu documents`);
+      devLog(`📦 Merged data from ${allResults.length} tabu documents`);
 
       // Return ALL fields from merged data - both structured and flat
       return {
@@ -923,7 +922,7 @@ export function Step2Documents({
         throw new Error("No building permit document available");
       }
 
-      console.log(
+      devLog(
         `📄 Found ${permitUploads.length} building permit documents to process`,
       );
 
@@ -932,7 +931,7 @@ export function Step2Documents({
 
       for (const upload of permitUploads) {
         const fileUrl = upload.url;
-        console.log(`📄 Extracting from building permit file: ${fileUrl}`);
+        devLog(`📄 Extracting from building permit file: ${fileUrl}`);
 
         const response = await fetch(
           `/api/session/${sessionId}/building-permit-analysis`,
@@ -945,7 +944,7 @@ export function Step2Documents({
 
         if (response.ok) {
           const result = await response.json();
-          console.log("🏗️ Building permit API response:", result);
+          devLog("🏗️ Building permit API response:", result);
 
           if (result.success) {
             allResults.push(result);
@@ -981,7 +980,7 @@ export function Step2Documents({
         });
       }
 
-      console.log(
+      devLog(
         `📦 Merged data from ${allResults.length} building permit documents`,
       );
 
@@ -1067,14 +1066,14 @@ export function Step2Documents({
         throw new Error("No condo document available");
       }
 
-      console.log(`📄 Found ${condoUploads.length} condo documents to process`);
+      devLog(`📄 Found ${condoUploads.length} condo documents to process`);
 
       // Process ALL condo documents and merge results
       const allResults: any[] = [];
 
       for (const upload of condoUploads) {
         const fileUrl = upload.url;
-        console.log(`📄 Extracting from condo file: ${fileUrl}`);
+        devLog(`📄 Extracting from condo file: ${fileUrl}`);
 
         const response = await fetch(
           `/api/session/${sessionId}/shared-building-analysis`,
@@ -1087,7 +1086,7 @@ export function Step2Documents({
 
         if (response.ok) {
           const result = await response.json();
-          console.log("🏢 Shared building API response:", result);
+          devLog("🏢 Shared building API response:", result);
 
           if (result.success) {
             allResults.push(result);
@@ -1121,7 +1120,7 @@ export function Step2Documents({
         });
       }
 
-      console.log(`📦 Merged data from ${allResults.length} condo documents`);
+      devLog(`📦 Merged data from ${allResults.length} condo documents`);
 
       // Return ALL fields from merged data - both structured and flat
       return {
@@ -1171,7 +1170,7 @@ export function Step2Documents({
         .filter((u: any) => u.status === "completed")
         .map((u: any) => ({ url: u.url }));
 
-      console.log(
+      devLog(
         "📸 Interior images:",
         interiorImages.length,
         "Exterior images:",
@@ -1201,7 +1200,7 @@ export function Step2Documents({
         "json" in interiorResponse.value
       ) {
         const interiorData = await interiorResponse.value.json();
-        console.log("📸 Interior API response:", interiorData);
+        devLog("📸 Interior API response:", interiorData);
 
         if (interiorData.success) {
           // Handle both nested and flat extractedData structure
@@ -1237,7 +1236,7 @@ export function Step2Documents({
         "json" in exteriorResponse.value
       ) {
         const exteriorData = await exteriorResponse.value.json();
-        console.log("📸 Exterior API response:", exteriorData);
+        devLog("📸 Exterior API response:", exteriorData);
 
         if (exteriorData.success) {
           // Handle both nested and flat extractedData structure
@@ -1253,7 +1252,7 @@ export function Step2Documents({
         }
       }
 
-      console.log("📸 Combined image analysis result:", result);
+      devLog("📸 Combined image analysis result:", result);
       return result;
     } catch (error) {
       console.error("Image analysis failed:", error);
@@ -1278,7 +1277,7 @@ export function Step2Documents({
       const currentInteriorCount = getUploadsByType("interior_image").length;
       const maxFiles = Math.min(files.length, 6 - currentInteriorCount);
       if (maxFiles <= 0) {
-        alert("ניתן להעלות עד 6 תמונות פנים בלבד");
+        toast.error("ניתן להעלות עד 6 תמונות פנים בלבד");
         return;
       }
       // Create a new FileList with limited files
@@ -1341,13 +1340,12 @@ export function Step2Documents({
       ),
     );
 
-    // After ALL uploads complete, trigger background processing ONCE for this type
-    // This avoids race conditions from multiple parallel processing triggers
+    // NOTE: Background processing removed - user clicks "עבד מסמכים" to start AI extraction
+    // This separates upload phase from processing phase for better UX
     if (type === "tabu" || type === "condo" || type === "permit") {
-      console.log(
-        `🚀 All uploads complete - triggering background processing for ${type} once`,
+      devLog(
+        `✅ All ${type} uploads complete - ready for processing when user clicks button`,
       );
-      triggerBackgroundProcessing(type as "tabu" | "condo" | "permit");
     }
   };
 
@@ -1381,7 +1379,7 @@ export function Step2Documents({
       formData.append("file", upload.file);
       formData.append("type", upload.type);
 
-      console.log(`🚀 Uploading ${upload.type} file: ${upload.file.name}`);
+      devLog(`🚀 Uploading ${upload.type} file: ${upload.file.name}`);
 
       const response = await fetch(`/api/files/${sessionId}/upload`, {
         method: "POST",
@@ -1393,7 +1391,7 @@ export function Step2Documents({
       }
 
       const result = await response.json();
-      console.log(`✅ Upload successful:`, result);
+      devLog(`✅ Upload successful:`, result);
 
       // Use the complete upload entry from the API response (it has the correct URL)
       const uploadEntry = result.uploadEntry || {};
@@ -1407,7 +1405,7 @@ export function Step2Documents({
               upload.type === "building_image" ||
               upload.type === "interior_image";
 
-            console.log(`✅ Marking upload as completed:`, {
+            devLog(`✅ Marking upload as completed:`, {
               id: u.id,
               type: upload.type,
               isImageType,
@@ -1442,32 +1440,30 @@ export function Step2Documents({
           upload.type === "building_image" ||
           upload.type === "interior_image"
         ) {
-          console.log("🖼️ Calling updateImageData after upload completion");
+          devLog("🖼️ Calling updateImageData after upload completion");
           const processedUploads = updateImageData(updated);
           if (processedUploads) {
-            console.log("🖼️ updateImageData returned processed uploads");
+            devLog("🖼️ updateImageData returned processed uploads");
             return processedUploads;
           } else {
-            console.log("🖼️ updateImageData returned nothing, using updated");
+            devLog("🖼️ updateImageData returned nothing, using updated");
           }
         }
 
         return updated;
       });
 
-      // 🚀 FIRE BACKGROUND PROCESSING IMMEDIATELY AFTER UPLOAD
-      // For document types (tabu, condo, permit), trigger AI extraction right away
-      // Skip if called with skipProcessing=true (parallel uploads handle this at batch level)
+      // Show success toast for upload
+      toast.success(`הקובץ "${upload.file.name}" הועלה בהצלחה`);
+
+      // NOTE: Background processing removed - user clicks "עבד מסמכים" to start AI extraction
+      // This separates upload phase from processing phase for better UX
       if (
-        !options?.skipProcessing &&
-        (upload.type === "tabu" ||
-          upload.type === "condo" ||
-          upload.type === "permit")
+        upload.type === "tabu" ||
+        upload.type === "condo" ||
+        upload.type === "permit"
       ) {
-        console.log(
-          `🚀 Upload complete - firing background processing for ${upload.type}`,
-        );
-        triggerBackgroundProcessing(upload.type);
+        devLog(`✅ Upload complete for ${upload.type} - ready for processing`);
       }
     } catch (error) {
       console.error("❌ Upload failed:", error);
@@ -1490,15 +1486,11 @@ export function Step2Documents({
   ): DocumentUpload[] | undefined => {
     const uploadsToUse = currentUploads || uploads;
 
-    console.log(
-      "🖼️ updateImageData called with",
-      uploadsToUse.length,
-      "uploads",
-    );
+    devLog("🖼️ updateImageData called with", uploadsToUse.length, "uploads");
     const imageUploads = uploadsToUse.filter(
       (u) => u.type === "building_image" || u.type === "interior_image",
     );
-    console.log(
+    devLog(
       "🖼️ Found",
       imageUploads.length,
       "image uploads:",
@@ -1525,10 +1517,10 @@ export function Step2Documents({
       return isImageType && hasPreviewReady && hasValidPreview && isCompleted;
     });
 
-    console.log("🖼️ After filter:", completedImages.length, "completed images");
+    devLog("🖼️ After filter:", completedImages.length, "completed images");
 
     if (completedImages.length === 0) {
-      console.log("🖼️ No completed images, clearing image data");
+      devLog("🖼️ No completed images, clearing image data");
       updateData({
         propertyImages: [],
         selectedImagePreview: null,
@@ -1545,10 +1537,10 @@ export function Step2Documents({
         u.preview !== "data:,",
     );
 
-    console.log("🖼️ After validation:", validUploads.length, "valid uploads");
+    devLog("🖼️ After validation:", validUploads.length, "valid uploads");
 
     if (validUploads.length === 0) {
-      console.log("🖼️ No valid uploads after validation");
+      devLog("🖼️ No valid uploads after validation");
       updateData({
         propertyImages: [],
         selectedImagePreview: null,
@@ -1657,7 +1649,7 @@ export function Step2Documents({
 
     if (!upload) return;
 
-    console.log(`🗑️ Removing upload ${uploadId} (${upload.type})`);
+    devLog(`🗑️ Removing upload ${uploadId} (${upload.type})`);
 
     // Revoke Object URL to free memory (only for blob: URLs, not server URLs)
     if (upload.preview?.startsWith("blob:")) {
@@ -1681,7 +1673,8 @@ export function Step2Documents({
       }
 
       const result = await response.json();
-      console.log(`✅ Upload deleted successfully:`, result);
+      devLog(`✅ Upload deleted successfully:`, result);
+      toast.success("הקובץ נמחק בהצלחה");
 
       // Update local state after successful deletion
       setUploads((prev) => {
@@ -1725,7 +1718,7 @@ export function Step2Documents({
               .map((u) => (u.preview as string).trim())
               .slice(0, 6);
 
-            console.log("🖼️ Updating interior images:", {
+            devLog("🖼️ Updating interior images:", {
               removed: upload.preview,
               remaining: remainingInteriorImages.length,
             });
@@ -1762,7 +1755,7 @@ export function Step2Documents({
                 ? selectedPreview
                 : null;
 
-            console.log("🏢 Updating building images:", {
+            devLog("🏢 Updating building images:", {
               removed: upload.preview,
               remaining: buildingImages.length,
               newSelected: validSelectedPreview,
@@ -1794,8 +1787,8 @@ export function Step2Documents({
       });
     } catch (error) {
       console.error(`❌ Error deleting upload:`, error);
-      alert(
-        `שגיאה במחיקת הקובץ: ${error instanceof Error ? error.message : "Unknown error"}`,
+      toast.error(
+        `שגיאה במחיקת הקובץ: ${error instanceof Error ? error.message : "שגיאה לא ידועה"}`,
       );
     }
   };
@@ -1834,7 +1827,7 @@ export function Step2Documents({
           ? selectedPreview
           : null;
 
-      console.log("Selecting image:", {
+      devLog("Selecting image:", {
         uploadId,
         selectedBuildingImage,
         preview: validSelectedPreview,
@@ -1880,24 +1873,41 @@ export function Step2Documents({
   };
 
   const validation = useCallback(() => {
-    // Step 2 is optional - always allow proceeding to next step
-    // Users can skip document uploads if they want
-    console.log("Step 2 validation: Always valid (optional step)");
-    return true;
-  }, []);
+    // Step 2 is optional - allow proceeding unless AI processing is in progress
+    // Block navigation during processing to prevent users from losing context
+    const isValid = !isProcessing;
+    devLog(
+      "Step 2 validation:",
+      isValid ? "Valid" : "Blocked (processing in progress)",
+    );
+    return isValid;
+  }, [isProcessing]);
 
-  // CRITICAL: Use ref to prevent infinite loops - only call onValidationChange once on mount
+  // Track previous processing state and whether validation has been called
+  const prevProcessingRef = useRef<boolean | null>(null);
   const validationCalledRef = useRef(false);
+
+  // Consolidated validation effect - handles both mount and state changes
   useEffect(() => {
-    if (!validationCalledRef.current) {
-      onValidationChange(true);
+    const shouldBeValid = !isProcessing;
+
+    // Update on mount OR when processing state actually changes
+    if (
+      !validationCalledRef.current ||
+      prevProcessingRef.current !== isProcessing
+    ) {
+      devLog(
+        `🔄 Validation update: processing=${isProcessing}, valid=${shouldBeValid}, initial=${!validationCalledRef.current}`,
+      );
+      onValidationChange(shouldBeValid);
+      prevProcessingRef.current = isProcessing;
       validationCalledRef.current = true;
     }
-  }, []); // Empty dependency array - only run once on mount
+  }, [isProcessing, onValidationChange]);
 
   // Save uploads to session data whenever uploads change
   useEffect(() => {
-    console.log(
+    devLog(
       "🔄 Uploads useEffect triggered, isProcessing:",
       isProcessing,
       "uploads.length:",
@@ -1906,14 +1916,14 @@ export function Step2Documents({
 
     // Don't save uploads during processing to avoid overwriting extracted data
     if (isProcessing) {
-      console.log(
+      devLog(
         "⏸️ Skipping upload save during processing to preserve extracted data",
       );
       return;
     }
 
     if (uploads.length > 0) {
-      console.log("💾 Saving uploads to session:", uploads.length, "uploads");
+      devLog("💾 Saving uploads to session:", uploads.length, "uploads");
 
       // Filter out UI-only fields before saving to database
       const uploadsForDB = uploads.map((upload) => {
@@ -1928,7 +1938,7 @@ export function Step2Documents({
           finalUrl = uploadPreview;
         }
 
-        console.log(`💾 Saving upload ${upload.id}:`, {
+        devLog(`💾 Saving upload ${upload.id}:`, {
           type: upload.type,
           hasUrl: !!uploadUrl,
           hasPreview: !!uploadPreview,
@@ -1954,10 +1964,10 @@ export function Step2Documents({
       });
 
       // Only update uploads, preserve other data like extractedData
-      console.log(
+      devLog(
         "💾 Updating parent data with uploads only, preserving extractedData",
       );
-      console.log(
+      devLog(
         "💾 Uploads being saved (with status field):",
         JSON.stringify(
           uploadsForDB.map((u) => ({
@@ -2448,7 +2458,7 @@ export function Step2Documents({
                         selectiveReprocess,
                       ).some((v) => v);
                       if (!hasSelection) {
-                        alert("אנא בחר לפחות מסמך אחד לעיבוד");
+                        toast.error("אנא בחר לפחות מסמך אחד לעיבוד");
                         return;
                       }
                       processDocuments(selectiveReprocess);
@@ -2528,51 +2538,81 @@ export function Step2Documents({
               </div>
             )}
 
-          {/* Processing State - Enhanced Spinner */}
+          {/* Processing State - Compact Overlay Modal with Accessibility */}
           {isProcessing && (
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-xl p-8 shadow-lg">
-              <div className="text-center">
-                {/* Animated Spinner */}
-                <div className="relative inline-block mb-6">
-                  <div className="w-20 h-20 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <Brain className="w-8 h-8 text-blue-600 animate-pulse" />
+            <div
+              className="fixed inset-0 z-50 flex items-start justify-center pt-24 pointer-events-none"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="processing-title"
+              aria-describedby="processing-status"
+            >
+              {/* Semi-transparent backdrop */}
+              <div className="absolute inset-0 bg-black/20 pointer-events-auto" />
+
+              {/* Compact modal */}
+              <div className="relative bg-white border border-blue-200 rounded-xl p-5 shadow-2xl max-w-md w-full mx-4 pointer-events-auto">
+                <div className="flex items-center gap-4">
+                  {/* Smaller spinner */}
+                  <div className="relative flex-shrink-0" aria-hidden="true">
+                    <div className="w-12 h-12 border-3 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Brain className="w-5 h-5 text-blue-600 animate-pulse" />
+                    </div>
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <h3
+                      id="processing-title"
+                      className="text-base font-bold text-blue-900 mb-1"
+                    >
+                      מעבד מסמכים עם AI...
+                    </h3>
+                    <p
+                      id="processing-status"
+                      className="text-blue-700 text-sm truncate"
+                      aria-live="polite"
+                      aria-atomic="true"
+                    >
+                      {processingStage || "מנתח מסמכים ומחלץ נתונים"}
+                    </p>
+                  </div>
+
+                  {/* Progress percentage with progressbar role */}
+                  <div
+                    className="flex-shrink-0 text-lg font-bold text-blue-600"
+                    role="progressbar"
+                    aria-valuenow={Math.round(processingProgress)}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label={`התקדמות עיבוד: ${Math.round(processingProgress)} אחוז`}
+                  >
+                    {Math.min(100, Math.max(0, Math.round(processingProgress)))}
+                    %
                   </div>
                 </div>
 
-                <h3 className="text-xl font-bold text-blue-900 mb-3">
-                  מעבד מסמכים עם AI...
-                </h3>
-                <p className="text-blue-800 text-base font-medium mb-6">
-                  {processingStage || "מנתח מסמכים ומחלץ נתונים באמצעות AI"}
-                </p>
-
-                {/* Enhanced Progress Bar */}
-                <div className="w-full bg-blue-100 h-3 rounded-full overflow-hidden shadow-inner mb-2">
+                {/* Progress bar with continuous shimmer animation */}
+                <div
+                  className="mt-3 w-full bg-blue-100 h-2 rounded-full overflow-hidden"
+                  aria-hidden="true"
+                >
                   <div
-                    className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 transition-all duration-700 ease-out relative overflow-hidden"
+                    className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 transition-all duration-500 ease-out relative"
                     style={{
-                      width: `${Math.min(100, Math.max(0, processingProgress))}%`,
+                      width: `${Math.min(100, Math.max(5, processingProgress))}%`,
                     }}
                   >
-                    {/* Shimmer effect */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-30 animate-shimmer"></div>
+                    {/* Continuous shimmer effect - always animating */}
+                    <div
+                      className="absolute inset-0 w-full h-full animate-shimmer"
+                      style={{
+                        background:
+                          "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.4) 50%, transparent 100%)",
+                        backgroundSize: "200% 100%",
+                      }}
+                    />
                   </div>
-                </div>
-
-                {/* Progress Percentage */}
-                <div className="flex items-center justify-center gap-2 mb-6">
-                  <div className="text-2xl font-bold text-blue-700">
-                    {Math.min(100, Math.max(0, Math.round(processingProgress)))}
-                  </div>
-                  <div className="text-sm text-blue-600">%</div>
-                </div>
-
-                {/* Tips */}
-                <div className="mt-6 pt-6 border-t border-blue-200">
-                  <p className="text-sm text-blue-600 italic">
-                    ☕ טיפ: זה ייקח כמה דקות, לך תעשה קפה
-                  </p>
                 </div>
               </div>
             </div>
@@ -2600,33 +2640,22 @@ export function Step2Documents({
 
       {/* Validation Summary */}
       <div className="mt-8">
-        {!validation() && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        {/* Show processing-in-progress message when navigation is blocked */}
+        {isProcessing && (
+          <div
+            className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4"
+            role="status"
+            aria-live="polite"
+          >
             <div className="flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-red-600" />
-              <span className="text-red-800 font-medium">
-                יש להעלות את כל המסמכים הנדרשים
+              <Loader2 className="w-5 h-5 text-amber-600 animate-spin" />
+              <span className="text-amber-800 font-medium">
+                עיבוד AI בתהליך - יש להמתין לסיום לפני המעבר לשלב הבא
               </span>
             </div>
-            <ul className="text-red-700 text-sm mt-2 space-y-1">
-              {Object.entries(DOCUMENT_TYPES)
-                .filter(([_, config]) => config.required)
-                .filter(([type, _]) => {
-                  if (type === "building_image" || type === "interior_image") {
-                    return !getUploadsByType(type).some(
-                      (u) => u.status === "completed",
-                    );
-                  }
-                  return !getUploadsByType(type).some(
-                    (u) => u.status === "completed",
-                  );
-                })
-                .map(([type, config]) => (
-                  <li key={type}>• {config.label}</li>
-                ))}
-            </ul>
           </div>
         )}
+        {/* Note: Required documents validation removed - all document types are optional */}
       </div>
     </div>
   );
