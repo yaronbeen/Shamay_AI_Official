@@ -1,37 +1,37 @@
-'use client'
+"use client";
 
-import React from 'react'
-import { FileText, Loader2, ExternalLink } from 'lucide-react'
+import React from "react";
+import { FileText, Loader2, ExternalLink } from "lucide-react";
 
 export type PDFFile = {
-  type?: string
-  name?: string
-  preview?: string
-  url?: string
-  file?: File
-}
+  type?: string;
+  name?: string;
+  preview?: string;
+  url?: string;
+  file?: File;
+};
 
 // Document type labels in Hebrew
 export const getDocumentTypeLabel = (type: string): string => {
-  const normalizedType = (type || '').toLowerCase()
+  const normalizedType = (type || "").toLowerCase();
   const labels: Record<string, string> = {
-    tabu: 'נסח טאבו',
-    permit: 'היתר בניה',
-    building_permit: 'היתר בניה',
-    condo: 'צו בית משותף',
-    condominium_order: 'צו בית משותף',
-    planning: 'מידע תכנוני',
-    planning_sheet: 'מידע תכנוני',
-  }
-  return labels[normalizedType] || type || 'מסמך'
-}
+    tabu: "נסח טאבו",
+    permit: "היתר בניה",
+    building_permit: "היתר בניה",
+    condo: "צו בית משותף",
+    condominium_order: "צו בית משותף",
+    planning: "מידע תכנוני",
+    planning_sheet: "מידע תכנוני",
+  };
+  return labels[normalizedType] || type || "מסמך";
+};
 
 interface Step3PDFPanelProps {
-  files: PDFFile[]
-  currentIndex: number
-  onIndexChange: (index: number) => void
-  loading?: boolean
-  sessionId?: string
+  files: PDFFile[];
+  currentIndex: number;
+  onIndexChange: (index: number) => void;
+  loading?: boolean;
+  sessionId?: string;
 }
 
 export function Step3PDFPanel({
@@ -42,17 +42,22 @@ export function Step3PDFPanel({
   sessionId,
 }: Step3PDFPanelProps) {
   // Bounds check to prevent accessing beyond array length
-  const safeIndex = files.length > 0 ? Math.min(currentIndex, files.length - 1) : 0
-  const currentFile = files[safeIndex]
+  const safeIndex =
+    files.length > 0 ? Math.min(currentIndex, files.length - 1) : 0;
+  const currentFile = files[safeIndex];
 
   const openInNewTab = () => {
-    if (sessionId && typeof window !== 'undefined') {
-      const opened = window.open(`/panel/step3-pdf?sessionId=${sessionId}`, '_blank', 'noopener,noreferrer')
+    if (sessionId && typeof window !== "undefined") {
+      const opened = window.open(
+        `/panel/step3-pdf?sessionId=${sessionId}`,
+        "_blank",
+        "noopener,noreferrer",
+      );
       if (!opened) {
-        console.warn('Popup blocked by browser')
+        console.warn("Popup blocked by browser");
       }
     }
-  }
+  };
 
   return (
     <div className="h-full flex flex-col bg-gray-50">
@@ -81,11 +86,11 @@ export function Step3PDFPanel({
                 onClick={() => onIndexChange(index)}
                 className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                   currentIndex === index
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
               >
-                {getDocumentTypeLabel(file.type || '')}
+                {getDocumentTypeLabel(file.type || "")}
               </button>
             ))}
           </div>
@@ -105,9 +110,9 @@ export function Step3PDFPanel({
           <iframe
             key="pdf-viewer"
             src={currentFile.url}
-            title={currentFile.name || 'מסמך PDF'}
+            title={currentFile.name || "מסמך PDF"}
             className="w-full h-full bg-white"
-            sandbox="allow-same-origin"
+            sandbox="allow-same-origin allow-scripts allow-popups"
             referrerPolicy="no-referrer"
           />
         ) : (
@@ -126,6 +131,5 @@ export function Step3PDFPanel({
         עיין במסמכים ועדכן את השדות בצד שמאל
       </div>
     </div>
-  )
+  );
 }
-
