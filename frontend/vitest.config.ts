@@ -5,6 +5,9 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
+  // Use development mode to ensure React doesn't load in production mode
+  // (fixes "act(...) is not supported in production builds" error)
+  mode: "development",
   test: {
     globals: true,
     environment: "happy-dom",
