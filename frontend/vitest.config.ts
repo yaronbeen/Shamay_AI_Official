@@ -8,6 +8,10 @@ export default defineConfig({
   // Use development mode to ensure React doesn't load in production mode
   // (fixes "act(...) is not supported in production builds" error)
   mode: "development",
+  // Explicitly define NODE_ENV for React
+  define: {
+    "process.env.NODE_ENV": JSON.stringify("development"),
+  },
   test: {
     globals: true,
     environment: "happy-dom",
