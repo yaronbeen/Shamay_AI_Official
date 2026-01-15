@@ -661,7 +661,9 @@ export function generateDocumentHTML(
   ]
     .filter(Boolean)
     .join(", ")
-    .replace(" , ,", " ,");
+    .replace(/,\s*,+/g, ",")
+    .replace(/^,\s*/, "")
+    .replace(/,\s*$/, "");
 
   const headerBlock = `
     <section class="page cover">
