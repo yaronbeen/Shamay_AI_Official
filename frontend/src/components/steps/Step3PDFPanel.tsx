@@ -112,8 +112,6 @@ export function Step3PDFPanel({
             src={currentFile.url}
             title={currentFile.name || "מסמך PDF"}
             className="w-full h-full bg-white"
-            sandbox="allow-same-origin allow-scripts allow-popups"
-            referrerPolicy="no-referrer"
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
