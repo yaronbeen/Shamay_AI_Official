@@ -41,10 +41,12 @@ export function Step3PDFPanel({
   loading = false,
   sessionId,
 }: Step3PDFPanelProps) {
-  // Bounds check to prevent accessing beyond array length
+  // Bounds check to prevent accessing beyond array length (handles both negative and overflow)
   const safeIndex =
-    files.length > 0 ? Math.min(currentIndex, files.length - 1) : 0;
-  const currentFile = files[safeIndex];
+    files.length > 0
+      ? Math.min(Math.max(0, currentIndex), files.length - 1)
+      : -1;
+  const currentFile = safeIndex >= 0 ? files[safeIndex] : null;
 
   const openInNewTab = () => {
     if (sessionId && typeof window !== "undefined") {

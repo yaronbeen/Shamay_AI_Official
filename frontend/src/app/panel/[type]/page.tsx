@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams, useParams } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { Step3FieldsPanel } from "@/components/steps/Step3FieldsPanel";
 import { Step3PDFPanel, PDFFile } from "@/components/steps/Step3PDFPanel";
 import { Step5ValuationPanel } from "@/components/steps/Step5ValuationPanel";
@@ -14,7 +14,26 @@ import {
   ExternalLink,
 } from "lucide-react";
 
-export default function PanelPage() {
+// Session ID validation to prevent IDOR and path traversal attacks
+const SESSION_ID_REGEX = /^[a-zA-Z0-9_-]{8,64}$/;
+function isValidSessionId(id: string | null): id is string {
+  if (!id) return false;
+  return SESSION_ID_REGEX.test(id);
+}
+
+// Allowed panel types for security
+const ALLOWED_PANEL_TYPES = [
+  "step3-fields",
+  "step5-valuation",
+  "step3-pdf",
+  "step5-export",
+] as const;
+type PanelType = (typeof ALLOWED_PANEL_TYPES)[number];
+function isValidPanelType(type: string | undefined): type is PanelType {
+  return !!type && ALLOWED_PANEL_TYPES.includes(type as PanelType);
+}
+
+function PanelContent() {
   const params = useParams<{ type: string }>();
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("sessionId");
@@ -31,14 +50,16 @@ export default function PanelPage() {
 
   useEffect(() => {
     const loadSessionData = async () => {
-      if (!sessionId) {
-        setError("No session ID provided");
+      if (!isValidSessionId(sessionId)) {
+        setError("Invalid or missing session ID");
         setLoading(false);
         return;
       }
 
       try {
-        const response = await fetch(`/api/session/${sessionId}`);
+        const response = await fetch(
+          `/api/session/${encodeURIComponent(sessionId)}`,
+        );
         if (!response.ok) {
           throw new Error("Failed to load session");
         }
@@ -92,14 +113,17 @@ export default function PanelPage() {
   };
 
   const handleExportPDF = async () => {
-    if (!sessionId) return;
+    if (!isValidSessionId(sessionId)) return;
     try {
       setExporting(true);
       setExportStatus("idle");
-      const response = await fetch(`/api/session/${sessionId}/export-pdf`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
+      const response = await fetch(
+        `/api/session/${encodeURIComponent(sessionId)}/export-pdf`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        },
+      );
       if (!response.ok) throw new Error("PDF export failed");
       const contentType = response.headers.get("content-type");
       if (contentType?.includes("application/pdf")) {
@@ -107,16 +131,14 @@ export default function PanelPage() {
         setPdfBlob(blob);
         setExportStatus("success");
         const url = URL.createObjectURL(blob);
-        try {
-          const link = document.createElement("a");
-          link.href = url;
-          link.download = `shamay-valuation-${sessionId}.pdf`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-        } finally {
-          URL.revokeObjectURL(url);
-        }
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `shamay-valuation-${sessionId}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        // Delay URL revocation to allow download to complete
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
       } else {
         throw new Error("Invalid response");
       }
@@ -153,10 +175,52 @@ export default function PanelPage() {
 
   if (error || !data) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <p className="text-red-600 mb-2">שגיאה בטעינת הנתונים</p>
-          <p className="text-gray-500 text-sm">{error}</p>
+      <div
+        className="min-h-screen flex items-center justify-center bg-gray-50"
+        dir="rtl"
+      >
+        <div
+          className="text-center max-w-md p-6 bg-white rounded-lg shadow-sm"
+          role="alert"
+          aria-live="assertive"
+        >
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-100 flex items-center justify-center">
+            <svg
+              className="w-8 h-8 text-red-600"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+          </div>
+          <h1 className="text-xl font-semibold text-gray-900 mb-2">
+            שגיאה בטעינת הנתונים
+          </h1>
+          <p className="text-gray-500 text-sm mb-6">
+            {error ||
+              "לא ניתן לטעון את נתוני השומה. ייתכן שהקישור אינו תקין או שפג תוקף ההפעלה."}
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            >
+              נסה שוב
+            </button>
+            <button
+              onClick={() => (window.location.href = "/wizard")}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+            >
+              חזור לאשף
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -287,7 +351,7 @@ export default function PanelPage() {
       default:
         return (
           <div className="min-h-screen flex items-center justify-center bg-gray-50">
-            <p className="text-gray-600">Unknown panel type: {params.type}</p>
+            <p className="text-gray-600">סוג פאנל לא נתמך</p>
           </div>
         );
     }
@@ -299,5 +363,22 @@ export default function PanelPage() {
         {renderPanel()}
       </div>
     </div>
+  );
+}
+
+export default function PanelPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="text-center">
+            <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
+            <p className="text-gray-600">טוען...</p>
+          </div>
+        </div>
+      }
+    >
+      <PanelContent />
+    </Suspense>
   );
 }

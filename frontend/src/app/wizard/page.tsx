@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Toaster } from "react-hot-toast";
 import { StepIndicator } from "@/components/StepIndicator";
 import { DocumentPreview } from "@/components/DocumentPreview";
 import { NavigationButtons } from "@/components/NavigationButtons";
@@ -66,7 +67,10 @@ function WizardContent() {
 
   // Get step from URL or default to 1
   useEffect(() => {
-    const step = parseInt(searchParams.get("step") || "1");
+    const stepParam = searchParams.get("step");
+    const parsedStep = parseInt(stepParam || "1", 10);
+    // Validate step is within bounds (1-5 for wizard steps)
+    const step = isNaN(parsedStep) ? 1 : Math.max(1, Math.min(5, parsedStep));
     if (step !== currentStep) {
       startTransition(() => {
         setCurrentStep(step);
@@ -98,38 +102,33 @@ function WizardContent() {
   // NAVIGATION HANDLERS
   // ==========================================================================
 
-  const nextStep = async () => {
+  // Centralized navigation logic to avoid DRY violation
+  const navigateToStep = async (targetStep: number) => {
+    if (targetStep < 1 || targetStep > 5) return;
+    await saveManually();
+    startTransition(() => {
+      setCurrentStep(targetStep);
+      setStepKey(targetStep);
+      router.push(`/wizard?step=${targetStep}`);
+    });
+  };
+
+  const nextStep = () => {
     if (currentStep < 5) {
-      await saveManually();
-      const newStep = currentStep + 1;
-      startTransition(() => {
-        setCurrentStep(newStep);
-        setStepKey(newStep);
-        router.push(`/wizard?step=${newStep}`);
-      });
+      navigateToStep(currentStep + 1);
     }
   };
 
-  const prevStep = async () => {
+  const prevStep = () => {
     if (currentStep > 1) {
-      await saveManually();
-      const newStep = currentStep - 1;
-      startTransition(() => {
-        setCurrentStep(newStep);
-        setStepKey(newStep);
-        router.push(`/wizard?step=${newStep}`);
-      });
+      navigateToStep(currentStep - 1);
     }
   };
 
-  const handleStepClick = async (step: number) => {
+  const handleStepClick = (step: number) => {
+    // Allow clicking completed steps or next step only
     if (step <= currentStep || step === currentStep + 1) {
-      await saveManually();
-      startTransition(() => {
-        setCurrentStep(step);
-        setStepKey(step);
-        router.push(`/wizard?step=${step}`);
-      });
+      navigateToStep(step);
     }
   };
 
@@ -208,6 +207,30 @@ function WizardContent() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Toast notifications */}
+      <Toaster
+        position="top-center"
+        reverseOrder={false}
+        toastOptions={{
+          duration: 4000,
+          style: {
+            direction: "rtl",
+          },
+          success: {
+            style: {
+              background: "#10b981",
+              color: "white",
+            },
+          },
+          error: {
+            style: {
+              background: "#ef4444",
+              color: "white",
+            },
+            duration: 5000,
+          },
+        }}
+      />
       {/* Navigation Bar */}
       <nav className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
