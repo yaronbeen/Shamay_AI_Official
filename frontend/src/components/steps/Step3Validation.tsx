@@ -150,7 +150,7 @@ export function Step3Validation({
   // Load session data and provenance
   useEffect(() => {
     const loadSessionData = async () => {
-      if (!sessionId || Object.keys(extractedData).length > 0) return;
+      if (!sessionId) return;
 
       try {
         const [sessionResponse, provenanceResponse] = await Promise.all([
@@ -162,18 +162,21 @@ export function Step3Validation({
 
         const sessionData = await sessionResponse.json();
 
-        // Load extracted data
-        const extractedDataFromSession =
-          sessionData.extractedData || sessionData.data?.extractedData;
-        if (
-          extractedDataFromSession &&
-          Object.keys(extractedDataFromSession).length > 0
-        ) {
-          setExtractedData(extractedDataFromSession);
+        // Load extracted data only if not already populated from props
+        if (Object.keys(extractedData).length === 0) {
+          const extractedDataFromSession =
+            sessionData.extractedData || sessionData.data?.extractedData;
+          if (
+            extractedDataFromSession &&
+            Object.keys(extractedDataFromSession).length > 0
+          ) {
+            setExtractedData(extractedDataFromSession);
+          }
         }
 
-        // Load files
+        // Load files from API only if not already loaded from props
         if (
+          allFiles.length === 0 &&
           sessionData.data?.uploads &&
           Array.isArray(sessionData.data.uploads)
         ) {
@@ -235,6 +238,24 @@ export function Step3Validation({
       setExtractedData(data.extractedData);
     }
   }, [data.extractedData]);
+
+  // Load files from props (primary source - more reliable than API)
+  useEffect(() => {
+    const loadFilesFromProps = async () => {
+      if (
+        data.uploads &&
+        Array.isArray(data.uploads) &&
+        data.uploads.length > 0
+      ) {
+        const files = await getAllFilesFromSessionData(data.uploads);
+        if (files.length > 0) {
+          setAllFiles(files);
+          setFilesLoading(false);
+        }
+      }
+    };
+    loadFilesFromProps();
+  }, [data.uploads]);
 
   const getAllFilesFromSessionData = async (
     sessionUploads: any[],
