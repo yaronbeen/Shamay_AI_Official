@@ -207,7 +207,7 @@ export function CreateValuationModal({
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="title">כותרת השומה</Label>
+            <Label htmlFor="title">כותרת השומה *</Label>
             <Input
               id="title"
               value={formData.title}
@@ -283,16 +283,16 @@ export function CreateValuationModal({
             💡 גוש, חלקה ותת-חלקה ימולאו אוטומטית לאחר העלאת נסח הטאבו בשלב 2
           </p>
 
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-start gap-2">
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? "יוצר..." : "צור שומה"}
+            </Button>
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
             >
               ביטול
-            </Button>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? "יוצר..." : "צור שומה"}
             </Button>
           </div>
         </form>
