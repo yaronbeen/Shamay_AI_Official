@@ -150,7 +150,8 @@ const loadPdfJs = async (): Promise<any> => {
 };
 
 const KonvaImageComponent: React.FC<{ src: string }> = ({ src }) => {
-  const [image] = useImage(src);
+  // Use 'anonymous' crossOrigin to allow canvas export (toDataURL) for cross-origin images
+  const [image] = useImage(src, "anonymous");
   return KonvaImage ? <KonvaImage image={image} /> : null;
 };
 
@@ -1633,6 +1634,7 @@ export default function GarmushkaMeasurementViewer({
   useEffect(() => {
     if (imageUrl) {
       const img = new Image();
+      img.crossOrigin = "anonymous"; // Enable CORS for cross-origin images
       img.onload = () => {
         imageSize.current = { width: img.width, height: img.height };
       };
