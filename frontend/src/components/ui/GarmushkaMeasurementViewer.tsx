@@ -195,6 +195,13 @@ export default function GarmushkaMeasurementViewer({
   const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
   const [previousTool, setPreviousTool] = useState<ToolMode>("pan");
   const [temporaryPanMode, setTemporaryPanMode] = useState<boolean>(false);
+  const [colorPickerShapeId, setColorPickerShapeId] = useState<string | null>(
+    null,
+  );
+  const [showInjectionDialog, setShowInjectionDialog] =
+    useState<boolean>(false);
+  const [injectionUseFullImage, setInjectionUseFullImage] =
+    useState<boolean>(true);
   const [showNameDialog, setShowNameDialog] = useState<boolean>(false);
   const [pendingShapeId, setPendingShapeId] = useState<string | null>(null);
   const [isRenaming, setIsRenaming] = useState<boolean>(false);
@@ -267,6 +274,20 @@ export default function GarmushkaMeasurementViewer({
   useEffect(() => {
     setIsClient(true);
   }, []);
+
+  // Close color picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (colorPickerShapeId) {
+        const target = e.target as HTMLElement;
+        if (!target.closest(".color-picker-container")) {
+          setColorPickerShapeId(null);
+        }
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [colorPickerShapeId]);
 
   // Load saved PNG exports from database
   useEffect(() => {
@@ -914,6 +935,15 @@ export default function GarmushkaMeasurementViewer({
     setShapes((prev) =>
       prev.map((s) => (s.id === id ? { ...s, name: newName } : s)),
     );
+  };
+
+  // Update shape color
+  const updateShapeColor = (id: string, newColor: string) => {
+    saveToHistory();
+    setShapes((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, color: newColor } : s)),
+    );
+    setColorPickerShapeId(null);
   };
 
   // Start editing shape name
@@ -2030,6 +2060,19 @@ export default function GarmushkaMeasurementViewer({
               </button>
 
               <button
+                onClick={() => setShowInjectionDialog(true)}
+                disabled={!imageUrl}
+                className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                  imageUrl
+                    ? "bg-purple-500 text-white hover:bg-purple-600"
+                    : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                }`}
+                title={imageUrl ? "הוסף תשריט למסמך" : "טען קובץ תחילה"}
+              >
+                📄 הוסף למסמך
+              </button>
+
+              <button
                 onClick={clearImage}
                 className="px-4 py-2 rounded-lg text-sm font-medium bg-gray-500 text-white"
               >
@@ -2319,10 +2362,50 @@ export default function GarmushkaMeasurementViewer({
                     >
                       <div className="flex justify-between items-start mb-2">
                         <div className="flex items-center gap-2">
-                          <div
-                            className="w-3 h-3 rounded-full"
-                            style={{ backgroundColor: getShapeColor(shape) }}
-                          />
+                          {/* Color picker for polygons, static dot for other types */}
+                          <div className="relative color-picker-container">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (shape.type === "polygon") {
+                                  setColorPickerShapeId(
+                                    colorPickerShapeId === shape.id
+                                      ? null
+                                      : shape.id,
+                                  );
+                                }
+                              }}
+                              className={`w-5 h-5 rounded-full border-2 ${
+                                shape.type === "polygon"
+                                  ? "cursor-pointer hover:scale-110 transition-transform border-gray-300"
+                                  : "cursor-default border-transparent"
+                              }`}
+                              style={{ backgroundColor: getShapeColor(shape) }}
+                              title={
+                                shape.type === "polygon" ? "לחץ לשינוי צבע" : ""
+                              }
+                            />
+                            {colorPickerShapeId === shape.id && (
+                              <div className="absolute z-20 top-7 right-0 p-2 bg-white rounded-lg shadow-lg border border-gray-200 grid grid-cols-5 gap-1">
+                                {areaColors.map((color) => (
+                                  <button
+                                    key={color}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      updateShapeColor(shape.id, color);
+                                    }}
+                                    className={`w-6 h-6 rounded-full border-2 hover:scale-110 transition-transform ${
+                                      getShapeColor(shape) === color
+                                        ? "border-gray-800 ring-2 ring-blue-400"
+                                        : "border-gray-200"
+                                    }`}
+                                    style={{ backgroundColor: color }}
+                                    title={`בחר צבע`}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </div>
                           {editingShapeId === shape.id ? (
                             <input
                               type="text"
@@ -2564,6 +2647,122 @@ export default function GarmushkaMeasurementViewer({
                 }`}
               >
                 שמור שם
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Injection Dialog */}
+      {showInjectionDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4">📄 הוספת תשריט למסמך</h3>
+
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                איזה תמונה להוסיף?
+              </label>
+              <div className="space-y-3">
+                <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                  <input
+                    type="radio"
+                    name="imageType"
+                    checked={injectionUseFullImage}
+                    onChange={() => setInjectionUseFullImage(true)}
+                    className="w-4 h-4 text-purple-600"
+                  />
+                  <div>
+                    <span className="font-medium">תמונה מלאה</span>
+                    <p className="text-sm text-gray-500">
+                      כל המדידות כפי שמופיעות על המסך
+                    </p>
+                  </div>
+                </label>
+                <label
+                  className={`flex items-center gap-3 p-3 border rounded-lg ${
+                    saveCropArea
+                      ? "cursor-pointer hover:bg-gray-50"
+                      : "opacity-50 cursor-not-allowed"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="imageType"
+                    checked={!injectionUseFullImage}
+                    onChange={() =>
+                      saveCropArea && setInjectionUseFullImage(false)
+                    }
+                    disabled={!saveCropArea}
+                    className="w-4 h-4 text-purple-600"
+                  />
+                  <div>
+                    <span className="font-medium">אזור חתוך/צבוע</span>
+                    <p className="text-sm text-gray-500">
+                      {saveCropArea
+                        ? "השתמש באזור שנבחר"
+                        : "לא הוגדר אזור חיתוך"}
+                    </p>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6 text-sm text-blue-800">
+              💡 לאחר הלחיצה על &quot;המשך&quot;, לחץ על המיקום הרצוי בתצוגה
+              המקדימה של המסמך
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowInjectionDialog(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              >
+                ביטול
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    // Generate the image
+                    let imageData: string | null = null;
+                    const stage = stageRef.current;
+
+                    if (injectionUseFullImage) {
+                      if (stage) {
+                        imageData = stage.toDataURL({
+                          mimeType: "image/png",
+                          quality: 1,
+                        });
+                      }
+                    } else {
+                      imageData = await generateCroppedImage();
+                    }
+
+                    if (!imageData) {
+                      alert("שגיאה ביצירת התמונה");
+                      return;
+                    }
+
+                    // Store the image data for injection
+                    // This will be picked up by the preview component
+                    const event = new CustomEvent("garmushka-inject", {
+                      detail: {
+                        imageData,
+                        useFullImage: injectionUseFullImage,
+                      },
+                    });
+                    window.dispatchEvent(event);
+
+                    setShowInjectionDialog(false);
+                    alert("לחץ על המיקום הרצוי בתצוגה המקדימה של המסמך");
+                  } catch (err) {
+                    console.error("Failed to prepare injection:", err);
+                    alert("שגיאה בהכנת התמונה להזרקה");
+                  }
+                }}
+                className="px-4 py-2 rounded-lg text-white font-medium bg-purple-500 hover:bg-purple-600"
+              >
+                המשך לבחירת מיקום
               </button>
             </div>
           </div>

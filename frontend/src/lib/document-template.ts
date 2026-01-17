@@ -1173,6 +1173,35 @@ export function generateDocumentHTML(
     (data as any).customTables,
   );
 
+  // Generate Garmushka injections section if any exist
+  const garmushkaInjectionsSection = (() => {
+    const injections = data.garmushkaMeasurements?.injections;
+    if (!injections || injections.length === 0) return "";
+
+    // Sort by position
+    const sortedInjections = [...injections].sort(
+      (a, b) => a.position.percentFromTop - b.position.percentFromTop,
+    );
+
+    return sortedInjections
+      .map(
+        (injection, index) => `
+      <div class="garmushka-injection section-block" data-garmushka-id="${injection.id}" style="margin: 20px 0; page-break-inside: avoid;">
+        <div class="sub-title" style="margin-bottom: 10px;">תשריט מדידות ${index > 0 ? index + 1 : ""}</div>
+        <figure style="margin: 0; text-align: center;">
+          <img
+            src="${injection.imageData}"
+            alt="תשריט מדידות גרמושקה"
+            style="max-width: 100%; border: 1px solid #cccccc; border-radius: 4px;"
+            data-managed-image="true"
+          />
+        </figure>
+      </div>
+    `,
+      )
+      .join("");
+  })();
+
   const bodyContent = `
     <div class="document">
       ${headerBlock}
@@ -1182,6 +1211,7 @@ export function generateDocumentHTML(
       ${planningSection}
       ${considerationsSection}
       ${valuationSection}
+      ${garmushkaInjectionsSection}
       ${summarySection}
       ${customTablesSection}
     </div>

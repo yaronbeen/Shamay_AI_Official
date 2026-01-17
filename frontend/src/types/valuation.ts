@@ -174,6 +174,16 @@ export interface GarmushkaMeasurement {
   color: string;
 }
 
+export interface GarmushkaInjection {
+  id: string;
+  imageData: string; // Base64 PNG
+  position: {
+    percentFromTop: number; // 0-100
+  };
+  useFullImage: boolean;
+  createdAt: string;
+}
+
 export interface GarmushkaMeasurements {
   measurementTable: GarmushkaMeasurement[];
   metersPerPixel: number;
@@ -181,6 +191,7 @@ export interface GarmushkaMeasurements {
   isCalibrated: boolean;
   fileName: string;
   pngExport?: string;
+  injections?: GarmushkaInjection[]; // Multiple images supported
 }
 
 // =============================================================================
