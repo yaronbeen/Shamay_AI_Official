@@ -147,6 +147,63 @@ interface ColumnGroup {
   columns: string[];
 }
 
+// Configuration constants
+const CONFIG = {
+  SANITIZATION: {
+    MAX_NUMERIC_LENGTH: 10,
+    MAX_TEXT_LENGTH: 200,
+    MAX_SESSION_ID_LENGTH: 64,
+  },
+  SEARCH: {
+    DEBOUNCE_MS: 500,
+    MAX_BLOCK_NUMBERS: 20,
+  },
+  PERSISTENCE: {
+    DEBOUNCE_MS: 1000,
+  },
+  FILTERS: {
+    MIN_CONSTRUCTION_YEAR: 1900,
+  },
+} as const;
+
+// Input sanitization helpers - defined at module level for performance
+const sanitizeNumeric = (input: string): string =>
+  input
+    .replace(/[^0-9]/g, "")
+    .substring(0, CONFIG.SANITIZATION.MAX_NUMERIC_LENGTH);
+
+const sanitizeText = (
+  input: string,
+  maxLen: number = CONFIG.SANITIZATION.MAX_TEXT_LENGTH,
+): string =>
+  input
+    .substring(0, maxLen)
+    .replace(/[<>"'`;\\{}[\]()&|]/g, "")
+    .trim();
+
+/**
+ * Parse block_of_land format: "GGGGGGG-PPPP-SSS-XX"
+ * where G=gush, P=parcel, S=sub-parcel
+ */
+interface ParsedBlockOfLand {
+  block: number | null;
+  parcel: number | null;
+  subParcel: number | null;
+}
+
+const parseBlockOfLand = (
+  blockOfLand: string | null | undefined,
+): ParsedBlockOfLand => {
+  if (!blockOfLand) return { block: null, parcel: null, subParcel: null };
+
+  const parts = blockOfLand.split("-");
+  return {
+    block: parts[0] ? parseInt(parts[0], 10) || null : null,
+    parcel: parts[1] ? parseInt(parts[1], 10) || null : null,
+    subParcel: parts[2] ? parseInt(parts[2], 10) || null : null,
+  };
+};
+
 const COLUMN_GROUPS: ColumnGroup[] = [
   {
     key: "basic",
@@ -222,8 +279,15 @@ export default function ComparableDataViewer({
   sessionId,
   onAnalysisComplete,
 }: ComparableDataViewerProps) {
-  // Generate storage key based on sessionId
-  const storageKey = `comparable-data-${sessionId || "default"}`;
+  // Sanitize session ID for storage key - only allow alphanumeric and hyphens
+  const sanitizeSessionId = (id: string | undefined): string => {
+    if (!id || typeof id !== "string") return "default";
+    const sanitized = id.replace(/[^a-zA-Z0-9-]/g, "").substring(0, 64);
+    return sanitized || "default";
+  };
+
+  // Generate storage key based on sanitized sessionId
+  const storageKey = `comparable-data-${sanitizeSessionId(sessionId)}`;
 
   // Helper to load persisted state
   const loadPersistedState = () => {
@@ -266,6 +330,109 @@ export default function ComparableDataViewer({
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">(
     persistedState?.sortDirection || "desc",
   );
+
+  // Edit mode state
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingCell, setEditingCell] = useState<{
+    transactionId: number;
+    field: string;
+    value: string;
+  } | null>(null);
+
+  // Track manually removed rows
+  const [removedRowIds, setRemovedRowIds] = useState<Set<number>>(
+    new Set(persistedState?.removedRowIds || []),
+  );
+
+  // Block filter for results (when searching multiple blocks)
+  const [resultBlockFilter, setResultBlockFilter] = useState<string>(
+    persistedState?.resultBlockFilter || "all",
+  );
+
+  // Helper to update a transaction field
+  const updateTransaction = useCallback(
+    (transactionId: number, field: string, value: string | number) => {
+      setTransactions((prev) =>
+        prev.map((t) =>
+          t.id === transactionId ? { ...t, [field]: value } : t,
+        ),
+      );
+    },
+    [],
+  );
+
+  // Helper to remove a row
+  const removeRow = useCallback((transactionId: number) => {
+    setRemovedRowIds((prev) => new Set([...prev, transactionId]));
+    // Also remove from selected if selected
+    setSelectedIds((prev) => {
+      const newSet = new Set(prev);
+      newSet.delete(transactionId);
+      return newSet;
+    });
+  }, []);
+
+  // Helper to restore a removed row
+  const restoreRow = useCallback((transactionId: number) => {
+    setRemovedRowIds((prev) => {
+      const newSet = new Set(prev);
+      newSet.delete(transactionId);
+      return newSet;
+    });
+  }, []);
+
+  /**
+   * Pre-computed map of transaction IDs to block numbers for O(1) lookups.
+   * Uses parseBlockOfLand helper for consistent parsing.
+   */
+  const transactionBlockMap = useMemo(() => {
+    const map = new Map<number, string | null>();
+    for (const t of transactions) {
+      const { block } = parseBlockOfLand(t.block_of_land);
+      map.set(t.id, block !== null ? String(block) : null);
+    }
+    return map;
+  }, [transactions]);
+
+  // Get unique block numbers from transactions EXCLUDING removed rows (for filtering)
+  // Uses transactionBlockMap to avoid re-parsing strings
+  const uniqueBlocksInResults = useMemo(() => {
+    const blocks = new Set<string>();
+    for (const t of transactions) {
+      if (removedRowIds.has(t.id)) continue;
+      const block = transactionBlockMap.get(t.id);
+      if (block) blocks.add(block);
+    }
+    return Array.from(blocks).sort((a, b) => parseInt(a) - parseInt(b));
+  }, [transactions, removedRowIds, transactionBlockMap]);
+
+  // Filtered transactions (excludes removed rows and applies block filter)
+  // Uses transactionBlockMap for O(1) lookups instead of string parsing
+  const visibleTransactions = useMemo(() => {
+    return transactions.filter((t) => {
+      // Exclude removed rows
+      if (removedRowIds.has(t.id)) return false;
+
+      // Apply block filter if not "all"
+      if (resultBlockFilter !== "all") {
+        const blockNum = transactionBlockMap.get(t.id);
+        // If no block or doesn't match filter, exclude
+        if (!blockNum || blockNum !== resultBlockFilter) return false;
+      }
+
+      return true;
+    });
+  }, [transactions, removedRowIds, resultBlockFilter, transactionBlockMap]);
+
+  // Reset block filter if current selection becomes invalid (e.g., all rows from that block were removed)
+  useEffect(() => {
+    if (
+      resultBlockFilter !== "all" &&
+      !uniqueBlocksInResults.includes(resultBlockFilter)
+    ) {
+      setResultBlockFilter("all");
+    }
+  }, [uniqueBlocksInResults, resultBlockFilter]);
 
   // Column visibility state - 'basic' is always visible
   const [visibleGroups, setVisibleGroups] = useState<Set<ColumnGroupKey>>(
@@ -443,7 +610,7 @@ export default function ComparableDataViewer({
       surfaceMin: Math.max(0, propertyArea - 15),
       surfaceMax: propertyArea + 15,
       yearMin: Math.max(1900, propertyYear - 10),
-      yearMax: Math.min(new Date().getFullYear() + 5, propertyYear + 10),
+      yearMax: Math.min(new Date().getFullYear(), propertyYear + 10),
       dateFrom: "",
       dateTo: "",
     },
@@ -485,6 +652,8 @@ export default function ComparableDataViewer({
       const stateToSave = {
         transactions,
         selectedIds: Array.from(selectedIds),
+        removedRowIds: Array.from(removedRowIds),
+        resultBlockFilter,
         analysisResult,
         showSection52,
         finalPricePerSqm,
@@ -512,6 +681,8 @@ export default function ComparableDataViewer({
   }, [
     transactions,
     selectedIds,
+    removedRowIds,
+    resultBlockFilter,
     analysisResult,
     showSection52,
     finalPricePerSqm,
@@ -567,29 +738,47 @@ export default function ComparableDataViewer({
           offset: String(page * pageSize),
         });
 
-        // Primary search filters based on search type
+        // Primary search filters based on search type (with sanitization)
         switch (filters.searchType) {
           case "block":
-            if (filters.blockNumber)
-              params.append("block_number", filters.blockNumber);
+            if (filters.blockNumber) {
+              const sanitized = sanitizeNumeric(filters.blockNumber);
+              if (sanitized) params.append("block_number", sanitized);
+            }
             break;
           case "blockRange":
-            if (filters.blockRangeFrom)
-              params.append("block_range_from", filters.blockRangeFrom);
-            if (filters.blockRangeTo)
-              params.append("block_range_to", filters.blockRangeTo);
+            if (filters.blockRangeFrom) {
+              const sanitized = sanitizeNumeric(filters.blockRangeFrom);
+              if (sanitized) params.append("block_range_from", sanitized);
+            }
+            if (filters.blockRangeTo) {
+              const sanitized = sanitizeNumeric(filters.blockRangeTo);
+              if (sanitized) params.append("block_range_to", sanitized);
+            }
             break;
           case "street":
-            if (filters.streetName) params.append("street", filters.streetName);
+            if (filters.streetName) {
+              const sanitized = sanitizeText(filters.streetName);
+              if (sanitized) params.append("street", sanitized);
+            }
             break;
           case "city":
-            if (filters.cityName) params.append("city", filters.cityName);
+            if (filters.cityName) {
+              const sanitized = sanitizeText(filters.cityName, 100);
+              if (sanitized) params.append("city", sanitized);
+            }
             break;
         }
 
-        // Multiple block numbers (for chips)
+        // Multiple block numbers (for chips) - with sanitization and limit
         if (filters.blockNumbers && filters.blockNumbers.length > 0) {
-          params.append("block_numbers", filters.blockNumbers.join(","));
+          const sanitizedBlocks = filters.blockNumbers
+            .map((b) => sanitizeNumeric(b))
+            .filter((b) => b.length > 0)
+            .slice(0, 20);
+          if (sanitizedBlocks.length > 0) {
+            params.append("block_numbers", sanitizedBlocks.join(","));
+          }
         }
 
         // Surface area range
@@ -624,20 +813,26 @@ export default function ComparableDataViewer({
           params.append("sale_value_max", String(filters.saleValueMax));
         }
 
-        // Property type
+        // Property type (sanitize to prevent injection)
         if (filters.propertyType && filters.propertyType !== "all") {
-          params.append("asset_type", filters.propertyType);
+          params.append("asset_type", sanitizeText(filters.propertyType, 50));
         }
 
-        // Rooms
+        // Rooms (sanitize to numeric only)
         if (filters.rooms && filters.rooms !== "all") {
-          params.append("rooms", filters.rooms);
+          const sanitized = sanitizeNumeric(filters.rooms);
+          if (sanitized) params.append("rooms", sanitized);
         }
 
-        // Parcel range
-        if (filters.parcelFrom)
-          params.append("parcel_from", filters.parcelFrom);
-        if (filters.parcelTo) params.append("parcel_to", filters.parcelTo);
+        // Parcel range (sanitize to alphanumeric)
+        if (filters.parcelFrom) {
+          const sanitized = sanitizeNumeric(filters.parcelFrom);
+          if (sanitized) params.append("parcel_from", sanitized);
+        }
+        if (filters.parcelTo) {
+          const sanitized = sanitizeNumeric(filters.parcelTo);
+          if (sanitized) params.append("parcel_to", sanitized);
+        }
 
         console.log("🔍 Searching with params:", Object.fromEntries(params));
 
@@ -663,6 +858,8 @@ export default function ComparableDataViewer({
           }
           setTransactions(result.data || []);
           setHasMore(result.pagination?.hasMore || false);
+          // Reset block filter when new results arrive
+          setResultBlockFilter("all");
 
           if (result.data.length === 0) {
             setError(
@@ -740,10 +937,11 @@ export default function ComparableDataViewer({
     });
   };
 
-  // Select/deselect all
+  // Select/deselect all (only visible transactions)
   const selectAll = () => {
-    const allIds = transactions.map((t) => t.id);
-    setSelectedIds(new Set(allIds));
+    // Only select visible transactions (respects removed rows and block filter)
+    const visibleIds = visibleTransactions.map((t) => t.id);
+    setSelectedIds(new Set(visibleIds));
   };
 
   const deselectAll = () => {
@@ -1050,36 +1248,15 @@ export default function ComparableDataViewer({
   // Format parcel ID (block_of_land) from "006770-0049-014-00" to "6770/49"
   const formatParcelId = (parcelId: string | null | undefined): string => {
     if (!parcelId) return "N/A";
-
-    try {
-      // Split by "-" to get parts: [006770, 0049, 014, 00]
-      const parts = parcelId.split("-");
-      if (parts.length < 2) return parcelId; // Return original if format is unexpected
-
-      // First part is block (gush): remove leading zeros
-      const block = parseInt(parts[0], 10);
-      // Second part is parcel (helka): remove leading zeros
-      const parcel = parseInt(parts[1], 10);
-
-      // Return formatted as "6770/49"
-      if (isNaN(block) || isNaN(parcel)) return parcelId;
-      return `${block}/${parcel}`;
-    } catch {
-      return parcelId;
-    }
+    const { block, parcel } = parseBlockOfLand(parcelId);
+    if (block === null || parcel === null) return parcelId;
+    return `${block}/${parcel}`;
   };
 
   // Format sub-chelka from block_of_land "006770-0049-014-00" -> "14"
   const formatSubChelka = (parcelId: string | null | undefined): string => {
-    if (!parcelId) return "-";
-    try {
-      const parts = parcelId.split("-");
-      if (parts.length < 3) return "-";
-      const subChelka = parseInt(parts[2], 10);
-      return isNaN(subChelka) || subChelka === 0 ? "-" : String(subChelka);
-    } catch {
-      return "-";
-    }
+    const { subParcel } = parseBlockOfLand(parcelId);
+    return subParcel !== null && subParcel !== 0 ? String(subParcel) : "-";
   };
 
   // Format boolean fields (1/0 or true/false) to כן/לא
@@ -1127,9 +1304,9 @@ export default function ComparableDataViewer({
 
   // Sort transactions based on current sort state
   const sortedTransactions = useMemo(() => {
-    if (!sortColumn) return transactions;
+    if (!sortColumn) return visibleTransactions;
 
-    const sorted = [...transactions].sort((a, b) => {
+    const sorted = [...visibleTransactions].sort((a, b) => {
       let aValue: any = a[sortColumn as keyof ComparableTransaction];
       let bValue: any = b[sortColumn as keyof ComparableTransaction];
 
@@ -1210,7 +1387,7 @@ export default function ComparableDataViewer({
     });
 
     return sorted;
-  }, [transactions, sortColumn, sortDirection]);
+  }, [visibleTransactions, sortColumn, sortDirection]);
 
   // Render sort indicator icon
   const renderSortIcon = (column: string) => {
@@ -1221,6 +1398,82 @@ export default function ComparableDataViewer({
       <span className="text-blue-600 text-xs">↑</span>
     ) : (
       <span className="text-blue-600 text-xs">↓</span>
+    );
+  };
+
+  // Editable cell component for inline editing
+  const EditableCell = ({
+    transactionId,
+    field,
+    value,
+    type = "text",
+    formatter,
+    className = "",
+  }: {
+    transactionId: number;
+    field: string;
+    value: string | number | null | undefined;
+    type?: "text" | "number";
+    formatter?: (val: any) => string;
+    className?: string;
+  }) => {
+    const isEditing =
+      editingCell?.transactionId === transactionId &&
+      editingCell?.field === field;
+
+    const displayValue = formatter ? formatter(value) : (value ?? "-");
+
+    if (!isEditMode) {
+      return <span className={className}>{displayValue}</span>;
+    }
+
+    if (isEditing) {
+      return (
+        <input
+          type={type}
+          autoFocus
+          defaultValue={value ?? ""}
+          className="w-full px-1 py-0.5 text-sm border border-orange-400 rounded bg-orange-50 focus:outline-none focus:ring-1 focus:ring-orange-500"
+          onBlur={(e) => {
+            const newValue =
+              type === "number"
+                ? parseFloat(e.target.value) || 0
+                : e.target.value;
+            updateTransaction(transactionId, field, newValue);
+            setEditingCell(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              const newValue =
+                type === "number"
+                  ? parseFloat((e.target as HTMLInputElement).value) || 0
+                  : (e.target as HTMLInputElement).value;
+              updateTransaction(transactionId, field, newValue);
+              setEditingCell(null);
+            } else if (e.key === "Escape") {
+              setEditingCell(null);
+            }
+          }}
+          onClick={(e) => e.stopPropagation()}
+        />
+      );
+    }
+
+    return (
+      <span
+        className={`${className} cursor-pointer hover:bg-orange-100 px-1 rounded border border-transparent hover:border-orange-300`}
+        onClick={(e) => {
+          e.stopPropagation();
+          setEditingCell({
+            transactionId,
+            field,
+            value: String(value ?? ""),
+          });
+        }}
+        title="לחץ לעריכה"
+      >
+        {displayValue}
+      </span>
     );
   };
 
@@ -1462,10 +1715,21 @@ export default function ComparableDataViewer({
           </div>
         </div>
 
-        {/* Block Chips (for multiple blocks) */}
-        {filters.blockNumbers.length > 0 && (
-          <div className="flex flex-wrap gap-2 p-2 bg-white rounded-md border border-gray-200">
-            <span className="text-sm text-gray-600">גושים:</span>
+        {/* Block Chips (for multiple blocks) - Always visible when searchType is block */}
+        {filters.searchType === "block" && (
+          <div className="flex flex-wrap gap-2 p-3 bg-blue-50 rounded-md border border-blue-200">
+            <span className="text-sm font-medium text-blue-700 self-center">
+              גושים נבחרים (
+              {filters.blockNumbers.length + (filters.blockNumber ? 1 : 0)}):
+            </span>
+            {/* Show current input as a chip if it exists */}
+            {filters.blockNumber && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-200 text-blue-900 rounded-md text-sm font-medium border border-blue-300">
+                {filters.blockNumber}
+                <span className="text-blue-600 text-xs">(נוכחי)</span>
+              </span>
+            )}
+            {/* Show added blocks as chips */}
             {filters.blockNumbers.map((block, index) => (
               <span
                 key={index}
@@ -1488,6 +1752,11 @@ export default function ComparableDataViewer({
                 </button>
               </span>
             ))}
+            {filters.blockNumbers.length === 0 && !filters.blockNumber && (
+              <span className="text-sm text-blue-500 italic">
+                הזן מספר גוש ולחץ "+ הוסף" לחיפוש במספר גושים
+              </span>
+            )}
           </div>
         )}
 
@@ -1693,36 +1962,51 @@ export default function ComparableDataViewer({
           </div>
 
           {/* שנת בנייה (Construction Year) */}
-          <div>
+          <div className="min-w-0 overflow-hidden">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               שנת בנייה
             </label>
-            <div className="flex gap-2 items-center">
+            <div className="flex gap-1 items-center">
               <input
                 type="number"
                 value={filters.yearMin}
-                onChange={(e) =>
+                min={1900}
+                max={new Date().getFullYear()}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value, 10);
+                  const currentYear = new Date().getFullYear();
+                  const clampedValue = Math.max(
+                    1900,
+                    Math.min(currentYear, value || 1900),
+                  );
                   setFilters((prev) => ({
                     ...prev,
-                    yearMin: parseInt(e.target.value, 10) || 1900,
-                  }))
-                }
+                    yearMin: clampedValue,
+                  }));
+                }}
                 placeholder="מ"
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="flex-1 min-w-[60px] max-w-[80px] px-2 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
               />
-              <span className="text-gray-500">-</span>
+              <span className="text-gray-500 flex-shrink-0">-</span>
               <input
                 type="number"
                 value={filters.yearMax}
-                onChange={(e) =>
+                min={1900}
+                max={new Date().getFullYear()}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value, 10);
+                  const currentYear = new Date().getFullYear();
+                  const clampedValue = Math.max(
+                    1900,
+                    Math.min(currentYear, value || currentYear),
+                  );
                   setFilters((prev) => ({
                     ...prev,
-                    yearMax:
-                      parseInt(e.target.value, 10) || new Date().getFullYear(),
-                  }))
-                }
+                    yearMax: clampedValue,
+                  }));
+                }}
                 placeholder="עד"
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="flex-1 min-w-[60px] max-w-[80px] px-2 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
               />
             </div>
           </div>
@@ -1735,7 +2019,11 @@ export default function ComparableDataViewer({
 
       {/* Error Message */}
       {error && (
-        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center justify-between">
+        <div
+          role="alert"
+          aria-live="polite"
+          className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center justify-between"
+        >
           <div className="flex items-center gap-2 text-yellow-700">
             <AlertCircle className="w-4 h-4" />
             <span className="text-sm">{error}</span>
@@ -1743,6 +2031,7 @@ export default function ComparableDataViewer({
           <button
             onClick={() => setError(null)}
             className="text-yellow-500 hover:text-yellow-700"
+            aria-label="סגור הודעה"
           >
             <X className="w-4 h-4" />
           </button>
@@ -1780,14 +2069,111 @@ export default function ComparableDataViewer({
         </div>
       )}
 
+      {/* Empty State - Filter Results in No Visible Transactions */}
+      {!isLoading &&
+        transactions.length > 0 &&
+        visibleTransactions.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-12 text-center bg-amber-50 rounded-lg border border-amber-200">
+            <SlidersHorizontal className="w-12 h-12 text-amber-300 mb-4" />
+            <h4 className="text-lg font-medium text-amber-700 mb-2">
+              אין עסקאות התואמות לסינון
+            </h4>
+            <p className="text-sm text-amber-600 max-w-md mb-4">
+              {resultBlockFilter !== "all"
+                ? `לא נמצאו עסקאות בגוש ${resultBlockFilter} לאחר החרגות`
+                : "כל העסקאות הוסתרו. לחץ על 'שחזר שורות' להחזרתן."}
+            </p>
+            <div className="flex gap-2">
+              {resultBlockFilter !== "all" && (
+                <button
+                  onClick={() => setResultBlockFilter("all")}
+                  className="px-4 py-2 text-sm bg-amber-100 text-amber-700 rounded hover:bg-amber-200"
+                >
+                  הצג כל הגושים
+                </button>
+              )}
+              {removedRowIds.size > 0 && (
+                <button
+                  onClick={() => setRemovedRowIds(new Set())}
+                  className="px-4 py-2 text-sm bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
+                >
+                  שחזר {removedRowIds.size} שורות
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
       {/* Results Table */}
       {!isLoading && transactions.length > 0 && (
         <div className="mb-6">
           <div className="flex items-center justify-between mb-3">
-            <h4 className="font-semibold text-gray-900">
-              נמצאו {transactions.length} עסקאות{hasMore ? "+" : ""}
-            </h4>
+            <div className="flex items-center gap-3">
+              <h4 className="font-semibold text-gray-900">
+                נמצאו {visibleTransactions.length} עסקאות
+                {removedRowIds.size > 0 && (
+                  <span className="text-sm font-normal text-gray-500 mr-1">
+                    ({removedRowIds.size} הוסתרו)
+                  </span>
+                )}
+                {hasMore ? "+" : ""}
+              </h4>
+              {/* Edit Mode Toggle */}
+              <button
+                onClick={() => setIsEditMode(!isEditMode)}
+                className={`text-xs px-3 py-1 rounded flex items-center gap-1 ${
+                  isEditMode
+                    ? "bg-orange-500 text-white hover:bg-orange-600"
+                    : "bg-orange-100 text-orange-700 hover:bg-orange-200"
+                }`}
+                title={
+                  isEditMode
+                    ? "צא ממצב עריכה"
+                    : "מצב עריכה - ערוך תאים, מחק שורות"
+                }
+              >
+                {isEditMode ? "✓ סיים עריכה" : "✎ ערוך טבלה"}
+              </button>
+
+              {/* Block filter dropdown - show when multiple blocks in results */}
+              {uniqueBlocksInResults.length > 1 && (
+                <div className="flex items-center gap-1">
+                  <label
+                    htmlFor="result-block-filter"
+                    className="text-xs text-gray-600"
+                  >
+                    סנן גוש:
+                  </label>
+                  <select
+                    id="result-block-filter"
+                    value={resultBlockFilter}
+                    onChange={(e) => setResultBlockFilter(e.target.value)}
+                    className="text-xs px-2 py-1 border border-gray-300 rounded bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    aria-label="סנן תוצאות לפי גוש"
+                  >
+                    <option value="all">
+                      כל הגושים ({uniqueBlocksInResults.length})
+                    </option>
+                    {uniqueBlocksInResults.map((block) => (
+                      <option key={block} value={block}>
+                        גוש {block}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
             <div className="flex gap-2">
+              {/* Restore removed rows button */}
+              {removedRowIds.size > 0 && (
+                <button
+                  onClick={() => setRemovedRowIds(new Set())}
+                  className="text-xs px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
+                  title="שחזר את כל השורות שהוסתרו"
+                >
+                  שחזר {removedRowIds.size} שורות
+                </button>
+              )}
               <button
                 onClick={exportToCSV}
                 className="text-xs px-3 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200"
@@ -1867,8 +2253,16 @@ export default function ComparableDataViewer({
               <table className="min-w-max text-sm" dir="rtl">
                 <thead className="bg-gray-100 sticky top-0 z-10">
                   <tr className="text-right whitespace-nowrap">
+                    {/* Delete action column - only in edit mode */}
+                    {isEditMode && (
+                      <th className="p-2 w-10 bg-orange-100 text-orange-700 text-xs sticky right-0 z-20">
+                        מחק
+                      </th>
+                    )}
                     {/* Checkbox - always visible */}
-                    <th className="p-2 w-12 sticky right-0 bg-gray-100 z-20">
+                    <th
+                      className={`p-2 w-12 bg-gray-100 z-20 ${isEditMode ? "sticky right-10" : "sticky right-0"}`}
+                    >
                       בחירה
                     </th>
 
@@ -2100,10 +2494,15 @@ export default function ComparableDataViewer({
                         key={transaction.id}
                         className={`border-t cursor-pointer hover:bg-gray-50 whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset ${
                           isSelected ? "bg-blue-50" : ""
-                        }`}
-                        onClick={() => toggleSelection(transaction.id)}
+                        } ${isEditMode ? "hover:bg-orange-50" : ""}`}
+                        onClick={() =>
+                          !isEditMode && toggleSelection(transaction.id)
+                        }
                         onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
+                          if (
+                            !isEditMode &&
+                            (e.key === "Enter" || e.key === " ")
+                          ) {
                             e.preventDefault();
                             toggleSelection(transaction.id);
                           }
@@ -2112,9 +2511,26 @@ export default function ComparableDataViewer({
                         role="row"
                         aria-selected={isSelected}
                       >
+                        {/* Delete button - only in edit mode */}
+                        {isEditMode && (
+                          <td
+                            className={`p-1 text-center sticky right-0 z-10 bg-orange-50`}
+                          >
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeRow(transaction.id);
+                              }}
+                              className="p-1 text-red-500 hover:text-red-700 hover:bg-red-100 rounded"
+                              title="הסר שורה מהטבלה"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </td>
+                        )}
                         {/* Checkbox - always visible */}
                         <td
-                          className={`p-2 text-center sticky right-0 z-10 ${isSelected ? "bg-blue-50" : "bg-white"}`}
+                          className={`p-2 text-center z-10 ${isSelected ? "bg-blue-50" : "bg-white"} ${isEditMode ? "sticky right-10" : "sticky right-0"}`}
                         >
                           <input
                             type="checkbox"
@@ -2146,34 +2562,72 @@ export default function ComparableDataViewer({
                           </td>
                         )}
                         {isColumnVisible("rooms") && (
-                          <td className="p-2">{transaction.rooms ?? "-"}</td>
+                          <td className="p-2">
+                            <EditableCell
+                              transactionId={transaction.id}
+                              field="rooms"
+                              value={transaction.rooms}
+                              type="number"
+                            />
+                          </td>
                         )}
                         {isColumnVisible("floor") && (
-                          <td className="p-2">{transaction.floor ?? "-"}</td>
+                          <td className="p-2">
+                            <EditableCell
+                              transactionId={transaction.id}
+                              field="floor"
+                              value={transaction.floor}
+                              type="number"
+                            />
+                          </td>
                         )}
                         {isColumnVisible("surface") && (
                           <td className="p-2">
-                            {transaction.surface
-                              ? Math.round(transaction.surface)
-                              : "-"}
+                            <EditableCell
+                              transactionId={transaction.id}
+                              field="surface"
+                              value={transaction.surface}
+                              type="number"
+                              formatter={(val) =>
+                                val ? Math.round(val).toString() : "-"
+                              }
+                            />
                           </td>
                         )}
                         {isColumnVisible("year_of_constru") && (
                           <td className="p-2">
-                            {transaction.year_of_constru || "-"}
+                            <EditableCell
+                              transactionId={transaction.id}
+                              field="year_of_constru"
+                              value={transaction.year_of_constru}
+                              type="number"
+                            />
                           </td>
                         )}
                         {isColumnVisible("sale_value_nis") && (
                           <td className="p-2 font-semibold">
-                            {formatPrice(
-                              transaction.estimated_price_ils ??
-                                transaction.sale_value_nis,
-                            )}
+                            <EditableCell
+                              transactionId={transaction.id}
+                              field="sale_value_nis"
+                              value={
+                                transaction.estimated_price_ils ??
+                                transaction.sale_value_nis
+                              }
+                              type="number"
+                              formatter={formatPrice}
+                            />
                           </td>
                         )}
                         {isColumnVisible("price_per_sqm") && (
                           <td className="p-2 text-green-700 font-medium bg-green-50">
-                            {formatPrice(transaction.price_per_sqm)}
+                            <EditableCell
+                              transactionId={transaction.id}
+                              field="price_per_sqm"
+                              value={transaction.price_per_sqm}
+                              type="number"
+                              formatter={formatPrice}
+                              className="text-green-700 font-medium"
+                            />
                           </td>
                         )}
 
