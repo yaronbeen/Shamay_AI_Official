@@ -2,9 +2,7 @@
 
 import { useSearchParams, useParams } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
-import { Step3FieldsPanel } from "@/components/steps/Step3FieldsPanel";
-import { Step3PDFPanel, PDFFile } from "@/components/steps/Step3PDFPanel";
-import { Step5ValuationPanel } from "@/components/steps/Step5ValuationPanel";
+import dynamic from "next/dynamic";
 import { ValuationData } from "@/types/valuation";
 import {
   Loader2,
@@ -13,6 +11,59 @@ import {
   CheckCircle,
   ExternalLink,
 } from "lucide-react";
+
+// Dynamically import heavy components to avoid SSR issues
+const Step3FieldsPanel = dynamic(
+  () =>
+    import("@/components/steps/Step3FieldsPanel").then(
+      (mod) => mod.Step3FieldsPanel,
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="p-6">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
+      </div>
+    ),
+  },
+);
+
+const Step3PDFPanel = dynamic(
+  () =>
+    import("@/components/steps/Step3PDFPanel").then((mod) => mod.Step3PDFPanel),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="p-6">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
+      </div>
+    ),
+  },
+);
+
+const Step5ValuationPanel = dynamic(
+  () =>
+    import("@/components/steps/Step5ValuationPanel").then(
+      (mod) => mod.Step5ValuationPanel,
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="p-6">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
+      </div>
+    ),
+  },
+);
+
+// Re-export PDFFile type for internal use
+type PDFFile = {
+  type?: string;
+  name?: string;
+  preview?: string;
+  url?: string;
+  file?: File;
+};
 
 // Session ID validation to prevent IDOR and path traversal attacks
 const SESSION_ID_REGEX = /^[a-zA-Z0-9_-]{8,64}$/;
@@ -227,7 +278,10 @@ function PanelContent() {
   }
 
   const renderPanel = () => {
-    switch (params.type) {
+    // Safely access params.type with fallback
+    const panelType = params?.type;
+
+    switch (panelType) {
       case "step3-fields":
         return (
           <div className="p-6 h-screen overflow-y-auto" dir="rtl">
