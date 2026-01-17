@@ -49,9 +49,10 @@ export function Step3PDFPanel({
   const currentFile = safeIndex >= 0 ? files[safeIndex] : null;
 
   const openInNewTab = () => {
-    if (sessionId && typeof window !== "undefined") {
+    // Open the current PDF directly in a new tab
+    if (currentFile?.url && typeof window !== "undefined") {
       const opened = window.open(
-        `/panel/step3-pdf?sessionId=${sessionId}`,
+        currentFile.url,
         "_blank",
         "noopener,noreferrer",
       );
@@ -67,7 +68,7 @@ export function Step3PDFPanel({
       <div className="bg-white border-b border-gray-200 p-3">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-semibold text-gray-700">מסמכים</h3>
-          {sessionId && (
+          {currentFile?.url && (
             <button
               onClick={openInNewTab}
               className="p-1.5 hover:bg-gray-100 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
