@@ -6,15 +6,11 @@ import { PanelClient } from "./panel-client";
 export const dynamic = "force-dynamic";
 
 interface PageProps {
-  params: Promise<{ type: string }>;
-  searchParams: Promise<{ sessionId?: string }>;
+  params: { type: string };
+  searchParams: { sessionId?: string };
 }
 
-export default async function PanelPage({ params, searchParams }: PageProps) {
-  // In Next.js 15, params and searchParams are Promises
-  const resolvedParams = await params;
-  const resolvedSearchParams = await searchParams;
-
+export default function PanelPage({ params, searchParams }: PageProps) {
   return (
     <Suspense
       fallback={
@@ -27,8 +23,8 @@ export default async function PanelPage({ params, searchParams }: PageProps) {
       }
     >
       <PanelClient
-        type={resolvedParams.type}
-        sessionId={resolvedSearchParams.sessionId || null}
+        type={params.type}
+        sessionId={searchParams.sessionId || null}
       />
     </Suspense>
   );
