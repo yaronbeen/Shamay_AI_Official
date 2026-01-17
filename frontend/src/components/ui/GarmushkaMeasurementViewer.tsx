@@ -13,6 +13,7 @@ let Line: any;
 let Circle: any;
 let Text: any;
 let Group: any;
+let Rect: any;
 
 if (typeof window !== "undefined") {
   const konva = require("react-konva");
@@ -23,6 +24,7 @@ if (typeof window !== "undefined") {
   Circle = konva.Circle;
   Text = konva.Text;
   Group = konva.Group;
+  Rect = konva.Rect;
 }
 
 interface GarmushkaMeasurementViewerProps {
@@ -55,7 +57,7 @@ interface PDFPageInfo {
   imageUrl: string;
 }
 
-type ToolMode = "calibrate" | "polyline" | "polygon" | "pan";
+type ToolMode = "calibrate" | "polyline" | "polygon" | "pan" | "crop";
 type UnitMode = "metric" | "imperial";
 
 // Load PDF.js from CDN only (avoid webpack bundling)
@@ -211,6 +213,11 @@ export default function GarmushkaMeasurementViewer({
     width: number;
     height: number;
   } | null>(null);
+  const [cropStartPoint, setCropStartPoint] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const [isDrawingCrop, setIsDrawingCrop] = useState<boolean>(false);
   const [showDebugData, setShowDebugData] = useState<boolean>(false);
   const [measurementTable, setMeasurementTable] = useState<
     Array<{
@@ -1964,6 +1971,7 @@ export default function GarmushkaMeasurementViewer({
                 { mode: "calibrate" as ToolMode, icon: "📏", label: "כיול" },
                 { mode: "polyline" as ToolMode, icon: "📐", label: "מרחק" },
                 { mode: "polygon" as ToolMode, icon: "▢", label: "שטח" },
+                { mode: "crop" as ToolMode, icon: "✂️", label: "חיתוך" },
               ].map((tool) => (
                 <button
                   key={tool.mode}
@@ -2125,6 +2133,12 @@ export default function GarmushkaMeasurementViewer({
                     או השתמש בכפתור "✓ סיים"
                   </div>
                 )}
+                {toolMode === "crop" && (
+                  <div>
+                    <strong>✂️ חיתוך:</strong> לחץ וגרור כדי לבחור אזור לחיתוך •
+                    לאחר הבחירה לחץ "הוסף למסמך"
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -2193,6 +2207,25 @@ export default function GarmushkaMeasurementViewer({
               onDragEnd={handleStageDragEnd}
               onMouseDown={(e: any) => {
                 const evt = e.evt;
+                // Handle crop tool - start drawing crop rectangle
+                if (toolMode === "crop" && evt.button === 0) {
+                  const pos = e.target.getStage()?.getPointerPosition();
+                  if (pos) {
+                    const point = {
+                      x: (pos.x - stagePosition.x) / scale,
+                      y: (pos.y - stagePosition.y) / scale,
+                    };
+                    setCropStartPoint(point);
+                    setIsDrawingCrop(true);
+                    setSaveCropArea({
+                      x: point.x,
+                      y: point.y,
+                      width: 0,
+                      height: 0,
+                    });
+                  }
+                  return;
+                }
                 // Enable dragging with middle mouse button
                 if (evt.button === 1) {
                   e.evt.preventDefault();
@@ -2217,8 +2250,32 @@ export default function GarmushkaMeasurementViewer({
                   document.body.style.cursor = "grabbing";
                 }
               }}
+              onMouseMove={(e: any) => {
+                // Handle crop tool - update crop rectangle while dragging
+                if (toolMode === "crop" && isDrawingCrop && cropStartPoint) {
+                  const pos = e.target.getStage()?.getPointerPosition();
+                  if (pos) {
+                    const currentPoint = {
+                      x: (pos.x - stagePosition.x) / scale,
+                      y: (pos.y - stagePosition.y) / scale,
+                    };
+                    const x = Math.min(cropStartPoint.x, currentPoint.x);
+                    const y = Math.min(cropStartPoint.y, currentPoint.y);
+                    const width = Math.abs(currentPoint.x - cropStartPoint.x);
+                    const height = Math.abs(currentPoint.y - cropStartPoint.y);
+                    setSaveCropArea({ x, y, width, height });
+                  }
+                }
+              }}
               onMouseUp={(e: any) => {
                 const evt = e.evt;
+                // Handle crop tool - finish drawing crop rectangle
+                if (toolMode === "crop" && isDrawingCrop) {
+                  setIsDrawingCrop(false);
+                  setCropStartPoint(null);
+                  // Keep saveCropArea as is - it's now the selected crop region
+                  return;
+                }
                 // Reset dragging state
                 if (evt.button === 1) {
                   // Middle mouse button released
@@ -2328,6 +2385,23 @@ export default function GarmushkaMeasurementViewer({
                     ))}
                   </Group>
                 )}
+
+                {/* Crop Selection Rectangle */}
+                {saveCropArea &&
+                  saveCropArea.width > 0 &&
+                  saveCropArea.height > 0 &&
+                  Rect && (
+                    <Rect
+                      x={saveCropArea.x}
+                      y={saveCropArea.y}
+                      width={saveCropArea.width}
+                      height={saveCropArea.height}
+                      stroke="#9333ea"
+                      strokeWidth={2}
+                      dash={[8, 4]}
+                      fill="rgba(147, 51, 234, 0.1)"
+                    />
+                  )}
               </Layer>
             </Stage>
           </div>
