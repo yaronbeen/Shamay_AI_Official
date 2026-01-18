@@ -836,6 +836,12 @@ export default function ComparableDataViewer({
         }
 
         console.log("🔍 Searching with params:", Object.fromEntries(params));
+        console.log("🔍 Filter state:", {
+          searchType: filters.searchType,
+          blockNumber: filters.blockNumber,
+          blockNumbers: filters.blockNumbers,
+          blockNumbersLength: filters.blockNumbers?.length,
+        });
 
         const response = await fetch(
           `/api/asset-details/search?${params.toString()}`,
@@ -845,7 +851,17 @@ export default function ComparableDataViewer({
         // Check if request was aborted before processing response
         if (signal?.aborted) return;
 
+        // Debug: Log HTTP status for troubleshooting
+        console.log(`📡 API Response: HTTP ${response.status}`);
+
         const result = await response.json();
+
+        // Debug: Log response structure
+        console.log("📦 Response:", {
+          success: result.success,
+          count: result.data?.length || 0,
+          error: result.error,
+        });
 
         if (result.success) {
           // Debug: Log first transaction to inspect data structure
@@ -863,11 +879,47 @@ export default function ComparableDataViewer({
           setResultBlockFilter("all");
 
           if (result.data.length === 0) {
+            // Build context-aware error message
+            const activeFilters: string[] = [];
+            if (filters.blockNumber)
+              activeFilters.push(`גוש: ${filters.blockNumber}`);
+            if (filters.blockNumbers?.length)
+              activeFilters.push(`גושים: ${filters.blockNumbers.join(", ")}`);
+            if (filters.parcelFrom || filters.parcelTo) {
+              const parcelRange =
+                filters.parcelFrom === filters.parcelTo
+                  ? `חלקה: ${filters.parcelFrom || filters.parcelTo}`
+                  : `חלקה: ${filters.parcelFrom || "*"} - ${filters.parcelTo || "*"}`;
+              activeFilters.push(parcelRange);
+
+              // Warn if parcel looks like a gush (4+ digits)
+              const parcelNum = parseInt(filters.parcelFrom || "0", 10);
+              if (parcelNum > 100) {
+                console.warn(
+                  `⚠️ High parcel number (${parcelNum}) - did you mean to enter this as גוש (block)?`,
+                );
+                activeFilters.push(
+                  `⚠️ שים לב: מספר חלקה ${parcelNum} גבוה מאוד - אולי התכוונת לגוש?`,
+                );
+              }
+            }
+            if (filters.cityName)
+              activeFilters.push(`עיר: ${filters.cityName}`);
+            if (filters.streetName)
+              activeFilters.push(`רחוב: ${filters.streetName}`);
+
+            const filterSummary =
+              activeFilters.length > 0
+                ? `\nפילטרים פעילים: ${activeFilters.join(" | ")}`
+                : "";
+
             setError(
-              "לא נמצאו עסקאות בגוש זה. ניתן להרחיב את טווח השטח או שנת הבנייה.",
+              `לא נמצאו עסקאות בחיפוש זה.${filterSummary}\nניתן להרחיב את טווח השטח, שנת הבנייה, או להסיר פילטרים.`,
             );
           }
         } else {
+          // Enhanced error message with more context
+          console.error("❌ API returned error:", result.error, result.message);
           setError(result.error || "שגיאה בטעינת הנתונים");
         }
       } catch (err) {
@@ -1621,6 +1673,14 @@ export default function ComparableDataViewer({
                         filters.blockNumber &&
                         !filters.blockNumbers.includes(filters.blockNumber)
                       ) {
+                        console.log("➕ Adding block to chips:", {
+                          adding: filters.blockNumber,
+                          existingChips: filters.blockNumbers,
+                          newChips: [
+                            ...filters.blockNumbers,
+                            filters.blockNumber,
+                          ],
+                        });
                         setFilters((prev) => ({
                           ...prev,
                           blockNumbers: [
