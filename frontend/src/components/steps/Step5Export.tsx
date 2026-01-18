@@ -8,7 +8,6 @@ import {
   CheckCircle,
   Loader2,
   ExternalLink,
-  Eye,
 } from "lucide-react";
 import { toast } from "sonner";
 import { ValuationData } from "@/types/valuation";
@@ -43,12 +42,8 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
   );
   const [docxBlob, setDocxBlob] = useState<Blob | null>(null);
 
-  // Drawer state
+  // Combined drawer state (Valuation + Export on the right)
   const [isDrawerOpen, setIsDrawerOpen] = useState(true);
-
-  // Preview drawer state
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [previewWidth, setPreviewWidth] = useState<"half" | "full">("half");
 
   // Use prop sessionId or fall back to data.sessionId
   const effectiveSessionId = sessionId || data.sessionId;
@@ -242,194 +237,174 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
         </p>
       </div>
 
-      {/* Main Content - Flex Layout with Drawers */}
+      {/* Main Content - Document Preview (left) + Combined Drawer (right) */}
       <div className="flex gap-4 min-h-[600px]">
-        {/* Left Side - Valuation Calculation (Collapsible Drawer) - Hidden when preview is full */}
-        {!(isPreviewOpen && previewWidth === "full") && (
-          <CollapsibleDrawer
-            isOpen={isDrawerOpen}
-            onToggle={() => setIsDrawerOpen(!isDrawerOpen)}
-            width={isPreviewOpen ? "w-1/4" : "w-1/3"}
-            collapsedLabel="חישוב שווי"
-          >
+        {/* Main Content - Document Preview */}
+        <div
+          className={cn(
+            "transition-all duration-300 min-w-0",
+            isDrawerOpen ? "flex-1" : "w-full",
+          )}
+        >
+          <div className="h-full bg-white rounded-lg border shadow-sm">
+            <EditableDocumentPreview
+              data={data}
+              onDataChange={updateData || (() => {})}
+            />
+          </div>
+        </div>
+
+        {/* Right Drawer - Combined Valuation + Export */}
+        <CollapsibleDrawer
+          isOpen={isDrawerOpen}
+          onToggle={() => setIsDrawerOpen(!isDrawerOpen)}
+          width="w-1/2"
+          collapsedLabel="חישוב וייצוא"
+        >
+          <div className="space-y-4 h-full overflow-y-auto p-1">
+            {/* Valuation Panel */}
             <Step5ValuationPanel
               data={data}
               updateData={updateData}
               sessionId={sessionId}
             />
-          </CollapsibleDrawer>
-        )}
 
-        {/* Center - PDF Export (shrinks when preview open, hidden when preview full) */}
-        <div
-          className={cn(
-            "transition-all duration-300",
-            isPreviewOpen && previewWidth === "full"
-              ? "hidden"
-              : "flex-1 min-w-[280px]",
-          )}
-        >
-          <div className="bg-white border-2 border-gray-200 rounded-xl p-6 shadow-lg h-full">
-            {/* Header with action buttons */}
-            <div className="flex justify-end gap-2 mb-2">
-              {/* Preview toggle button */}
-              <button
-                onClick={() => setIsPreviewOpen(!isPreviewOpen)}
-                className={cn(
-                  "p-1.5 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1",
-                  isPreviewOpen
-                    ? "bg-blue-100 text-blue-600"
-                    : "hover:bg-gray-100 text-gray-600",
-                )}
-                title={isPreviewOpen ? "סגור תצוגה מקדימה" : "פתח תצוגה מקדימה"}
-                aria-label="תצוגה מקדימה של הדוח"
-              >
-                <Eye className="w-4 h-4" />
-              </button>
-              {effectiveSessionId && (
-                <button
-                  onClick={openExportInNewTab}
-                  className="p-1.5 hover:bg-gray-100 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
-                  title="פתח בלשונית חדשה"
-                  aria-label="פתח ייצוא בלשונית חדשה"
-                >
-                  <ExternalLink className="w-4 h-4 text-gray-600" />
-                </button>
-              )}
-            </div>
-            <div className="text-center mb-6">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
-                <FileText className="h-8 w-8 text-blue-600" />
-              </div>
-              <h3 className="text-xl font-semibold mb-2">ייצוא PDF</h3>
-              <p className="text-sm text-gray-600">
-                יצירת דוח PDF מקצועי עם כל המידע והנתונים
-              </p>
-            </div>
-
-            <button
-              onClick={handleExportPDF}
-              disabled={exporting}
-              className={`w-full px-6 py-4 rounded-lg font-semibold text-lg transition-all ${
-                exporting
-                  ? "bg-gray-400 text-white cursor-not-allowed"
-                  : "bg-blue-600 text-white hover:bg-blue-700 hover:shadow-lg transform hover:scale-105"
-              }`}
-            >
-              {exporting ? (
-                <div className="flex items-center justify-center">
-                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                  מייצא...
-                </div>
-              ) : (
-                <div className="flex items-center justify-center">
-                  <FileText className="h-5 w-5 mr-2" />
-                  יצור PDF
-                </div>
-              )}
-            </button>
-
-            {exportStatus === "success" && (
-              <div className="mt-6 p-4 bg-green-50 border-2 border-green-300 rounded-lg">
-                <div className="flex items-center justify-center text-green-800 mb-2">
-                  <CheckCircle className="h-6 w-6 mr-2" />
-                  <span className="text-base font-semibold">
-                    PDF נוצר בהצלחה!
-                  </span>
-                </div>
-                {pdfBlob && (
+            {/* Export Controls */}
+            <div className="bg-white border-2 border-gray-200 rounded-xl p-6 shadow-lg">
+              {/* Header with action button */}
+              <div className="flex justify-end gap-2 mb-2">
+                {effectiveSessionId && (
                   <button
-                    onClick={handleDownloadPDF}
-                    className="w-full mt-3 px-4 py-2 text-sm text-blue-700 hover:text-blue-900 hover:underline font-medium"
+                    onClick={openExportInNewTab}
+                    className="p-1.5 hover:bg-gray-100 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                    title="פתח בלשונית חדשה"
+                    aria-label="פתח ייצוא בלשונית חדשה"
                   >
-                    <Download className="h-4 w-4 inline mr-2" />
-                    הורד PDF שוב
+                    <ExternalLink className="w-4 h-4 text-gray-600" />
                   </button>
                 )}
               </div>
-            )}
-
-            {exportStatus === "error" && (
-              <div className="mt-6 p-4 bg-red-50 border-2 border-red-300 rounded-lg">
-                <p className="text-sm text-red-800 text-center font-medium">
-                  שגיאה ביצירת PDF
-                </p>
-              </div>
-            )}
-
-            {/* Word Export Option */}
-            <div className="mt-6 pt-6 border-t-2 border-gray-200">
-              <div className="text-center mb-4">
-                <h4 className="text-lg font-semibold mb-1">ייצוא Word</h4>
+              <div className="text-center mb-6">
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
+                  <FileText className="h-8 w-8 text-blue-600" />
+                </div>
+                <h3 className="text-xl font-semibold mb-2">ייצוא PDF</h3>
                 <p className="text-sm text-gray-600">
-                  יצירת מסמך Word ניתן לעריכה
+                  יצירת דוח PDF מקצועי עם כל המידע והנתונים
                 </p>
               </div>
 
               <button
-                onClick={handleExportDocx}
-                disabled={exportingDocx}
-                className={`w-full px-4 py-3 rounded-lg font-medium transition-all ${
-                  exportingDocx
+                onClick={handleExportPDF}
+                disabled={exporting}
+                className={`w-full px-6 py-4 rounded-lg font-semibold text-lg transition-all ${
+                  exporting
                     ? "bg-gray-400 text-white cursor-not-allowed"
-                    : "bg-green-600 text-white hover:bg-green-700 hover:shadow-lg"
+                    : "bg-blue-600 text-white hover:bg-blue-700 hover:shadow-lg transform hover:scale-105"
                 }`}
               >
-                {exportingDocx ? (
+                {exporting ? (
                   <div className="flex items-center justify-center">
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    מייצא Word...
+                    <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                    מייצא...
                   </div>
                 ) : (
                   <div className="flex items-center justify-center">
-                    <FileText className="h-4 w-4 mr-2" />
-                    יצור Word
+                    <FileText className="h-5 w-5 mr-2" />
+                    יצור PDF
                   </div>
                 )}
               </button>
 
-              {docxStatus === "success" && (
-                <div className="mt-4 p-3 bg-green-50 border border-green-300 rounded-lg">
-                  <div className="flex items-center justify-center text-green-800 mb-1">
-                    <CheckCircle className="h-5 w-5 mr-2" />
-                    <span className="text-sm font-semibold">
-                      Word נוצר בהצלחה!
+              {exportStatus === "success" && (
+                <div className="mt-6 p-4 bg-green-50 border-2 border-green-300 rounded-lg">
+                  <div className="flex items-center justify-center text-green-800 mb-2">
+                    <CheckCircle className="h-6 w-6 mr-2" />
+                    <span className="text-base font-semibold">
+                      PDF נוצר בהצלחה!
                     </span>
                   </div>
-                  {docxBlob && (
+                  {pdfBlob && (
                     <button
-                      onClick={handleDownloadDocx}
-                      className="w-full mt-2 px-3 py-1.5 text-sm text-green-700 hover:text-green-900 hover:underline font-medium"
+                      onClick={handleDownloadPDF}
+                      className="w-full mt-3 px-4 py-2 text-sm text-blue-700 hover:text-blue-900 hover:underline font-medium"
                     >
-                      <Download className="h-3 w-3 inline mr-1" />
-                      הורד Word שוב
+                      <Download className="h-4 w-4 inline mr-2" />
+                      הורד PDF שוב
                     </button>
                   )}
                 </div>
               )}
 
-              {docxStatus === "error" && (
-                <div className="mt-4 p-3 bg-red-50 border border-red-300 rounded-lg">
+              {exportStatus === "error" && (
+                <div className="mt-6 p-4 bg-red-50 border-2 border-red-300 rounded-lg">
                   <p className="text-sm text-red-800 text-center font-medium">
-                    שגיאה ביצירת Word
+                    שגיאה ביצירת PDF
                   </p>
                 </div>
               )}
+
+              {/* Word Export Option */}
+              <div className="mt-6 pt-6 border-t-2 border-gray-200">
+                <div className="text-center mb-4">
+                  <h4 className="text-lg font-semibold mb-1">ייצוא Word</h4>
+                  <p className="text-sm text-gray-600">
+                    יצירת מסמך Word ניתן לעריכה
+                  </p>
+                </div>
+
+                <button
+                  onClick={handleExportDocx}
+                  disabled={exportingDocx}
+                  className={`w-full px-4 py-3 rounded-lg font-medium transition-all ${
+                    exportingDocx
+                      ? "bg-gray-400 text-white cursor-not-allowed"
+                      : "bg-green-600 text-white hover:bg-green-700 hover:shadow-lg"
+                  }`}
+                >
+                  {exportingDocx ? (
+                    <div className="flex items-center justify-center">
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      מייצא Word...
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center">
+                      <FileText className="h-4 w-4 mr-2" />
+                      יצור Word
+                    </div>
+                  )}
+                </button>
+
+                {docxStatus === "success" && (
+                  <div className="mt-4 p-3 bg-green-50 border border-green-300 rounded-lg">
+                    <div className="flex items-center justify-center text-green-800 mb-1">
+                      <CheckCircle className="h-5 w-5 mr-2" />
+                      <span className="text-sm font-semibold">
+                        Word נוצר בהצלחה!
+                      </span>
+                    </div>
+                    {docxBlob && (
+                      <button
+                        onClick={handleDownloadDocx}
+                        className="w-full mt-2 px-3 py-1.5 text-sm text-green-700 hover:text-green-900 hover:underline font-medium"
+                      >
+                        <Download className="h-3 w-3 inline mr-1" />
+                        הורד Word שוב
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {docxStatus === "error" && (
+                  <div className="mt-4 p-3 bg-red-50 border border-red-300 rounded-lg">
+                    <p className="text-sm text-red-800 text-center font-medium">
+                      שגיאה ביצירת Word
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-
-        {/* Right Side - Document Preview (Collapsible Drawer) */}
-        <CollapsibleDrawer
-          isOpen={isPreviewOpen}
-          onToggle={() => setIsPreviewOpen(!isPreviewOpen)}
-          width={previewWidth === "full" ? "w-full" : "w-1/2"}
-          collapsedLabel="תצוגה מקדימה"
-        >
-          <EditableDocumentPreview
-            data={data}
-            onDataChange={updateData || (() => {})}
-          />
         </CollapsibleDrawer>
       </div>
     </div>
