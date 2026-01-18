@@ -109,12 +109,63 @@ export const buildBaseCss = (settings?: CompanySettings): string => `
     padding-top: 4px;
   }
 
+  /* Manual page break marker (user-inserted) */
+  .manual-page-break {
+    position: relative;
+    margin: 16px 0;
+    page-break-before: always;
+    break-before: page;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    border-top: 2px dashed #3b82f6;
+    cursor: default;
+  }
+  .manual-page-break::before {
+    content: 'מעבר עמוד ידני';
+    position: absolute;
+    top: -10px;
+    background: white;
+    padding: 0 12px;
+    color: #3b82f6;
+    font-size: 10pt;
+    font-weight: 500;
+  }
+  .manual-page-break .delete-break {
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    color: #ef4444;
+    font-size: 14px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    background: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid #ef4444;
+  }
+  .manual-page-break:hover .delete-break {
+    opacity: 1;
+  }
+  .manual-page-break .delete-break:hover {
+    background: #fef2f2;
+  }
+
   /* Hide visual separators in print/PDF */
   @media print {
     .page::after {
       display: none !important;
     }
     .auto-page-break-marker::before {
+      display: none !important;
+    }
+    .manual-page-break::before {
+      display: none !important;
+    }
+    .manual-page-break .delete-break {
       display: none !important;
     }
   }

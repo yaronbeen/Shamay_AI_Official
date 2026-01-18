@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import React from "react";
 import {
   Download,
@@ -8,12 +8,14 @@ import {
   CheckCircle,
   Loader2,
   ExternalLink,
+  Settings,
 } from "lucide-react";
 import { toast } from "sonner";
 import { ValuationData } from "@/types/valuation";
 import { Step5ValuationPanel } from "./Step5ValuationPanel";
 import { EditableDocumentPreview } from "../EditableDocumentPreview";
 import { CollapsibleDrawer } from "../ui/CollapsibleDrawer";
+import { CompanySettingsModal } from "../ui/CompanySettingsModal";
 import { cn } from "@/lib/utils";
 
 interface Step5ExportProps {
@@ -45,8 +47,19 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
   // Combined drawer state (Valuation + Export on the right)
   const [isDrawerOpen, setIsDrawerOpen] = useState(true);
 
+  // Company settings modal state
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  // Key to force refresh of EditableDocumentPreview
+  const [previewKey, setPreviewKey] = useState(0);
+
   // Use prop sessionId or fall back to data.sessionId
   const effectiveSessionId = sessionId || data.sessionId;
+
+  // Callback to refresh document preview after settings change
+  const handleSettingsUpdated = useCallback(() => {
+    // Increment key to force re-render of EditableDocumentPreview
+    setPreviewKey((prev) => prev + 1);
+  }, []);
 
   const openExportInNewTab = () => {
     if (effectiveSessionId) {
@@ -230,7 +243,16 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="text-center">
+      <div className="text-center relative">
+        {/* Settings button in top-right */}
+        <button
+          onClick={() => setShowSettingsModal(true)}
+          className="absolute left-0 top-0 p-2 hover:bg-gray-100 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+          title="הגדרות חברה (לוגו, חתימה)"
+          aria-label="פתח הגדרות חברה"
+        >
+          <Settings className="w-5 h-5 text-gray-600" />
+        </button>
         <h2 className="text-3xl font-bold mb-2">חישוב שווי וייצוא</h2>
         <p className="text-gray-600 text-lg">
           סיכום הערכת השווי ויצירת דוח PDF
@@ -248,6 +270,7 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
         >
           <div className="h-full bg-white rounded-lg border shadow-sm">
             <EditableDocumentPreview
+              key={previewKey}
               data={data}
               onDataChange={updateData || (() => {})}
             />
@@ -407,6 +430,13 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
           </div>
         </CollapsibleDrawer>
       </div>
+
+      {/* Company Settings Modal */}
+      <CompanySettingsModal
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+        onSettingsUpdated={handleSettingsUpdated}
+      />
     </div>
   );
 }

@@ -31,6 +31,7 @@ export interface FloatingToolbarProps {
   onImageResize: (size: "full" | "half" | "third") => void;
   onImageReplace: () => void;
   onImageReset: () => void;
+  onInsertPageBreak?: () => void;
 }
 
 interface TextToolbarButton {
@@ -68,6 +69,7 @@ export function FloatingToolbar({
   onImageResize,
   onImageReplace,
   onImageReset,
+  onInsertPageBreak,
 }: FloatingToolbarProps) {
   if (!toolbarState.visible) {
     return null;
@@ -109,6 +111,7 @@ export function FloatingToolbar({
           disabled={isTextDisabled}
           onExecuteCommand={onExecuteCommand}
           onAdjustFontSize={onAdjustFontSize}
+          onInsertPageBreak={onInsertPageBreak}
           onHide={onHide}
         />
       ) : toolbarState.mode === "table" ? (
@@ -138,6 +141,7 @@ interface TextToolbarProps {
   disabled: boolean;
   onExecuteCommand: (command: string, value?: string) => void;
   onAdjustFontSize: (direction: "up" | "down") => void;
+  onInsertPageBreak?: () => void;
   onHide: () => void;
 }
 
@@ -145,6 +149,7 @@ function TextToolbar({
   disabled,
   onExecuteCommand,
   onAdjustFontSize,
+  onInsertPageBreak,
   onHide,
 }: TextToolbarProps) {
   const buttonBaseClass = "rounded-md border px-2 py-1 text-xs font-semibold";
@@ -200,6 +205,16 @@ function TextToolbar({
       >
         {"\uD83D\uDD8D\uFE0F"}
       </button>
+      {onInsertPageBreak && (
+        <button
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={onInsertPageBreak}
+          className={`${buttonBaseClass} border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:border-blue-400`}
+          title="הוסף מעבר עמוד"
+        >
+          ⏎ עמוד
+        </button>
+      )}
       <CloseButton onHide={onHide} />
     </>
   );
