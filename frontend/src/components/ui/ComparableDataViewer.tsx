@@ -742,9 +742,34 @@ export default function ComparableDataViewer({
         // Primary search filters based on search type (with sanitization)
         switch (filters.searchType) {
           case "block":
-            if (filters.blockNumber) {
-              const sanitized = sanitizeNumeric(filters.blockNumber);
-              if (sanitized) params.append("block_number", sanitized);
+            // FIX: Combine blockNumber and blockNumbers into a single block_numbers parameter
+            // to avoid ambiguity and ensure all blocks are searched
+            {
+              const blocksToSearch: string[] = [];
+
+              // Add chips (blockNumbers) first - these take priority
+              if (filters.blockNumbers && filters.blockNumbers.length > 0) {
+                blocksToSearch.push(...filters.blockNumbers);
+              }
+
+              // Add single blockNumber only if it's not already in chips
+              if (
+                filters.blockNumber &&
+                !blocksToSearch.includes(filters.blockNumber)
+              ) {
+                blocksToSearch.push(filters.blockNumber);
+              }
+
+              // Sanitize and send as block_numbers (comma-separated)
+              if (blocksToSearch.length > 0) {
+                const sanitizedBlocks = blocksToSearch
+                  .map((b) => sanitizeNumeric(b))
+                  .filter((b) => b.length > 0)
+                  .slice(0, 20);
+                if (sanitizedBlocks.length > 0) {
+                  params.append("block_numbers", sanitizedBlocks.join(","));
+                }
+              }
             }
             break;
           case "blockRange":
@@ -769,17 +794,6 @@ export default function ComparableDataViewer({
               if (sanitized) params.append("city", sanitized);
             }
             break;
-        }
-
-        // Multiple block numbers (for chips) - with sanitization and limit
-        if (filters.blockNumbers && filters.blockNumbers.length > 0) {
-          const sanitizedBlocks = filters.blockNumbers
-            .map((b) => sanitizeNumeric(b))
-            .filter((b) => b.length > 0)
-            .slice(0, 20);
-          if (sanitizedBlocks.length > 0) {
-            params.append("block_numbers", sanitizedBlocks.join(","));
-          }
         }
 
         // Surface area range
