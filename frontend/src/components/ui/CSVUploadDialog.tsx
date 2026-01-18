@@ -168,9 +168,9 @@ export function CSVUploadDialog({
                 type="file"
                 accept=".csv,text/csv"
                 onChange={handleFileSelect}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
               />
-              <div className="text-center">
+              <div className="text-center pointer-events-none">
                 {fileName ? (
                   <div className="flex items-center justify-center gap-2">
                     <FileSpreadsheet className="h-6 w-6 text-green-600" />
