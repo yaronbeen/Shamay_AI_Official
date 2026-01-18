@@ -8,10 +8,12 @@ import {
   CheckCircle,
   Loader2,
   ExternalLink,
+  Eye,
 } from "lucide-react";
 import { toast } from "sonner";
 import { ValuationData } from "@/types/valuation";
 import { Step5ValuationPanel } from "./Step5ValuationPanel";
+import { Step5DocumentPreview } from "./Step5DocumentPreview";
 import { CollapsibleDrawer } from "../ui/CollapsibleDrawer";
 import { cn } from "@/lib/utils";
 
@@ -43,6 +45,10 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
 
   // Drawer state
   const [isDrawerOpen, setIsDrawerOpen] = useState(true);
+
+  // Preview drawer state
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewWidth, setPreviewWidth] = useState<"half" | "full">("half");
 
   // Use prop sessionId or fall back to data.sessionId
   const effectiveSessionId = sessionId || data.sessionId;
@@ -236,13 +242,14 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
         </p>
       </div>
 
-      {/* Main Content - Flex Layout with Drawer */}
-      <div className="flex gap-6 min-h-[500px]">
+      {/* Main Content - Flex Layout with Drawers */}
+      <div className="flex gap-4 min-h-[500px]">
         {/* Left Side - Valuation Calculation (Collapsible Drawer) */}
         <CollapsibleDrawer
           isOpen={isDrawerOpen}
           onToggle={() => setIsDrawerOpen(!isDrawerOpen)}
-          width="w-1/2"
+          width={isPreviewOpen ? "w-1/4" : "w-1/3"}
+          collapsedLabel="חישוב שווי"
         >
           <Step5ValuationPanel
             data={data}
@@ -251,16 +258,32 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
           />
         </CollapsibleDrawer>
 
-        {/* Right Side - PDF Export (expands when drawer closed) */}
+        {/* Center - PDF Export (shrinks when preview open, hidden when preview full) */}
         <div
           className={cn(
             "transition-all duration-300",
-            isDrawerOpen ? "flex-1" : "w-full",
+            isPreviewOpen && previewWidth === "full"
+              ? "hidden"
+              : "flex-1 min-w-[280px]",
           )}
         >
           <div className="bg-white border-2 border-gray-200 rounded-xl p-6 shadow-lg h-full">
-            {/* Header with open in new tab button */}
-            <div className="flex justify-end mb-2">
+            {/* Header with action buttons */}
+            <div className="flex justify-end gap-2 mb-2">
+              {/* Preview toggle button */}
+              <button
+                onClick={() => setIsPreviewOpen(!isPreviewOpen)}
+                className={cn(
+                  "p-1.5 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1",
+                  isPreviewOpen
+                    ? "bg-blue-100 text-blue-600"
+                    : "hover:bg-gray-100 text-gray-600",
+                )}
+                title={isPreviewOpen ? "סגור תצוגה מקדימה" : "פתח תצוגה מקדימה"}
+                aria-label="תצוגה מקדימה של הדוח"
+              >
+                <Eye className="w-4 h-4" />
+              </button>
               {effectiveSessionId && (
                 <button
                   onClick={openExportInNewTab}
@@ -393,6 +416,22 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
             </div>
           </div>
         </div>
+
+        {/* Right Side - Document Preview (Collapsible Drawer) */}
+        <CollapsibleDrawer
+          isOpen={isPreviewOpen}
+          onToggle={() => setIsPreviewOpen(!isPreviewOpen)}
+          width={previewWidth === "full" ? "w-2/3" : "w-1/3"}
+          collapsedLabel="תצוגה מקדימה"
+        >
+          <Step5DocumentPreview
+            data={data}
+            width={previewWidth}
+            onWidthChange={() =>
+              setPreviewWidth((w) => (w === "half" ? "full" : "half"))
+            }
+          />
+        </CollapsibleDrawer>
       </div>
     </div>
   );

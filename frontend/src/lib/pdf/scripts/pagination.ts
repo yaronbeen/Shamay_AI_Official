@@ -244,6 +244,12 @@ export const autoPaginateScript = `
 
       const pages = Array.from(document.querySelectorAll('section.page'))
       pages.forEach(splitPage)
+
+      // Dispatch event when pagination is complete
+      const finalPages = document.querySelectorAll('section.page')
+      window.dispatchEvent(new CustomEvent('pagination-complete', {
+        detail: { totalPages: finalPages.length }
+      }))
     })
   </script>
 `;

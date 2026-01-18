@@ -16,6 +16,7 @@ import {
   useExport,
 } from "./EditableDocumentPreview/hooks";
 import { FloatingToolbar } from "./EditableDocumentPreview/FloatingToolbar";
+import { PageNavigator } from "./EditableDocumentPreview/PageNavigator";
 
 // Type helper for PropertyAnalysis with potential __customDocumentEdits
 type PropertyAnalysisWithEdits = ValuationData["propertyAnalysis"] & {
@@ -112,7 +113,10 @@ export function EditableDocumentPreview({
     CompanySettings | undefined
   >(undefined);
   const [htmlContent, setHtmlContent] = useState<string>("");
-  // Note: pageCount, currentPage, and viewMode were removed as unused dead code
+  // Page navigation state for single-page view mode
+  const [viewMode, setViewMode] = useState<"single" | "scroll">("single");
+  const [currentPageIndex, setCurrentPageIndex] = useState(0);
+  const [totalPageCount, setTotalPageCount] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -249,6 +253,114 @@ export function EditableDocumentPreview({
     }
     return frame.contentDocument || frame.contentWindow?.document || null;
   }, []);
+
+  // Update page count from iframe document
+  const updatePageCount = useCallback(() => {
+    const doc = getFrameDocument();
+    if (!doc) return;
+    const pages = doc.querySelectorAll("section.page");
+    setTotalPageCount(pages.length);
+    // Set data-page-index on each page for tracking
+    pages.forEach((page, idx) => {
+      page.setAttribute("data-page-index", String(idx));
+    });
+  }, [getFrameDocument]);
+
+  // Navigate to a specific page in single-page mode
+  const navigateToPage = useCallback(
+    (pageIndex: number) => {
+      const doc = getFrameDocument();
+      if (!doc) return;
+
+      const pages = doc.querySelectorAll("section.page");
+      if (pageIndex < 0 || pageIndex >= pages.length) return;
+
+      if (viewMode === "single") {
+        // Hide all pages except the target
+        pages.forEach((page, idx) => {
+          const pageEl = page as HTMLElement;
+          pageEl.style.display = idx === pageIndex ? "block" : "none";
+        });
+        // Add class to document for single-page mode styling
+        const docEl = doc.querySelector(".document");
+        if (docEl) {
+          docEl.classList.add("single-page-mode");
+        }
+      } else {
+        // In scroll mode, show all pages and scroll to target
+        pages.forEach((page) => {
+          (page as HTMLElement).style.display = "block";
+        });
+        const docEl = doc.querySelector(".document");
+        if (docEl) {
+          docEl.classList.remove("single-page-mode");
+        }
+        pages[pageIndex].scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+
+      setCurrentPageIndex(pageIndex);
+    },
+    [getFrameDocument, viewMode],
+  );
+
+  // Apply view mode when it changes
+  useEffect(() => {
+    if (totalPageCount > 0) {
+      navigateToPage(currentPageIndex);
+    }
+  }, [viewMode, totalPageCount, currentPageIndex, navigateToPage]);
+
+  // Keyboard navigation for single-page mode
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Skip if editing (toolbar visible) or not in single mode
+      if (toolbarState.visible || viewMode !== "single") return;
+
+      // Check if focus is on an input element
+      const activeElement = document.activeElement;
+      if (
+        activeElement instanceof HTMLInputElement ||
+        activeElement instanceof HTMLTextAreaElement ||
+        activeElement instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+
+      switch (e.key) {
+        case "ArrowLeft": // Next page in RTL
+        case "PageDown":
+          e.preventDefault();
+          if (currentPageIndex < totalPageCount - 1) {
+            navigateToPage(currentPageIndex + 1);
+          }
+          break;
+        case "ArrowRight": // Previous page in RTL
+        case "PageUp":
+          e.preventDefault();
+          if (currentPageIndex > 0) {
+            navigateToPage(currentPageIndex - 1);
+          }
+          break;
+        case "Home":
+          e.preventDefault();
+          navigateToPage(0);
+          break;
+        case "End":
+          e.preventDefault();
+          navigateToPage(totalPageCount - 1);
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    viewMode,
+    currentPageIndex,
+    totalPageCount,
+    navigateToPage,
+    toolbarState.visible,
+  ]);
 
   const getUniqueSelector = useCallback(
     (element: HTMLElement): string | null => {
@@ -1509,6 +1621,15 @@ export function EditableDocumentPreview({
     updateIframeHeight(previewFrameRef.current);
     applyOverridesToDocument();
 
+    // Update page count after pagination completes
+    window.setTimeout(() => {
+      updatePageCount();
+      // Apply initial view mode (show first page in single mode)
+      if (viewMode === "single") {
+        navigateToPage(currentPageIndex);
+      }
+    }, 200);
+
     // Apply edit bindings if in edit mode - ensures bindings are ready after iframe reload
     if (isEditMode) {
       // Use setTimeout to ensure DOM is fully settled
@@ -1521,6 +1642,10 @@ export function EditableDocumentPreview({
     applyEditableBindings,
     isEditMode,
     updateIframeHeight,
+    updatePageCount,
+    navigateToPage,
+    viewMode,
+    currentPageIndex,
   ]);
 
   return (
@@ -1720,6 +1845,15 @@ export function EditableDocumentPreview({
         </div>
       )}
 
+      {/* Page navigator */}
+      <PageNavigator
+        currentPage={currentPageIndex}
+        totalPages={totalPageCount}
+        viewMode={viewMode}
+        onPageChange={navigateToPage}
+        onViewModeChange={setViewMode}
+      />
+
       <div className="p-4 overflow-auto flex-1 min-h-0">
         {!htmlContent ? (
           <div
@@ -1744,7 +1878,37 @@ export function EditableDocumentPreview({
               )}
             </div>
           </div>
+        ) : viewMode === "single" ? (
+          /* Single page view - fixed A4 viewport */
+          <div
+            className="mx-auto bg-white rounded shadow-lg overflow-hidden"
+            style={{
+              width: "210mm",
+              maxWidth: "100%",
+              height: "297mm",
+              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+            }}
+          >
+            <iframe
+              ref={previewFrameRef}
+              srcDoc={htmlContent}
+              className={`w-full h-full ${
+                isInjectionMode
+                  ? "border-2 border-purple-400 cursor-crosshair"
+                  : ""
+              }`}
+              style={{
+                width: "100%",
+                height: "100%",
+                border: "none",
+                cursor: isInjectionMode ? "crosshair" : undefined,
+              }}
+              title="Document preview - Single page"
+              onLoad={handleIframeLoad}
+            />
+          </div>
         ) : (
+          /* Scroll view - original behavior */
           <iframe
             ref={previewFrameRef}
             srcDoc={htmlContent}
@@ -1759,7 +1923,7 @@ export function EditableDocumentPreview({
               maxWidth: "1200px",
               cursor: isInjectionMode ? "crosshair" : undefined,
             }}
-            title="Document preview"
+            title="Document preview - Scroll"
             onLoad={handleIframeLoad}
           />
         )}

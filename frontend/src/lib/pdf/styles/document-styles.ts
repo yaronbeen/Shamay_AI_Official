@@ -119,6 +119,17 @@ export const buildBaseCss = (settings?: CompanySettings): string => `
     }
   }
 
+  /* ===== SINGLE PAGE VIEW MODE ===== */
+  .document.single-page-mode {
+    padding: 0;
+  }
+  .document.single-page-mode .page {
+    margin-bottom: 0;
+  }
+  .document.single-page-mode .page::after {
+    display: none;
+  }
+
   /* ===== HEADER - MMBL Style - Compact ===== */
   .page-header {
     text-align: center;

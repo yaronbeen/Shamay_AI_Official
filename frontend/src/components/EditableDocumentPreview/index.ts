@@ -30,3 +30,5 @@ export { useTableEditor } from "./hooks/useTableEditor";
 // Components
 export { FloatingToolbar } from "./FloatingToolbar";
 export type { FloatingToolbarProps } from "./FloatingToolbar";
+export { PageNavigator } from "./PageNavigator";
+export type { PageNavigatorProps, ViewMode } from "./PageNavigator";
