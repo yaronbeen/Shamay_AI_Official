@@ -113,8 +113,7 @@ export function EditableDocumentPreview({
     CompanySettings | undefined
   >(undefined);
   const [htmlContent, setHtmlContent] = useState<string>("");
-  // Page navigation state for single-page view mode
-  const [viewMode, setViewMode] = useState<"single" | "scroll">("single");
+  // Page navigation state for single-page view
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [totalPageCount, setTotalPageCount] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -266,7 +265,7 @@ export function EditableDocumentPreview({
     });
   }, [getFrameDocument]);
 
-  // Navigate to a specific page in single-page mode
+  // Navigate to a specific page (single-page view only)
   const navigateToPage = useCallback(
     (pageIndex: number) => {
       const doc = getFrameDocument();
@@ -275,46 +274,34 @@ export function EditableDocumentPreview({
       const pages = doc.querySelectorAll("section.page");
       if (pageIndex < 0 || pageIndex >= pages.length) return;
 
-      if (viewMode === "single") {
-        // Hide all pages except the target
-        pages.forEach((page, idx) => {
-          const pageEl = page as HTMLElement;
-          pageEl.style.display = idx === pageIndex ? "block" : "none";
-        });
-        // Add class to document for single-page mode styling
-        const docEl = doc.querySelector(".document");
-        if (docEl) {
-          docEl.classList.add("single-page-mode");
-        }
-      } else {
-        // In scroll mode, show all pages and scroll to target
-        pages.forEach((page) => {
-          (page as HTMLElement).style.display = "block";
-        });
-        const docEl = doc.querySelector(".document");
-        if (docEl) {
-          docEl.classList.remove("single-page-mode");
-        }
-        pages[pageIndex].scrollIntoView({ behavior: "smooth", block: "start" });
+      // Hide all pages except the target
+      pages.forEach((page, idx) => {
+        const pageEl = page as HTMLElement;
+        pageEl.style.display = idx === pageIndex ? "block" : "none";
+      });
+      // Add class to document for single-page mode styling
+      const docEl = doc.querySelector(".document");
+      if (docEl) {
+        docEl.classList.add("single-page-mode");
       }
 
       setCurrentPageIndex(pageIndex);
     },
-    [getFrameDocument, viewMode],
+    [getFrameDocument],
   );
 
-  // Apply view mode when it changes
+  // Apply single-page view when page count changes
   useEffect(() => {
     if (totalPageCount > 0) {
       navigateToPage(currentPageIndex);
     }
-  }, [viewMode, totalPageCount, currentPageIndex, navigateToPage]);
+  }, [totalPageCount, currentPageIndex, navigateToPage]);
 
-  // Keyboard navigation for single-page mode
+  // Keyboard navigation for page navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Skip if editing (toolbar visible) or not in single mode
-      if (toolbarState.visible || viewMode !== "single") return;
+      // Skip if editing (toolbar visible)
+      if (toolbarState.visible) return;
 
       // Check if focus is on an input element
       const activeElement = document.activeElement;
@@ -354,13 +341,7 @@ export function EditableDocumentPreview({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [
-    viewMode,
-    currentPageIndex,
-    totalPageCount,
-    navigateToPage,
-    toolbarState.visible,
-  ]);
+  }, [currentPageIndex, totalPageCount, navigateToPage, toolbarState.visible]);
 
   const getUniqueSelector = useCallback(
     (element: HTMLElement): string | null => {
@@ -1624,10 +1605,8 @@ export function EditableDocumentPreview({
     // Update page count after pagination completes
     window.setTimeout(() => {
       updatePageCount();
-      // Apply initial view mode (show first page in single mode)
-      if (viewMode === "single") {
-        navigateToPage(currentPageIndex);
-      }
+      // Show first page in single-page view
+      navigateToPage(currentPageIndex);
     }, 200);
 
     // Apply edit bindings if in edit mode - ensures bindings are ready after iframe reload
@@ -1644,7 +1623,6 @@ export function EditableDocumentPreview({
     updateIframeHeight,
     updatePageCount,
     navigateToPage,
-    viewMode,
     currentPageIndex,
   ]);
 
@@ -1849,9 +1827,7 @@ export function EditableDocumentPreview({
       <PageNavigator
         currentPage={currentPageIndex}
         totalPages={totalPageCount}
-        viewMode={viewMode}
         onPageChange={navigateToPage}
-        onViewModeChange={setViewMode}
       />
 
       <div className="p-4 overflow-auto flex-1 min-h-0">
@@ -1878,7 +1854,7 @@ export function EditableDocumentPreview({
               )}
             </div>
           </div>
-        ) : viewMode === "single" ? (
+        ) : (
           /* Single page view - fixed A4 viewport */
           <div
             className="mx-auto bg-white rounded shadow-lg overflow-hidden"
@@ -1903,29 +1879,10 @@ export function EditableDocumentPreview({
                 border: "none",
                 cursor: isInjectionMode ? "crosshair" : undefined,
               }}
-              title="Document preview - Single page"
+              title="Document preview"
               onLoad={handleIframeLoad}
             />
           </div>
-        ) : (
-          /* Scroll view - original behavior */
-          <iframe
-            ref={previewFrameRef}
-            srcDoc={htmlContent}
-            className={`w-full rounded shadow-sm bg-white mx-auto ${
-              isInjectionMode
-                ? "border-2 border-purple-400 cursor-crosshair"
-                : "border border-gray-200"
-            }`}
-            style={{
-              minHeight: "1122px",
-              width: "100%",
-              maxWidth: "1200px",
-              cursor: isInjectionMode ? "crosshair" : undefined,
-            }}
-            title="Document preview - Scroll"
-            onLoad={handleIframeLoad}
-          />
         )}
 
         {/* Garmushka Injections Control Panel */}
