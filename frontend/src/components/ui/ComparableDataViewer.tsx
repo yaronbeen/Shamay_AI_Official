@@ -15,6 +15,7 @@ import {
   X,
   SlidersHorizontal,
 } from "lucide-react";
+import { toast } from "sonner";
 import { ValuationData } from "@/types/valuation";
 import FinalAssetValuation from "../valuation/FinalAssetValuation";
 
@@ -1040,109 +1041,116 @@ export default function ComparableDataViewer({
 
   // Export transactions to CSV
   const exportToCSV = () => {
-    if (transactions.length === 0) {
-      setError("אין נתונים לייצוא");
-      return;
+    try {
+      if (transactions.length === 0) {
+        toast.error("אין נתונים לייצוא");
+        return;
+      }
+
+      // Define all columns for export (Hebrew headers for Excel compatibility)
+      const headers = [
+        "id",
+        "יום מכירה",
+        "כתובת",
+        "גוש/חלקה",
+        "חדרים",
+        "קומה",
+        'שטח (מ"ר)',
+        "שנת בנייה",
+        "מחיר מכירה",
+        'מחיר למ"ר',
+        "כניסה",
+        "דירה",
+        "תת חלקה",
+        "שטח ברוטו",
+        "שטח נטו",
+        "חלק מקרקעין",
+        "קומות בבניין",
+        "דירות בבניין",
+        "מעלית",
+        "חניות",
+        "מגרש",
+        "גג",
+        "מחסן",
+        "חצר",
+        "גלריה",
+        "מחיר מוצהר",
+        "מחיר מוצהר $",
+        "מחיר מוערך $",
+        "מחיר לחדר",
+        "סוג עסקה",
+        "תפקוד בניין",
+        "תפקוד יחידה",
+        "מהות זכות",
+        'תב"ע',
+      ];
+
+      // Map transactions to CSV rows
+      const rows = sortedTransactions.map((t) =>
+        [
+          t.id,
+          t.sale_day || "",
+          t.address || "",
+          t.block_of_land || "",
+          t.rooms ?? "",
+          t.floor ?? "",
+          t.surface ?? "",
+          t.year_of_constru || "",
+          t.sale_value_nis ?? t.estimated_price_ils ?? "",
+          t.price_per_sqm ?? "",
+          t.entrance ?? "",
+          t.apartment_number ?? "",
+          formatSubChelka(t.block_of_land),
+          t.arnona_area_sqm ?? "",
+          t.registered_area_sqm ?? "",
+          t.shares || "",
+          t.total_floors ?? "",
+          t.apartments_in_building ?? "",
+          t.elevator || "",
+          t.parking_spaces ?? "",
+          t.plot ?? "",
+          t.roof ?? "",
+          t.storage ?? "",
+          t.yard ?? "",
+          t.gallery ?? "",
+          t.declared_price_ils ?? "",
+          t.declared_price_usd ?? "",
+          t.estimated_price_usd ?? "",
+          t.price_per_room ?? "",
+          t.transaction_type || "",
+          t.building_function || "",
+          t.unit_function || "",
+          t.rights || "",
+          t.zoning_plan || "",
+        ].map((cell) => {
+          // Escape quotes and wrap in quotes for CSV
+          const cellStr = String(cell ?? "");
+          return `"${cellStr.replace(/"/g, '""')}"`;
+        }),
+      );
+
+      // Create CSV content with BOM for Hebrew support in Excel
+      const csvContent = [
+        headers.map((h) => `"${h}"`).join(","),
+        ...rows.map((row) => row.join(",")),
+      ].join("\n");
+
+      // Add BOM for UTF-8 encoding (Excel Hebrew support)
+      const blob = new Blob(["\ufeff" + csvContent], {
+        type: "text/csv;charset=utf-8",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `comparable-data-${new Date().toISOString().split("T")[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      toast.success("הקובץ יורד...");
+    } catch (error) {
+      console.error("CSV export failed:", error);
+      toast.error("שגיאה בייצוא הנתונים");
     }
-
-    // Define all columns for export (Hebrew headers for Excel compatibility)
-    const headers = [
-      "id",
-      "יום מכירה",
-      "כתובת",
-      "גוש/חלקה",
-      "חדרים",
-      "קומה",
-      'שטח (מ"ר)',
-      "שנת בנייה",
-      "מחיר מכירה",
-      'מחיר למ"ר',
-      "כניסה",
-      "דירה",
-      "תת חלקה",
-      "שטח ברוטו",
-      "שטח נטו",
-      "חלק מקרקעין",
-      "קומות בבניין",
-      "דירות בבניין",
-      "מעלית",
-      "חניות",
-      "מגרש",
-      "גג",
-      "מחסן",
-      "חצר",
-      "גלריה",
-      "מחיר מוצהר",
-      "מחיר מוצהר $",
-      "מחיר מוערך $",
-      "מחיר לחדר",
-      "סוג עסקה",
-      "תפקוד בניין",
-      "תפקוד יחידה",
-      "מהות זכות",
-      'תב"ע',
-    ];
-
-    // Map transactions to CSV rows
-    const rows = sortedTransactions.map((t) =>
-      [
-        t.id,
-        t.sale_day || "",
-        t.address || "",
-        t.block_of_land || "",
-        t.rooms ?? "",
-        t.floor ?? "",
-        t.surface ?? "",
-        t.year_of_constru || "",
-        t.sale_value_nis ?? t.estimated_price_ils ?? "",
-        t.price_per_sqm ?? "",
-        t.entrance ?? "",
-        t.apartment_number ?? "",
-        formatSubChelka(t.block_of_land),
-        t.arnona_area_sqm ?? "",
-        t.registered_area_sqm ?? "",
-        t.shares || "",
-        t.total_floors ?? "",
-        t.apartments_in_building ?? "",
-        t.elevator || "",
-        t.parking_spaces ?? "",
-        t.plot ?? "",
-        t.roof ?? "",
-        t.storage ?? "",
-        t.yard ?? "",
-        t.gallery ?? "",
-        t.declared_price_ils ?? "",
-        t.declared_price_usd ?? "",
-        t.estimated_price_usd ?? "",
-        t.price_per_room ?? "",
-        t.transaction_type || "",
-        t.building_function || "",
-        t.unit_function || "",
-        t.rights || "",
-        t.zoning_plan || "",
-      ].map((cell) => {
-        // Escape quotes and wrap in quotes for CSV
-        const cellStr = String(cell ?? "");
-        return `"${cellStr.replace(/"/g, '""')}"`;
-      }),
-    );
-
-    // Create CSV content with BOM for Hebrew support in Excel
-    const csvContent = [
-      headers.map((h) => `"${h}"`).join(","),
-      ...rows.map((row) => row.join(",")),
-    ].join("\n");
-
-    // Add BOM for UTF-8 encoding (Excel Hebrew support)
-    const blob = new Blob(["\ufeff" + csvContent], {
-      type: "text/csv;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `comparable-data-${new Date().toISOString().split("T")[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   // Clear persisted state and reset
@@ -2176,7 +2184,12 @@ export default function ComparableDataViewer({
               )}
               <button
                 onClick={exportToCSV}
-                className="text-xs px-3 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200"
+                disabled={transactions.length === 0}
+                className={`text-xs px-3 py-1 rounded ${
+                  transactions.length === 0
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    : "bg-green-100 text-green-700 hover:bg-green-200"
+                }`}
                 title="ייצא לקובץ CSV לעריכה באקסל"
               >
                 ייצא CSV

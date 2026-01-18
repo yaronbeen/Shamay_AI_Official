@@ -7,6 +7,7 @@
  */
 
 import { useCallback, useState } from "react";
+import { toast } from "sonner";
 import { TableCellPosition, ToolbarState } from "../types";
 import { CustomTable, ValuationData } from "@/types/valuation";
 
@@ -79,8 +80,8 @@ export function useTableEditor({
         customTables: updatedTables,
       });
 
-      alert(
-        `✅ טבלה "${table.title || "ללא כותרת"}" נוספה בהצלחה! (${table.rows.length} שורות)`,
+      toast.success(
+        `טבלה "${table.title || "ללא כותרת"}" נוספה בהצלחה (${table.rows.length} שורות)`,
       );
     },
     [data.customTables, onDataChange],
@@ -92,7 +93,7 @@ export function useTableEditor({
    */
   const handleExportTableToCSV = useCallback(() => {
     if (!currentTableCell) {
-      alert("יש לבחור תא בטבלה לפני ייצוא");
+      toast.error("יש לבחור תא בטבלה לפני ייצוא");
       return;
     }
 
@@ -100,30 +101,39 @@ export function useTableEditor({
     const table = existingTables.find((t) => t.id === currentTableCell.tableId);
 
     if (!table) {
-      alert("לא נמצאה הטבלה לייצוא");
+      toast.error("לא נמצאה הטבלה לייצוא");
       return;
     }
 
-    // Build CSV content with proper escaping
-    const headerRow = table.headers.map(escapeCSVField).join(",");
-    const dataRows = table.rows.map((row) => row.map(escapeCSVField).join(","));
-    const csvContent = [headerRow, ...dataRows].join("\n");
+    try {
+      // Build CSV content with proper escaping
+      const headerRow = table.headers.map(escapeCSVField).join(",");
+      const dataRows = table.rows.map((row) =>
+        row.map(escapeCSVField).join(","),
+      );
+      const csvContent = [headerRow, ...dataRows].join("\n");
 
-    // Add BOM for Hebrew support in Excel
-    const BOM = "\uFEFF";
-    const blob = new Blob([BOM + csvContent], {
-      type: "text/csv;charset=utf-8;",
-    });
+      // Add BOM for Hebrew support in Excel
+      const BOM = "\uFEFF";
+      const blob = new Blob([BOM + csvContent], {
+        type: "text/csv;charset=utf-8;",
+      });
 
-    // Download the file
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${table.title || "table"}-export.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+      // Download the file
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${table.title || "table"}-export.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast.success("הטבלה יוצאה בהצלחה");
+    } catch (error) {
+      console.error("CSV export failed:", error);
+      toast.error("שגיאה בייצוא הטבלה");
+    }
   }, [currentTableCell, data.customTables]);
 
   /**
@@ -132,7 +142,7 @@ export function useTableEditor({
   const handleTableOperation = useCallback(
     (operation: TableOperation) => {
       if (!currentTableCell) {
-        alert("יש לבחור תא בטבלה");
+        toast.error("יש לבחור תא בטבלה");
         return;
       }
 
@@ -141,7 +151,7 @@ export function useTableEditor({
       const tableIndex = existingTables.findIndex((t) => t.id === tableId);
 
       if (tableIndex === -1) {
-        alert("לא נמצאה הטבלה");
+        toast.error("לא נמצאה הטבלה");
         return;
       }
 
@@ -164,7 +174,7 @@ export function useTableEditor({
 
         case "deleteRow": {
           if (row < 0 || table.rows.length <= 1) {
-            alert("לא ניתן למחוק את השורה היחידה");
+            toast.error("לא ניתן למחוק את השורה היחידה");
             return;
           }
           updatedTable = {
@@ -202,7 +212,7 @@ export function useTableEditor({
 
         case "deleteColumn": {
           if (col < 0 || table.headers.length <= 1) {
-            alert("לא ניתן למחוק את העמודה היחידה");
+            toast.error("לא ניתן למחוק את העמודה היחידה");
             return;
           }
           updatedTable = {
