@@ -13,7 +13,7 @@ import {
 import { toast } from "sonner";
 import { ValuationData } from "@/types/valuation";
 import { Step5ValuationPanel } from "./Step5ValuationPanel";
-import { Step5DocumentPreview } from "./Step5DocumentPreview";
+import { EditableDocumentPreview } from "../EditableDocumentPreview";
 import { CollapsibleDrawer } from "../ui/CollapsibleDrawer";
 import { cn } from "@/lib/utils";
 
@@ -426,12 +426,9 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
           width={previewWidth === "full" ? "w-full" : "w-1/2"}
           collapsedLabel="תצוגה מקדימה"
         >
-          <Step5DocumentPreview
+          <EditableDocumentPreview
             data={data}
-            width={previewWidth}
-            onWidthChange={() =>
-              setPreviewWidth((w) => (w === "half" ? "full" : "half"))
-            }
+            onDataChange={updateData || (() => {})}
           />
         </CollapsibleDrawer>
       </div>
