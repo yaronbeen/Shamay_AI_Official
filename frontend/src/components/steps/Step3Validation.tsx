@@ -378,7 +378,8 @@ export function Step3Validation({
       };
 
       setExtractedData(newExtractedData);
-      updateData({ extractedData: newExtractedData });
+      // Use immediate save since field blur is a discrete action
+      updateData({ extractedData: newExtractedData }, { immediate: true });
     },
     [data.extractedData, extractedData, updateData, trackFieldEdit],
   );

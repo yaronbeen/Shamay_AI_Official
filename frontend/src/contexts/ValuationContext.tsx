@@ -28,6 +28,7 @@ import { useShumaDB } from "@/hooks/useShumaDB";
 
 interface SaveOptions {
   skipAutoSave?: boolean;
+  immediate?: boolean; // Save immediately without debounce (for discrete actions like dropdowns, checkboxes)
 }
 
 type UpdateDataFn = (
@@ -448,7 +449,7 @@ export function ValuationProvider({ children }: ValuationProviderProps) {
       }
     };
 
-    debouncedSaveRef.current = createFlushableDebounce(saveFn, 1000);
+    debouncedSaveRef.current = createFlushableDebounce(saveFn, 300); // 300ms debounce for text input
 
     // Cleanup on unmount - cancel any pending debounced saves
     return () => {
@@ -559,11 +560,24 @@ export function ValuationProvider({ children }: ValuationProviderProps) {
         }
 
         if (isMeaningfulUpdate && !options?.skipAutoSave) {
-          console.log(
-            "💾 [ValuationContext] Triggering save for meaningful update:",
-            Object.keys(updates),
-          );
-          debouncedSave(newData);
+          if (options?.immediate) {
+            // Immediate save: flush pending debounce and save now
+            // Used for discrete actions (dropdowns, checkboxes, blur events)
+            console.log(
+              "⚡ [ValuationContext] Immediate save for discrete action:",
+              Object.keys(updates),
+            );
+            debouncedSaveRef.current?.flush(); // Clear any pending debounce
+            debouncedSaveRef.current?.(newData); // Queue new save
+            debouncedSaveRef.current?.flush(); // Execute immediately
+          } else {
+            // Debounced save: used for text input (typing)
+            console.log(
+              "💾 [ValuationContext] Debounced save for text input:",
+              Object.keys(updates),
+            );
+            debouncedSave(newData);
+          }
           setHasUnsavedChanges(false);
         }
 
