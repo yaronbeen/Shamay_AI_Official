@@ -297,12 +297,12 @@ function WizardContent() {
 
       <div className="w-full px-4 sm:px-6 lg:px-8 py-8">
         <div
-          className={`grid grid-cols-1 ${currentStep === 3 ? "" : "xl:grid-cols-12"} gap-8`}
+          className={`grid grid-cols-1 ${currentStep === 3 || currentStep === 5 ? "" : "xl:grid-cols-12"} gap-8`}
         >
           {/* Main Content - Full width on Step 3, expands when preview hidden */}
           <div
             className={
-              currentStep === 3
+              currentStep === 3 || currentStep === 5
                 ? ""
                 : showPreview
                   ? "xl:col-span-7"
@@ -340,8 +340,8 @@ function WizardContent() {
             </div>
           </div>
 
-          {/* Document Preview - Toggleable, Hidden on Step 3 */}
-          {currentStep !== 3 && (
+          {/* Document Preview - Toggleable, Hidden on Step 3 and Step 5 */}
+          {currentStep !== 3 && currentStep !== 5 && (
             <div
               className={`${showPreview ? "xl:col-span-5" : "xl:col-span-1"} sticky top-24 self-start h-[calc(100vh-8rem)] transition-all duration-300`}
             >

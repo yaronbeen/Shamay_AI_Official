@@ -243,20 +243,22 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
       </div>
 
       {/* Main Content - Flex Layout with Drawers */}
-      <div className="flex gap-4 min-h-[500px]">
-        {/* Left Side - Valuation Calculation (Collapsible Drawer) */}
-        <CollapsibleDrawer
-          isOpen={isDrawerOpen}
-          onToggle={() => setIsDrawerOpen(!isDrawerOpen)}
-          width={isPreviewOpen ? "w-1/4" : "w-1/3"}
-          collapsedLabel="חישוב שווי"
-        >
-          <Step5ValuationPanel
-            data={data}
-            updateData={updateData}
-            sessionId={sessionId}
-          />
-        </CollapsibleDrawer>
+      <div className="flex gap-4 min-h-[600px]">
+        {/* Left Side - Valuation Calculation (Collapsible Drawer) - Hidden when preview is full */}
+        {!(isPreviewOpen && previewWidth === "full") && (
+          <CollapsibleDrawer
+            isOpen={isDrawerOpen}
+            onToggle={() => setIsDrawerOpen(!isDrawerOpen)}
+            width={isPreviewOpen ? "w-1/4" : "w-1/3"}
+            collapsedLabel="חישוב שווי"
+          >
+            <Step5ValuationPanel
+              data={data}
+              updateData={updateData}
+              sessionId={sessionId}
+            />
+          </CollapsibleDrawer>
+        )}
 
         {/* Center - PDF Export (shrinks when preview open, hidden when preview full) */}
         <div
@@ -421,7 +423,7 @@ export function Step5Export({ data, updateData, sessionId }: Step5ExportProps) {
         <CollapsibleDrawer
           isOpen={isPreviewOpen}
           onToggle={() => setIsPreviewOpen(!isPreviewOpen)}
-          width={previewWidth === "full" ? "w-2/3" : "w-1/3"}
+          width={previewWidth === "full" ? "w-full" : "w-1/2"}
           collapsedLabel="תצוגה מקדימה"
         >
           <Step5DocumentPreview

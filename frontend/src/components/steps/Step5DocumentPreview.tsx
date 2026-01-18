@@ -59,7 +59,7 @@ export function Step5DocumentPreview({
     <div className="h-full flex flex-col bg-white rounded-lg border shadow-sm">
       {/* Header with controls */}
       <div className="flex items-center justify-between p-3 border-b bg-gray-50">
-        <h3 className="font-semibold text-gray-800">תצוגה מקדימה</h3>
+        <h3 className="font-semibold text-gray-800">תצוגה מקדימה של הדוח</h3>
         <div className="flex items-center gap-2">
           {/* Refresh button */}
           <button
@@ -75,13 +75,23 @@ export function Step5DocumentPreview({
           {/* Width toggle button */}
           <button
             onClick={onWidthChange}
-            className="p-2 hover:bg-gray-200 rounded transition-colors"
-            title={width === "half" ? "הרחב לרוחב מלא" : "צמצם לחצי רוחב"}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded transition-colors ${
+              width === "full"
+                ? "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+            title={width === "half" ? "הרחב למסך מלא" : "צמצם"}
           >
             {width === "half" ? (
-              <Maximize2 className="w-4 h-4 text-gray-600" />
+              <>
+                <Maximize2 className="w-4 h-4" />
+                <span className="text-sm font-medium">מסך מלא</span>
+              </>
             ) : (
-              <Minimize2 className="w-4 h-4 text-gray-600" />
+              <>
+                <Minimize2 className="w-4 h-4" />
+                <span className="text-sm font-medium">צמצם</span>
+              </>
             )}
           </button>
         </div>
@@ -90,14 +100,17 @@ export function Step5DocumentPreview({
       {/* Preview iframe */}
       <div className="flex-1 overflow-auto bg-gray-100 p-2">
         {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+          <div className="flex items-center justify-center h-full min-h-[400px]">
+            <div className="text-center">
+              <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-2" />
+              <p className="text-sm text-gray-500">טוען תצוגה מקדימה...</p>
+            </div>
           </div>
         ) : (
           <iframe
             ref={iframeRef}
             srcDoc={html}
-            className="w-full min-h-[800px] bg-white border-0 shadow-lg"
+            className="w-full min-h-[800px] bg-white border-0 shadow-lg rounded"
             onLoad={handleIframeLoad}
             title="תצוגה מקדימה של המסמך"
           />
