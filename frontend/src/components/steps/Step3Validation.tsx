@@ -408,7 +408,11 @@ export function Step3Validation({
     }
   };
 
-  const displayExtractedData = data.extractedData || extractedData;
+  // Merge props and local state - local edits take priority for immediate feedback
+  const displayExtractedData = {
+    ...(data.extractedData || {}),
+    ...extractedData, // Local edits take priority
+  };
 
   return (
     <div className="h-[calc(100vh-120px)] flex flex-col">

@@ -133,7 +133,8 @@ const SaveFinalResultsSchema = z.object({
 });
 
 // Union of all session action schemas
-const SessionActionSchema = z.discriminatedUnion("action", [
+// Using regular union instead of discriminatedUnion to allow fallback for unknown actions
+const SessionActionSchema = z.union([
   SaveToDbSchema,
   LoadFromDbSchema,
   SaveGisDataSchema,
