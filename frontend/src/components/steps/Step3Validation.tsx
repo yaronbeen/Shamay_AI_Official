@@ -26,7 +26,7 @@ interface Step3ValidationProps {
   data: ValuationData;
   updateData: (
     updates: Partial<ValuationData>,
-    options?: { skipAutoSave?: boolean },
+    options?: { skipAutoSave?: boolean; immediate?: boolean },
   ) => void;
   onValidationChange: (isValid: boolean) => void;
   sessionId?: string;

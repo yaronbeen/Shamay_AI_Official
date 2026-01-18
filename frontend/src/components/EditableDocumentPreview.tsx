@@ -143,7 +143,11 @@ export function EditableDocumentPreview({
   const [pendingInjection, setPendingInjection] = useState<{
     imageData: string;
     useFullImage: boolean;
+    label?: string;
   } | null>(null);
+  // Page selection for injection
+  const [showPageSelectionDialog, setShowPageSelectionDialog] = useState(false);
+  const [selectedTargetPage, setSelectedTargetPage] = useState(0);
   const previewFrameRef = useRef<HTMLIFrameElement>(null);
   const observerRef = useRef<MutationObserver | null>(null);
   const toolbarStateRef = useRef<ToolbarState>(toolbarState);
@@ -216,9 +220,11 @@ export function EditableDocumentPreview({
   // Listen for Garmushka injection event
   useEffect(() => {
     const handleGarmushkaInject = (event: CustomEvent) => {
-      const { imageData, useFullImage } = event.detail;
-      setPendingInjection({ imageData, useFullImage });
-      setIsInjectionMode(true);
+      const { imageData, useFullImage, label } = event.detail;
+      setPendingInjection({ imageData, useFullImage, label });
+      // Show page selection dialog instead of directly entering injection mode
+      setSelectedTargetPage(currentPageIndex); // Default to current page
+      setShowPageSelectionDialog(true);
     };
 
     window.addEventListener("garmushka-inject" as any, handleGarmushkaInject);
@@ -228,7 +234,7 @@ export function EditableDocumentPreview({
         handleGarmushkaInject,
       );
     };
-  }, []);
+  }, [currentPageIndex]);
 
   useEffect(() => {
     if (debounceTimerRef.current) {
@@ -718,6 +724,145 @@ export function EditableDocumentPreview({
     saveOverrideForElement(container);
   }, [getFrameDocument, saveOverrideForElement]);
 
+  // Handler for inserting manual page breaks
+  const handleInsertPageBreak = useCallback(() => {
+    const doc = getFrameDocument();
+    if (!doc) {
+      alert("לא ניתן לגשת למסמך");
+      return;
+    }
+
+    const selection = doc.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      alert("יש לבחור מיקום במסמך להוספת מעבר עמוד");
+      return;
+    }
+
+    // Find the nearest block element to insert after
+    let targetElement: Element | null = selection.anchorNode as Element;
+    if (targetElement?.nodeType === Node.TEXT_NODE) {
+      targetElement = targetElement.parentElement;
+    }
+
+    // Walk up to find a suitable block element
+    const blockSelectors = [
+      ".section-block",
+      ".chapter-title",
+      ".section-title",
+      "p",
+      "div",
+      "table",
+      "ul",
+      "ol",
+      ".page-body > *",
+    ];
+
+    while (targetElement && targetElement.tagName !== "SECTION") {
+      const isBlockElement = blockSelectors.some(
+        (sel) =>
+          targetElement?.matches?.(sel) ||
+          targetElement?.closest?.(sel) === targetElement,
+      );
+      if (isBlockElement && targetElement.parentElement) {
+        break;
+      }
+      targetElement = targetElement.parentElement;
+    }
+
+    if (!targetElement || targetElement.tagName === "SECTION") {
+      alert("לא ניתן להוסיף מעבר עמוד במיקום זה");
+      return;
+    }
+
+    // Generate unique ID for the page break
+    const breakId = `pb-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    // Create page break element
+    const pageBreak = doc.createElement("div");
+    pageBreak.className = "manual-page-break";
+    pageBreak.setAttribute("data-page-break", "manual");
+    pageBreak.setAttribute("data-break-id", breakId);
+    pageBreak.innerHTML =
+      '<span class="delete-break" title="הסר מעבר עמוד">✕</span>';
+
+    // Insert after target element
+    targetElement.parentNode?.insertBefore(
+      pageBreak,
+      targetElement.nextSibling,
+    );
+
+    // Generate a unique selector for persistence
+    const generateSelector = (el: Element): string => {
+      // Try to find a unique identifier
+      if (el.id) return `#${el.id}`;
+      if (el.getAttribute("data-edit-selector")) {
+        return el.getAttribute("data-edit-selector")!;
+      }
+
+      // Build path-based selector
+      const path: string[] = [];
+      let current: Element | null = el;
+      while (current && current !== doc.body && path.length < 5) {
+        let selector = current.tagName.toLowerCase();
+        if (current.className) {
+          const classes = current.className
+            .split(" ")
+            .filter((c) => c && !c.startsWith("__"))
+            .slice(0, 2);
+          if (classes.length > 0) {
+            selector += "." + classes.join(".");
+          }
+        }
+        // Add nth-child for specificity
+        const parent = current.parentElement;
+        if (parent) {
+          const siblings = Array.from(parent.children).filter(
+            (c) => c.tagName === current!.tagName,
+          );
+          if (siblings.length > 1) {
+            const index = siblings.indexOf(current) + 1;
+            selector += `:nth-of-type(${index})`;
+          }
+        }
+        path.unshift(selector);
+        current = current.parentElement;
+      }
+      return path.join(" > ");
+    };
+
+    const positionSelector = generateSelector(targetElement);
+
+    // Add click handler for delete button
+    const deleteBtn = pageBreak.querySelector(".delete-break");
+    if (deleteBtn) {
+      deleteBtn.addEventListener("click", () => {
+        if (confirm("האם למחוק את מעבר העמוד?")) {
+          pageBreak.remove();
+          // Update data to remove this break
+          const existingBreaks = data.manualPageBreaks || [];
+          onDataChange({
+            manualPageBreaks: existingBreaks.filter((b) => b.id !== breakId),
+          });
+        }
+      });
+    }
+
+    // Save to data for persistence
+    const existingBreaks = data.manualPageBreaks || [];
+    onDataChange({
+      manualPageBreaks: [
+        ...existingBreaks,
+        {
+          id: breakId,
+          positionAfterSelector: positionSelector,
+          createdAt: new Date().toISOString(),
+        },
+      ],
+    });
+
+    alert("✅ מעבר עמוד נוסף בהצלחה");
+  }, [getFrameDocument, data, onDataChange]);
+
   useEffect(() => {
     const fetchCompanySettings = async () => {
       try {
@@ -1085,22 +1230,35 @@ export function EditableDocumentPreview({
       const doc = getFrameDocument();
       if (!doc) return;
 
-      // Calculate position as percentage from top of document
-      const scrollTop = doc.documentElement.scrollTop || doc.body.scrollTop;
-      const docHeight =
-        doc.documentElement.scrollHeight || doc.body.scrollHeight;
-      const clickY = event.clientY + scrollTop;
-      const percentFromTop = Math.min(
-        100,
-        Math.max(0, (clickY / docHeight) * 100),
-      );
+      // Get the current page element
+      const currentPage = doc.querySelector(
+        `section.page[data-page-index="${selectedTargetPage}"]`,
+      ) as HTMLElement | null;
 
-      // Create new injection
+      let percentFromPageTop = 50; // Default to middle of page
+
+      if (currentPage) {
+        // Calculate position relative to the current page
+        const pageRect = currentPage.getBoundingClientRect();
+        const clickY = event.clientY - pageRect.top;
+        const pageHeight = pageRect.height || 1122; // Default A4 height
+        percentFromPageTop = Math.min(
+          100,
+          Math.max(0, (clickY / pageHeight) * 100),
+        );
+      }
+
+      // Create new injection with page-based positioning
       const newInjection = {
         id: `garmushka-${Date.now()}`,
         imageData: pendingInjection.imageData,
-        position: { percentFromTop },
+        position: {
+          pageIndex: selectedTargetPage,
+          percentFromPageTop,
+          percentFromTop: 0, // Legacy field, kept for backwards compat
+        },
         useFullImage: pendingInjection.useFullImage,
+        label: pendingInjection.label,
         createdAt: new Date().toISOString(),
       };
 
@@ -1130,6 +1288,7 @@ export function EditableDocumentPreview({
       isInjectionMode,
       onDataChange,
       pendingInjection,
+      selectedTargetPage,
     ],
   );
 
@@ -1800,12 +1959,86 @@ export function EditableDocumentPreview({
         </div>
       </div>
 
+      {/* Page Selection Dialog for Injection */}
+      {showPageSelectionDialog && pendingInjection && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4">
+              📄 בחר עמוד להוספת התשריט
+            </h3>
+
+            {pendingInjection.label && (
+              <div className="mb-4 p-2 bg-gray-50 rounded text-sm text-gray-600">
+                תשריט:{" "}
+                <span className="font-medium">{pendingInjection.label}</span>
+              </div>
+            )}
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                בחר עמוד יעד:
+              </label>
+              <select
+                value={selectedTargetPage}
+                onChange={(e) => setSelectedTargetPage(Number(e.target.value))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              >
+                {Array.from({ length: totalPageCount || 1 }, (_, i) => (
+                  <option key={i} value={i}>
+                    עמוד {i + 1}
+                    {i === 0 ? " - שער" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-sm text-blue-800">
+              💡 לאחר הבחירה, לחץ על המיקום המדויק בעמוד להוספת התשריט
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowPageSelectionDialog(false);
+                  setPendingInjection(null);
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              >
+                ביטול
+              </button>
+              <button
+                onClick={() => {
+                  if (totalPageCount === 0) {
+                    alert("לא ניתן להוסיף תשריט - המסמך לא נטען");
+                    setShowPageSelectionDialog(false);
+                    setPendingInjection(null);
+                    return;
+                  }
+                  setShowPageSelectionDialog(false);
+                  // Navigate to selected page and enter injection mode
+                  navigateToPage(selectedTargetPage);
+                  setIsInjectionMode(true);
+                }}
+                disabled={totalPageCount === 0}
+                className={`px-4 py-2 rounded-lg text-white font-medium ${
+                  totalPageCount === 0
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-purple-500 hover:bg-purple-600"
+                }`}
+              >
+                המשך לבחירת מיקום
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Injection mode banner */}
       {isInjectionMode && pendingInjection && (
         <div className="px-4 py-3 bg-purple-100 border-b border-purple-200 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="text-purple-800 font-medium">
-              📍 מצב הוספת תשריט פעיל
+              📍 מצב הוספת תשריט פעיל - עמוד {selectedTargetPage + 1}
             </span>
             <span className="text-purple-600 text-sm">
               לחץ על המיקום הרצוי במסמך להוספת התשריט
@@ -1888,149 +2121,237 @@ export function EditableDocumentPreview({
         {/* Garmushka Injections Control Panel */}
         {data.garmushkaMeasurements?.injections &&
           data.garmushkaMeasurements.injections.length > 0 && (
-            <div className="fixed bottom-4 left-4 bg-white rounded-lg shadow-lg border border-gray-200 p-4 max-w-xs z-40">
+            <div className="fixed bottom-4 left-4 bg-white rounded-lg shadow-lg border border-gray-200 p-4 max-w-sm z-40">
               <h4 className="text-sm font-semibold mb-3 text-gray-800">
                 תשריטי גרמושקה ({data.garmushkaMeasurements.injections.length})
               </h4>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
+              <div className="space-y-3 max-h-64 overflow-y-auto">
                 {data.garmushkaMeasurements.injections.map(
-                  (injection, index) => (
-                    <div
-                      key={injection.id}
-                      className="flex items-center justify-between gap-2 p-2 bg-gray-50 rounded"
-                    >
-                      <span className="text-xs text-gray-600 truncate flex-1">
-                        תשריט {index + 1}
-                      </span>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => {
-                            const currentInjections = [
-                              ...(data.garmushkaMeasurements?.injections || []),
-                            ];
-                            const injectionIndex = currentInjections.findIndex(
-                              (i) => i.id === injection.id,
-                            );
-                            if (injectionIndex >= 0) {
-                              currentInjections[injectionIndex] = {
-                                ...currentInjections[injectionIndex],
-                                position: {
-                                  percentFromTop: Math.max(
+                  (injection, index) => {
+                    // Get page index from new or legacy format
+                    const pageIndex = injection.position.pageIndex ?? 0;
+                    const percentFromPageTop =
+                      injection.position.percentFromPageTop ??
+                      injection.position.percentFromTop ??
+                      50;
+
+                    return (
+                      <div
+                        key={injection.id}
+                        className="p-2 bg-gray-50 rounded border border-gray-100"
+                      >
+                        {/* Row 1: Label and page info */}
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-medium text-gray-700 truncate">
+                            {injection.label || `תשריט ${index + 1}`}
+                          </span>
+                          <span className="text-xs text-purple-600 bg-purple-50 px-2 py-0.5 rounded">
+                            עמוד {pageIndex + 1}
+                          </span>
+                        </div>
+
+                        {/* Row 2: Move to page dropdown and actions */}
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={pageIndex}
+                            onChange={(e) => {
+                              const newPageIndex = Number(e.target.value);
+                              const currentInjections = [
+                                ...(data.garmushkaMeasurements?.injections ||
+                                  []),
+                              ];
+                              const injectionIdx = currentInjections.findIndex(
+                                (i) => i.id === injection.id,
+                              );
+                              if (injectionIdx >= 0) {
+                                currentInjections[injectionIdx] = {
+                                  ...currentInjections[injectionIdx],
+                                  position: {
+                                    pageIndex: newPageIndex,
+                                    percentFromPageTop,
+                                    percentFromTop: 0,
+                                  },
+                                };
+                                onDataChange({
+                                  garmushkaMeasurements: {
+                                    ...data.garmushkaMeasurements,
+                                    measurementTable:
+                                      data.garmushkaMeasurements
+                                        ?.measurementTable || [],
+                                    metersPerPixel:
+                                      data.garmushkaMeasurements
+                                        ?.metersPerPixel || 0,
+                                    unitMode:
+                                      data.garmushkaMeasurements?.unitMode ||
+                                      "metric",
+                                    isCalibrated:
+                                      data.garmushkaMeasurements
+                                        ?.isCalibrated || false,
+                                    fileName:
+                                      data.garmushkaMeasurements?.fileName ||
+                                      "",
+                                    injections: currentInjections,
+                                  },
+                                });
+                              }
+                            }}
+                            className="flex-1 text-xs px-2 py-1 border border-gray-200 rounded bg-white"
+                            title="העבר לעמוד"
+                          >
+                            {Array.from(
+                              { length: totalPageCount || 1 },
+                              (_, i) => (
+                                <option key={i} value={i}>
+                                  עמוד {i + 1}
+                                </option>
+                              ),
+                            )}
+                          </select>
+
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => {
+                                const currentInjections = [
+                                  ...(data.garmushkaMeasurements?.injections ||
+                                    []),
+                                ];
+                                const injectionIdx =
+                                  currentInjections.findIndex(
+                                    (i) => i.id === injection.id,
+                                  );
+                                if (injectionIdx >= 0) {
+                                  const newPercent = Math.max(
                                     0,
-                                    currentInjections[injectionIndex].position
-                                      .percentFromTop - 5,
-                                  ),
-                                },
-                              };
-                              onDataChange({
-                                garmushkaMeasurements: {
-                                  ...data.garmushkaMeasurements,
-                                  measurementTable:
-                                    data.garmushkaMeasurements
-                                      ?.measurementTable || [],
-                                  metersPerPixel:
-                                    data.garmushkaMeasurements
-                                      ?.metersPerPixel || 0,
-                                  unitMode:
-                                    data.garmushkaMeasurements?.unitMode ||
-                                    "metric",
-                                  isCalibrated:
-                                    data.garmushkaMeasurements?.isCalibrated ||
-                                    false,
-                                  fileName:
-                                    data.garmushkaMeasurements?.fileName || "",
-                                  injections: currentInjections,
-                                },
-                              });
-                            }
-                          }}
-                          className="w-6 h-6 flex items-center justify-center bg-gray-200 rounded hover:bg-gray-300 text-xs"
-                          title="הזז למעלה"
-                        >
-                          ▲
-                        </button>
-                        <button
-                          onClick={() => {
-                            const currentInjections = [
-                              ...(data.garmushkaMeasurements?.injections || []),
-                            ];
-                            const injectionIndex = currentInjections.findIndex(
-                              (i) => i.id === injection.id,
-                            );
-                            if (injectionIndex >= 0) {
-                              currentInjections[injectionIndex] = {
-                                ...currentInjections[injectionIndex],
-                                position: {
-                                  percentFromTop: Math.min(
+                                    percentFromPageTop - 5,
+                                  );
+                                  currentInjections[injectionIdx] = {
+                                    ...currentInjections[injectionIdx],
+                                    position: {
+                                      pageIndex,
+                                      percentFromPageTop: newPercent,
+                                      percentFromTop: 0,
+                                    },
+                                  };
+                                  onDataChange({
+                                    garmushkaMeasurements: {
+                                      ...data.garmushkaMeasurements,
+                                      measurementTable:
+                                        data.garmushkaMeasurements
+                                          ?.measurementTable || [],
+                                      metersPerPixel:
+                                        data.garmushkaMeasurements
+                                          ?.metersPerPixel || 0,
+                                      unitMode:
+                                        data.garmushkaMeasurements?.unitMode ||
+                                        "metric",
+                                      isCalibrated:
+                                        data.garmushkaMeasurements
+                                          ?.isCalibrated || false,
+                                      fileName:
+                                        data.garmushkaMeasurements?.fileName ||
+                                        "",
+                                      injections: currentInjections,
+                                    },
+                                  });
+                                }
+                              }}
+                              className="w-6 h-6 flex items-center justify-center bg-gray-200 rounded hover:bg-gray-300 text-xs"
+                              title="הזז למעלה בעמוד"
+                            >
+                              ▲
+                            </button>
+                            <button
+                              onClick={() => {
+                                const currentInjections = [
+                                  ...(data.garmushkaMeasurements?.injections ||
+                                    []),
+                                ];
+                                const injectionIdx =
+                                  currentInjections.findIndex(
+                                    (i) => i.id === injection.id,
+                                  );
+                                if (injectionIdx >= 0) {
+                                  const newPercent = Math.min(
                                     100,
-                                    currentInjections[injectionIndex].position
-                                      .percentFromTop + 5,
-                                  ),
-                                },
-                              };
-                              onDataChange({
-                                garmushkaMeasurements: {
-                                  ...data.garmushkaMeasurements,
-                                  measurementTable:
-                                    data.garmushkaMeasurements
-                                      ?.measurementTable || [],
-                                  metersPerPixel:
-                                    data.garmushkaMeasurements
-                                      ?.metersPerPixel || 0,
-                                  unitMode:
-                                    data.garmushkaMeasurements?.unitMode ||
-                                    "metric",
-                                  isCalibrated:
-                                    data.garmushkaMeasurements?.isCalibrated ||
-                                    false,
-                                  fileName:
-                                    data.garmushkaMeasurements?.fileName || "",
-                                  injections: currentInjections,
-                                },
-                              });
-                            }
-                          }}
-                          className="w-6 h-6 flex items-center justify-center bg-gray-200 rounded hover:bg-gray-300 text-xs"
-                          title="הזז למטה"
-                        >
-                          ▼
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (confirm("האם למחוק את התשריט הזה מהמסמך?")) {
-                              const currentInjections = (
-                                data.garmushkaMeasurements?.injections || []
-                              ).filter((i) => i.id !== injection.id);
-                              onDataChange({
-                                garmushkaMeasurements: {
-                                  ...data.garmushkaMeasurements,
-                                  measurementTable:
-                                    data.garmushkaMeasurements
-                                      ?.measurementTable || [],
-                                  metersPerPixel:
-                                    data.garmushkaMeasurements
-                                      ?.metersPerPixel || 0,
-                                  unitMode:
-                                    data.garmushkaMeasurements?.unitMode ||
-                                    "metric",
-                                  isCalibrated:
-                                    data.garmushkaMeasurements?.isCalibrated ||
-                                    false,
-                                  fileName:
-                                    data.garmushkaMeasurements?.fileName || "",
-                                  injections: currentInjections,
-                                },
-                              });
-                            }
-                          }}
-                          className="w-6 h-6 flex items-center justify-center bg-red-100 text-red-600 rounded hover:bg-red-200 text-xs"
-                          title="מחק תשריט"
-                        >
-                          ✕
-                        </button>
+                                    percentFromPageTop + 5,
+                                  );
+                                  currentInjections[injectionIdx] = {
+                                    ...currentInjections[injectionIdx],
+                                    position: {
+                                      pageIndex,
+                                      percentFromPageTop: newPercent,
+                                      percentFromTop: 0,
+                                    },
+                                  };
+                                  onDataChange({
+                                    garmushkaMeasurements: {
+                                      ...data.garmushkaMeasurements,
+                                      measurementTable:
+                                        data.garmushkaMeasurements
+                                          ?.measurementTable || [],
+                                      metersPerPixel:
+                                        data.garmushkaMeasurements
+                                          ?.metersPerPixel || 0,
+                                      unitMode:
+                                        data.garmushkaMeasurements?.unitMode ||
+                                        "metric",
+                                      isCalibrated:
+                                        data.garmushkaMeasurements
+                                          ?.isCalibrated || false,
+                                      fileName:
+                                        data.garmushkaMeasurements?.fileName ||
+                                        "",
+                                      injections: currentInjections,
+                                    },
+                                  });
+                                }
+                              }}
+                              className="w-6 h-6 flex items-center justify-center bg-gray-200 rounded hover:bg-gray-300 text-xs"
+                              title="הזז למטה בעמוד"
+                            >
+                              ▼
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (
+                                  confirm("האם למחוק את התשריט הזה מהמסמך?")
+                                ) {
+                                  const currentInjections = (
+                                    data.garmushkaMeasurements?.injections || []
+                                  ).filter((i) => i.id !== injection.id);
+                                  onDataChange({
+                                    garmushkaMeasurements: {
+                                      ...data.garmushkaMeasurements,
+                                      measurementTable:
+                                        data.garmushkaMeasurements
+                                          ?.measurementTable || [],
+                                      metersPerPixel:
+                                        data.garmushkaMeasurements
+                                          ?.metersPerPixel || 0,
+                                      unitMode:
+                                        data.garmushkaMeasurements?.unitMode ||
+                                        "metric",
+                                      isCalibrated:
+                                        data.garmushkaMeasurements
+                                          ?.isCalibrated || false,
+                                      fileName:
+                                        data.garmushkaMeasurements?.fileName ||
+                                        "",
+                                      injections: currentInjections,
+                                    },
+                                  });
+                                }
+                              }}
+                              className="w-6 h-6 flex items-center justify-center bg-red-100 text-red-600 rounded hover:bg-red-200 text-xs"
+                              title="מחק תשריט"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ),
+                    );
+                  },
                 )}
               </div>
             </div>
@@ -2047,6 +2368,7 @@ export function EditableDocumentPreview({
             onImageResize={handleImageResize}
             onImageReplace={handleImageReplace}
             onImageReset={handleImageReset}
+            onInsertPageBreak={handleInsertPageBreak}
           />
         )}
         <style jsx global>{`

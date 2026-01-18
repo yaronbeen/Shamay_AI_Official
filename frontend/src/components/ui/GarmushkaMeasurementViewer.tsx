@@ -48,6 +48,7 @@ interface Shape {
   notes?: string;
   realWorldLength?: number;
   color?: string;
+  croppedImageData?: string; // Base64 PNG of extracted polygon area
 }
 
 interface PDFPageInfo {
@@ -205,6 +206,14 @@ export default function GarmushkaMeasurementViewer({
     useState<boolean>(false);
   const [injectionUseFullImage, setInjectionUseFullImage] =
     useState<boolean>(true);
+  // Crop polygon modal state
+  const [showCropModal, setShowCropModal] = useState<boolean>(false);
+  const [cropShapeId, setCropShapeId] = useState<string | null>(null);
+  const [cropBackgroundType, setCropBackgroundType] = useState<
+    "transparent" | "white" | "original"
+  >("transparent");
+  const [cropPreviewUrl, setCropPreviewUrl] = useState<string | null>(null);
+  const [isCropping, setIsCropping] = useState<boolean>(false);
   const [showNameDialog, setShowNameDialog] = useState<boolean>(false);
   const [pendingShapeId, setPendingShapeId] = useState<string | null>(null);
   const [isRenaming, setIsRenaming] = useState<boolean>(false);
@@ -1567,6 +1576,206 @@ export default function GarmushkaMeasurementViewer({
     }
   }, [saveCropArea]);
 
+  // Extract polygon area with specified background treatment
+  const extractPolygonArea = useCallback(
+    async (
+      shape: Shape,
+      backgroundType: "transparent" | "white" | "original",
+    ): Promise<string | null> => {
+      if (!stageRef.current || shape.type !== "polygon" || !imageUrl)
+        return null;
+      // Validate minimum polygon points
+      if (!shape.points || shape.points.length < 3) {
+        console.warn("Cannot extract polygon area: need at least 3 points");
+        return null;
+      }
+
+      try {
+        // Calculate bounding box of the polygon
+        const xs = shape.points.map((p) => p.x);
+        const ys = shape.points.map((p) => p.y);
+        const minX = Math.min(...xs);
+        const maxX = Math.max(...xs);
+        const minY = Math.min(...ys);
+        const maxY = Math.max(...ys);
+        const padding = 10; // Small padding around the polygon
+        const width = maxX - minX + padding * 2;
+        const height = maxY - minY + padding * 2;
+
+        // Create a new canvas for the extracted polygon
+        const extractCanvas = document.createElement("canvas");
+        extractCanvas.width = width;
+        extractCanvas.height = height;
+        const ctx = extractCanvas.getContext("2d");
+        if (!ctx) return null;
+
+        // Load the source image
+        const sourceImage = new Image();
+        sourceImage.crossOrigin = "anonymous";
+
+        await new Promise<void>((resolve, reject) => {
+          sourceImage.onload = () => resolve();
+          sourceImage.onerror = () => reject(new Error("Failed to load image"));
+          sourceImage.src = imageUrl;
+        });
+
+        // Translate points to local canvas coordinates
+        const localPoints = shape.points.map((p) => ({
+          x: p.x - minX + padding,
+          y: p.y - minY + padding,
+        }));
+
+        if (backgroundType === "original") {
+          // Just crop to bounding box, no clipping
+          ctx.drawImage(
+            sourceImage,
+            minX - padding,
+            minY - padding,
+            width,
+            height,
+            0,
+            0,
+            width,
+            height,
+          );
+        } else {
+          // Fill background based on type
+          if (backgroundType === "white") {
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, width, height);
+          }
+          // For transparent, canvas is already transparent by default
+
+          // Create clipping path from polygon
+          ctx.beginPath();
+          ctx.moveTo(localPoints[0].x, localPoints[0].y);
+          for (let i = 1; i < localPoints.length; i++) {
+            ctx.lineTo(localPoints[i].x, localPoints[i].y);
+          }
+          ctx.closePath();
+          ctx.clip();
+
+          // Draw the image through the clip mask
+          ctx.drawImage(
+            sourceImage,
+            minX - padding,
+            minY - padding,
+            width,
+            height,
+            0,
+            0,
+            width,
+            height,
+          );
+        }
+
+        return extractCanvas.toDataURL("image/png");
+      } catch (err) {
+        console.error("Failed to extract polygon area:", err);
+        return null;
+      }
+    },
+    [imageUrl],
+  );
+
+  // Open crop modal for a shape
+  const openCropModal = useCallback(
+    async (shapeId: string) => {
+      const shape = shapes.find((s) => s.id === shapeId);
+      if (!shape || shape.type !== "polygon") return;
+
+      setCropShapeId(shapeId);
+      setCropBackgroundType("transparent");
+      setShowCropModal(true);
+
+      // Generate initial preview with race condition guard
+      setIsCropping(true);
+      const preview = await extractPolygonArea(shape, "transparent");
+      // Only update if this shape is still selected (guard against stale updates)
+      setCropShapeId((currentId) => {
+        if (currentId === shapeId) {
+          setCropPreviewUrl(preview);
+          setIsCropping(false);
+        }
+        return currentId;
+      });
+    },
+    [shapes, extractPolygonArea],
+  );
+
+  // Update crop preview when background type changes
+  const updateCropPreview = useCallback(async () => {
+    if (!cropShapeId) return;
+    const shape = shapes.find((s) => s.id === cropShapeId);
+    if (!shape) return;
+
+    const currentShapeId = cropShapeId;
+    setIsCropping(true);
+    const preview = await extractPolygonArea(shape, cropBackgroundType);
+    // Guard against stale updates if shape changed during async operation
+    setCropShapeId((activeId) => {
+      if (activeId === currentShapeId) {
+        setCropPreviewUrl(preview);
+        setIsCropping(false);
+      }
+      return activeId;
+    });
+  }, [cropShapeId, shapes, cropBackgroundType, extractPolygonArea]);
+
+  // Handle crop and add to document
+  const handleCropAndInject = useCallback(async () => {
+    if (!cropShapeId || !cropPreviewUrl) return;
+
+    const shape = shapes.find((s) => s.id === cropShapeId);
+    if (!shape) return;
+
+    // Store the cropped image in the shape
+    setShapes((prev) =>
+      prev.map((s) =>
+        s.id === cropShapeId ? { ...s, croppedImageData: cropPreviewUrl } : s,
+      ),
+    );
+
+    // Dispatch injection event with the cropped image
+    const event = new CustomEvent("garmushka-inject", {
+      detail: {
+        imageData: cropPreviewUrl,
+        useFullImage: false,
+        label: shape.name,
+      },
+    });
+    window.dispatchEvent(event);
+
+    setShowCropModal(false);
+    setCropShapeId(null);
+    setCropPreviewUrl(null);
+    alert("לחץ על המיקום הרצוי בתצוגה המקדימה של המסמך");
+  }, [cropShapeId, cropPreviewUrl, shapes]);
+
+  // Copy cropped image to clipboard
+  const handleCopyToClipboard = useCallback(async () => {
+    if (!cropPreviewUrl) return;
+
+    // Security: Only allow data URLs to prevent SSRF (fetching arbitrary URLs)
+    if (!cropPreviewUrl.startsWith("data:image/")) {
+      console.error("Invalid URL for clipboard copy - only data URLs allowed");
+      alert("שגיאה: URL לא חוקי");
+      return;
+    }
+
+    try {
+      const response = await fetch(cropPreviewUrl);
+      const blob = await response.blob();
+      await navigator.clipboard.write([
+        new ClipboardItem({ "image/png": blob }),
+      ]);
+      alert("התמונה הועתקה ללוח!");
+    } catch (err) {
+      console.error("Failed to copy to clipboard:", err);
+      alert("שגיאה בהעתקה ללוח");
+    }
+  }, [cropPreviewUrl]);
+
   // Save measurements to session
   const saveMeasurements = useCallback(async () => {
     try {
@@ -2526,6 +2735,19 @@ export default function GarmushkaMeasurementViewer({
                             {measurement}
                           </span>
                           <div className="flex items-center gap-1">
+                            {/* Crop button - only for polygons */}
+                            {shape.type === "polygon" && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openCropModal(shape.id);
+                                }}
+                                className="text-purple-500 hover:text-purple-700 text-sm px-1 py-1"
+                                title="חתוך אזור"
+                              >
+                                ✂
+                              </button>
+                            )}
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -2839,6 +3061,138 @@ export default function GarmushkaMeasurementViewer({
                 className="px-4 py-2 rounded-lg text-white font-medium bg-purple-500 hover:bg-purple-600"
               >
                 המשך לבחירת מיקום
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Crop Polygon Modal */}
+      {showCropModal && cropShapeId && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-lg w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4">
+              ✂️ חיתוך אזור:{" "}
+              {shapes.find((s) => s.id === cropShapeId)?.name || ""}
+            </h3>
+
+            {/* Preview */}
+            <div className="mb-4 border rounded-lg p-2 bg-gray-100 flex items-center justify-center min-h-[200px]">
+              {isCropping ? (
+                <div className="text-gray-500">טוען תצוגה מקדימה...</div>
+              ) : cropPreviewUrl ? (
+                <img
+                  src={cropPreviewUrl}
+                  alt="תצוגה מקדימה"
+                  className="max-w-full max-h-[300px] object-contain"
+                  style={{
+                    backgroundColor:
+                      cropBackgroundType === "transparent"
+                        ? "repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 50% / 20px 20px"
+                        : cropBackgroundType === "white"
+                          ? "#fff"
+                          : "#f3f4f6",
+                  }}
+                />
+              ) : (
+                <div className="text-gray-500">לא ניתן ליצור תצוגה מקדימה</div>
+              )}
+            </div>
+
+            {/* Background Options */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                טיפול ברקע:
+              </label>
+              <div className="space-y-2">
+                <label className="flex items-center gap-3 p-2 border rounded-lg cursor-pointer hover:bg-gray-50">
+                  <input
+                    type="radio"
+                    name="cropBackground"
+                    checked={cropBackgroundType === "transparent"}
+                    onChange={() => {
+                      setCropBackgroundType("transparent");
+                      setTimeout(updateCropPreview, 0);
+                    }}
+                    className="w-4 h-4 text-purple-600"
+                  />
+                  <div>
+                    <span className="font-medium">שקוף</span>
+                    <p className="text-xs text-gray-500">הסר את הרקע לחלוטין</p>
+                  </div>
+                </label>
+                <label className="flex items-center gap-3 p-2 border rounded-lg cursor-pointer hover:bg-gray-50">
+                  <input
+                    type="radio"
+                    name="cropBackground"
+                    checked={cropBackgroundType === "white"}
+                    onChange={() => {
+                      setCropBackgroundType("white");
+                      setTimeout(updateCropPreview, 0);
+                    }}
+                    className="w-4 h-4 text-purple-600"
+                  />
+                  <div>
+                    <span className="font-medium">לבן</span>
+                    <p className="text-xs text-gray-500">
+                      החלף את הרקע בלבן נקי
+                    </p>
+                  </div>
+                </label>
+                <label className="flex items-center gap-3 p-2 border rounded-lg cursor-pointer hover:bg-gray-50">
+                  <input
+                    type="radio"
+                    name="cropBackground"
+                    checked={cropBackgroundType === "original"}
+                    onChange={() => {
+                      setCropBackgroundType("original");
+                      setTimeout(updateCropPreview, 0);
+                    }}
+                    className="w-4 h-4 text-purple-600"
+                  />
+                  <div>
+                    <span className="font-medium">שמור מקורי</span>
+                    <p className="text-xs text-gray-500">
+                      חתוך לגבולות המלבן בלבד
+                    </p>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowCropModal(false);
+                  setCropShapeId(null);
+                  setCropPreviewUrl(null);
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              >
+                ביטול
+              </button>
+              <button
+                onClick={handleCopyToClipboard}
+                disabled={!cropPreviewUrl || isCropping}
+                className={`px-4 py-2 rounded-lg font-medium border ${
+                  cropPreviewUrl && !isCropping
+                    ? "border-purple-500 text-purple-600 hover:bg-purple-50"
+                    : "border-gray-300 text-gray-400 cursor-not-allowed"
+                }`}
+              >
+                📋 העתק ללוח
+              </button>
+              <button
+                onClick={handleCropAndInject}
+                disabled={!cropPreviewUrl || isCropping}
+                className={`px-4 py-2 rounded-lg text-white font-medium ${
+                  cropPreviewUrl && !isCropping
+                    ? "bg-purple-500 hover:bg-purple-600"
+                    : "bg-gray-400 cursor-not-allowed"
+                }`}
+              >
+                📄 הוסף למסמך
               </button>
             </div>
           </div>

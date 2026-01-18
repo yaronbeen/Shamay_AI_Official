@@ -1178,27 +1178,57 @@ export function generateDocumentHTML(
     const injections = data.garmushkaMeasurements?.injections;
     if (!injections || injections.length === 0) return "";
 
-    // Sort by position
-    const sortedInjections = [...injections].sort(
-      (a, b) => a.position.percentFromTop - b.position.percentFromTop,
-    );
+    // Sort by page first, then by position within page
+    const sortedInjections = [...injections].sort((a, b) => {
+      const pageA = a.position.pageIndex ?? 0;
+      const pageB = b.position.pageIndex ?? 0;
+      if (pageA !== pageB) return pageA - pageB;
+      // Within same page, sort by position
+      const posA =
+        a.position.percentFromPageTop ?? a.position.percentFromTop ?? 50;
+      const posB =
+        b.position.percentFromPageTop ?? b.position.percentFromTop ?? 50;
+      return posA - posB;
+    });
 
     return sortedInjections
-      .map(
-        (injection, index) => `
-      <div class="garmushka-injection section-block" data-garmushka-id="${injection.id}" style="margin: 20px 0; page-break-inside: avoid;">
-        <div class="sub-title" style="margin-bottom: 10px;">תשריט מדידות ${index > 0 ? index + 1 : ""}</div>
+      .map((injection, index) => {
+        const pageIndex = injection.position.pageIndex ?? 0;
+        // Sanitize label to prevent XSS
+        const rawLabel = injection.label || `תשריט ${index + 1}`;
+        const safeLabel = escapeHtmlForTable(rawLabel);
+        const pageLabel = pageIndex > 0 ? ` (עמוד ${pageIndex + 1})` : "";
+
+        // Sanitize injection.id for attribute usage (alphanumeric and dash only)
+        const safeId = (injection.id || "").replace(/[^a-zA-Z0-9-_]/g, "");
+
+        // Validate imageData is a proper data URL (prevent arbitrary URL injection)
+        const isValidDataUrl =
+          injection.imageData &&
+          /^data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/=]+$/.test(
+            injection.imageData,
+          );
+        if (!isValidDataUrl) {
+          console.warn(
+            `Invalid image data for injection ${safeId}, skipping render`,
+          );
+          return "";
+        }
+
+        return `
+      <div class="garmushka-injection section-block" data-garmushka-id="${safeId}" data-target-page="${pageIndex}" style="margin: 20px 0; page-break-inside: avoid;">
+        <div class="sub-title" style="margin-bottom: 10px;">${safeLabel}${pageLabel}</div>
         <figure style="margin: 0; text-align: center;">
           <img
             src="${injection.imageData}"
-            alt="תשריט מדידות גרמושקה"
+            alt="${safeLabel}"
             style="max-width: 100%; border: 1px solid #cccccc; border-radius: 4px;"
             data-managed-image="true"
           />
         </figure>
       </div>
-    `,
-      )
+    `;
+      })
       .join("");
   })();
 

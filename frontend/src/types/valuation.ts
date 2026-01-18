@@ -178,9 +178,12 @@ export interface GarmushkaInjection {
   id: string;
   imageData: string; // Base64 PNG
   position: {
-    percentFromTop: number; // 0-100
+    pageIndex: number; // 0-indexed page number
+    percentFromPageTop: number; // 0-100 position within the page
+    percentFromTop?: number; // Legacy: 0-100 of entire document (for backwards compat)
   };
   useFullImage: boolean;
+  label?: string; // Optional name/label for the injection
   createdAt: string;
 }
 
@@ -213,6 +216,19 @@ export interface StructuredFootnote {
   pageNumber: number;
   footnoteNumber: number;
   text: string;
+}
+
+export interface ManualPageBreak {
+  id: string;
+  positionAfterSelector: string;
+  createdAt: string;
+}
+
+export interface DocumentComponentOrder {
+  id: string;
+  type: "custom-table" | "garmushka" | "section-block";
+  customPosition?: number;
+  visible: boolean;
 }
 
 export interface ComparableProperty {
@@ -481,6 +497,12 @@ export interface ValuationData {
 
   // Structured Footnotes
   structuredFootnotes?: StructuredFootnote[];
+
+  // Manual Page Breaks
+  manualPageBreaks?: ManualPageBreak[];
+
+  // Component Ordering (for page builder)
+  documentComponentOrder?: DocumentComponentOrder[];
 }
 
 // =============================================================================
@@ -503,6 +525,7 @@ export interface Upload {
 
 export interface SaveOptions {
   skipAutoSave?: boolean;
+  immediate?: boolean;
 }
 
 export type UpdateDataFn = (
