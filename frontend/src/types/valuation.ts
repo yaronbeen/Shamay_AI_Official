@@ -174,6 +174,14 @@ export interface GarmushkaMeasurement {
   color: string;
 }
 
+export interface CroppedDiagram {
+  id: string;
+  name: string;
+  imageData: string; // Base64 PNG
+  sourceShapeId?: string; // Reference to the polygon it came from
+  createdAt: string;
+}
+
 export interface GarmushkaInjection {
   id: string;
   imageData: string; // Base64 PNG
@@ -194,7 +202,8 @@ export interface GarmushkaMeasurements {
   isCalibrated: boolean;
   fileName: string;
   pngExport?: string;
-  injections?: GarmushkaInjection[]; // Multiple images supported
+  injections?: GarmushkaInjection[]; // Legacy - kept for backwards compat
+  croppedDiagrams?: CroppedDiagram[]; // Saved cropped areas
 }
 
 // =============================================================================

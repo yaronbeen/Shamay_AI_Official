@@ -249,6 +249,11 @@ export default function GarmushkaMeasurementViewer({
     new Set(),
   );
 
+  // Cropped diagrams gallery (Option B: simple crop + auto-render)
+  const [croppedDiagrams, setCroppedDiagrams] = useState<
+    Array<{ id: string; name: string; imageData: string; createdAt: string }>
+  >([]);
+
   const stageRef = useRef<any>(null);
   const imageSize = useRef<{ width: number; height: number }>({
     width: 0,
@@ -398,6 +403,17 @@ export default function GarmushkaMeasurementViewer({
           setSavedPngExports(exports);
           // Clear selection when reloading
           setSelectedExports(new Set());
+
+          // Load saved cropped diagrams
+          if (
+            Array.isArray(measurementData.croppedDiagrams) &&
+            measurementData.croppedDiagrams.length > 0
+          ) {
+            console.log(
+              `📐 Restoring ${measurementData.croppedDiagrams.length} cropped diagrams`,
+            );
+            setCroppedDiagrams(measurementData.croppedDiagrams);
+          }
         }
       } catch (error) {
         console.error("Error loading saved PNG exports:", error);
@@ -1722,35 +1738,114 @@ export default function GarmushkaMeasurementViewer({
     });
   }, [cropShapeId, shapes, cropBackgroundType, extractPolygonArea]);
 
-  // Handle crop and add to document
-  const handleCropAndInject = useCallback(async () => {
+  // Handle crop and save to gallery (Option B: simple save + auto-render)
+  const handleCropAndSave = useCallback(async () => {
     if (!cropShapeId || !cropPreviewUrl) return;
 
     const shape = shapes.find((s) => s.id === cropShapeId);
     if (!shape) return;
 
-    // Store the cropped image in the shape
-    setShapes((prev) =>
-      prev.map((s) =>
-        s.id === cropShapeId ? { ...s, croppedImageData: cropPreviewUrl } : s,
-      ),
-    );
+    // Create new cropped diagram entry
+    const newCrop = {
+      id: `crop-${Date.now()}`,
+      name: shape.name,
+      imageData: cropPreviewUrl,
+      sourceShapeId: cropShapeId,
+      createdAt: new Date().toISOString(),
+    };
 
-    // Dispatch injection event with the cropped image
-    const event = new CustomEvent("garmushka-inject", {
-      detail: {
-        imageData: cropPreviewUrl,
-        useFullImage: false,
-        label: shape.name,
-      },
-    });
-    window.dispatchEvent(event);
+    // Add to local state
+    const updatedCrops = [...croppedDiagrams, newCrop];
+    setCroppedDiagrams(updatedCrops);
+
+    // Save to backend
+    try {
+      const measurementData = {
+        measurementTable,
+        metersPerPixel,
+        unitMode,
+        isCalibrated: metersPerPixel > 0,
+        fileName: isPdfMode ? `PDF עמוד ${selectedPageIndex + 1}` : "תמונה",
+        croppedDiagrams: updatedCrops,
+      };
+
+      const response = await fetch(
+        `/api/session/${sessionId}/garmushka-measurements`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(measurementData),
+        },
+      );
+
+      if (response.ok) {
+        onMeasurementComplete(measurementData);
+        alert("✅ התשריט נשמר בהצלחה ויופיע במסמך!");
+      } else {
+        console.error("Failed to save cropped diagram");
+        alert("שגיאה בשמירת התשריט");
+      }
+    } catch (err) {
+      console.error("Error saving cropped diagram:", err);
+      alert("שגיאה בשמירת התשריט");
+    }
 
     setShowCropModal(false);
     setCropShapeId(null);
     setCropPreviewUrl(null);
-    alert("לחץ על המיקום הרצוי בתצוגה המקדימה של המסמך");
-  }, [cropShapeId, cropPreviewUrl, shapes]);
+  }, [
+    cropShapeId,
+    cropPreviewUrl,
+    shapes,
+    croppedDiagrams,
+    measurementTable,
+    metersPerPixel,
+    unitMode,
+    isPdfMode,
+    selectedPageIndex,
+    sessionId,
+    onMeasurementComplete,
+  ]);
+
+  // Delete a cropped diagram
+  const handleDeleteCroppedDiagram = useCallback(
+    async (cropId: string) => {
+      const updatedCrops = croppedDiagrams.filter((c) => c.id !== cropId);
+      setCroppedDiagrams(updatedCrops);
+
+      // Save to backend
+      try {
+        const measurementData = {
+          measurementTable,
+          metersPerPixel,
+          unitMode,
+          isCalibrated: metersPerPixel > 0,
+          fileName: isPdfMode ? `PDF עמוד ${selectedPageIndex + 1}` : "תמונה",
+          croppedDiagrams: updatedCrops,
+        };
+
+        await fetch(`/api/session/${sessionId}/garmushka-measurements`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(measurementData),
+        });
+
+        onMeasurementComplete(measurementData);
+      } catch (err) {
+        console.error("Error deleting cropped diagram:", err);
+      }
+    },
+    [
+      croppedDiagrams,
+      measurementTable,
+      metersPerPixel,
+      unitMode,
+      isPdfMode,
+      selectedPageIndex,
+      sessionId,
+      onMeasurementComplete,
+    ],
+  );
 
   // Copy cropped image to clipboard
   const handleCopyToClipboard = useCallback(async () => {
@@ -1798,6 +1893,7 @@ export default function GarmushkaMeasurementViewer({
         isCalibrated: metersPerPixel > 0,
         fileName: isPdfMode ? `PDF עמוד ${selectedPageIndex + 1}` : "תמונה",
         pngExport: pngBase64, // Add PNG export to the data
+        croppedDiagrams, // Include saved cropped diagrams
       };
 
       console.log("💾 Saving Garmushka measurements with PNG export");
@@ -1837,6 +1933,7 @@ export default function GarmushkaMeasurementViewer({
     isPdfMode,
     selectedPageIndex,
     onMeasurementComplete,
+    croppedDiagrams,
   ]);
 
   // Update image dimensions when image loads
@@ -2825,6 +2922,46 @@ export default function GarmushkaMeasurementViewer({
               </div>
             </div>
           )}
+
+          {/* Saved Cropped Diagrams Gallery */}
+          {croppedDiagrams.length > 0 && (
+            <div className="bg-purple-50 rounded-lg p-4 mt-4">
+              <h4 className="font-medium mb-3 text-purple-800">
+                📐 תשריטים שמורים ({croppedDiagrams.length})
+              </h4>
+              <p className="text-xs text-purple-600 mb-3">
+                תשריטים אלו יופיעו אוטומטית במסמך הסופי
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                {croppedDiagrams.map((crop) => (
+                  <div
+                    key={crop.id}
+                    className="bg-white rounded-lg border border-purple-200 p-2"
+                  >
+                    <div className="aspect-video bg-gray-100 rounded overflow-hidden mb-2">
+                      <img
+                        src={crop.imageData}
+                        alt={crop.name}
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium truncate">
+                        {crop.name}
+                      </span>
+                      <button
+                        onClick={() => handleDeleteCroppedDiagram(crop.id)}
+                        className="text-red-500 hover:text-red-700 text-sm px-2"
+                        title="מחק תשריט"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -3184,7 +3321,7 @@ export default function GarmushkaMeasurementViewer({
                 📋 העתק ללוח
               </button>
               <button
-                onClick={handleCropAndInject}
+                onClick={handleCropAndSave}
                 disabled={!cropPreviewUrl || isCropping}
                 className={`px-4 py-2 rounded-lg text-white font-medium ${
                   cropPreviewUrl && !isCropping
@@ -3192,7 +3329,7 @@ export default function GarmushkaMeasurementViewer({
                     : "bg-gray-400 cursor-not-allowed"
                 }`}
               >
-                📄 הוסף למסמך
+                💾 שמור תשריט
               </button>
             </div>
           </div>

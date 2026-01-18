@@ -1232,6 +1232,56 @@ export function generateDocumentHTML(
       .join("");
   })();
 
+  // Cropped Diagrams Section (Option B: simple gallery auto-render)
+  const croppedDiagramsSection = (() => {
+    const diagrams = data.garmushkaMeasurements?.croppedDiagrams;
+    if (!diagrams || diagrams.length === 0) return "";
+
+    const diagramsHtml = diagrams
+      .map((diagram, index) => {
+        // Sanitize name to prevent XSS
+        const safeName = escapeHtmlForTable(
+          diagram.name || `תשריט ${index + 1}`,
+        );
+        const safeId = (diagram.id || "").replace(/[^a-zA-Z0-9-_]/g, "");
+
+        // Validate imageData is a proper data URL
+        const isValidDataUrl =
+          diagram.imageData &&
+          /^data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/=]+$/.test(
+            diagram.imageData,
+          );
+        if (!isValidDataUrl) {
+          console.warn(`Invalid image data for diagram ${safeId}, skipping`);
+          return "";
+        }
+
+        return `
+        <div class="cropped-diagram" data-diagram-id="${safeId}" style="margin: 15px 0; page-break-inside: avoid;">
+          <div class="sub-title" style="margin-bottom: 8px; font-weight: 600;">${safeName}</div>
+          <figure style="margin: 0; text-align: center;">
+            <img
+              src="${diagram.imageData}"
+              alt="${safeName}"
+              style="max-width: 100%; max-height: 400px; border: 1px solid #cccccc; border-radius: 4px;"
+              data-managed-image="true"
+            />
+          </figure>
+        </div>
+      `;
+      })
+      .join("");
+
+    return `
+      <div class="section-block cropped-diagrams-section" style="margin-top: 30px;">
+        <div class="section-title" style="font-size: 16px; font-weight: bold; margin-bottom: 15px; border-bottom: 2px solid #333; padding-bottom: 5px;">
+          תשריטים
+        </div>
+        ${diagramsHtml}
+      </div>
+    `;
+  })();
+
   const bodyContent = `
     <div class="document">
       ${headerBlock}
@@ -1242,6 +1292,7 @@ export function generateDocumentHTML(
       ${considerationsSection}
       ${valuationSection}
       ${garmushkaInjectionsSection}
+      ${croppedDiagramsSection}
       ${summarySection}
       ${customTablesSection}
     </div>
