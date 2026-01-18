@@ -162,8 +162,13 @@ export function Step3Validation({
 
         const sessionData = await sessionResponse.json();
 
-        // Load extracted data only if not already populated from props
-        if (Object.keys(extractedData).length === 0) {
+        // Load extracted data only if BOTH local state AND props are empty
+        // This prevents overwriting props data with potentially stale API data
+        const propsExtractedData = data.extractedData || {};
+        if (
+          Object.keys(extractedData).length === 0 &&
+          Object.keys(propsExtractedData).length === 0
+        ) {
           const extractedDataFromSession =
             sessionData.extractedData || sessionData.data?.extractedData;
           if (
@@ -230,12 +235,22 @@ export function Step3Validation({
     };
 
     loadSessionData();
-  }, [sessionId, extractedData]);
+  }, [sessionId, extractedData, data.extractedData]);
 
-  // Sync with props
+  // Sync with props - props are the source of truth from Context
+  // This effect runs when props change (e.g., after Context state update)
   useEffect(() => {
     if (data.extractedData && Object.keys(data.extractedData).length > 0) {
-      setExtractedData(data.extractedData);
+      // Props take priority as they contain the latest saved/synced state
+      // Merge: start with current local state, then overlay props values
+      setExtractedData((prev) => {
+        // If local state is empty, just use props entirely
+        if (Object.keys(prev).length === 0) {
+          return data.extractedData as ExtractedData;
+        }
+        // Otherwise merge: props overwrite local values for existing keys
+        return { ...prev, ...data.extractedData } as ExtractedData;
+      });
     }
   }, [data.extractedData]);
 

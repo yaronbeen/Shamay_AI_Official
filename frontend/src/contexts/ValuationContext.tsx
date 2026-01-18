@@ -98,15 +98,53 @@ interface ValuationProviderProps {
 // UTILITY FUNCTIONS
 // =============================================================================
 
-// Simple debounce function
+// Flushable debounce function - allows immediate execution of pending saves
+interface DebouncedFunction<T extends (...args: any[]) => any> {
+  (...args: Parameters<T>): void;
+  flush: () => void;
+  cancel: () => void;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function debounce<T extends (...args: any[]) => any>(func: T, wait: number): T {
+function createFlushableDebounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number,
+): DebouncedFunction<T> {
   let timeout: NodeJS.Timeout | null = null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return ((...args: any[]) => {
+  let pendingArgs: Parameters<T> | null = null;
+
+  const debounced = ((...args: Parameters<T>) => {
+    pendingArgs = args;
     if (timeout) clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
-  }) as T;
+    timeout = setTimeout(() => {
+      if (pendingArgs) {
+        func(...pendingArgs);
+        pendingArgs = null;
+      }
+      timeout = null;
+    }, wait);
+  }) as DebouncedFunction<T>;
+
+  debounced.flush = () => {
+    if (timeout) {
+      clearTimeout(timeout);
+      timeout = null;
+    }
+    if (pendingArgs) {
+      func(...pendingArgs);
+      pendingArgs = null;
+    }
+  };
+
+  debounced.cancel = () => {
+    if (timeout) {
+      clearTimeout(timeout);
+      timeout = null;
+    }
+    pendingArgs = null;
+  };
+
+  return debounced;
 }
 
 // Deep comparison helper
@@ -190,6 +228,12 @@ export function ValuationProvider({ children }: ValuationProviderProps) {
   const pendingSaveRef = useRef<Promise<SaveResult> | null>(null);
   const initializedSessionRef = useRef<string | null>(null);
   const prevSessionIdRef = useRef<string | null>(null);
+  // Ref to always have the latest data (avoids stale closure issues)
+  const dataRef = useRef<ValuationData>(data);
+  // Ref to hold the flushable debounced save function
+  const debouncedSaveRef = useRef<DebouncedFunction<
+    (dataToSave: ValuationData) => Promise<void>
+  > | null>(null);
 
   // ==========================================================================
   // HOOKS
@@ -332,11 +376,20 @@ export function ValuationProvider({ children }: ValuationProviderProps) {
   }, [searchParams, router, loadShumaForWizard]);
 
   // ==========================================================================
-  // DEBOUNCED SAVE
+  // KEEP DATA REF IN SYNC
   // ==========================================================================
 
-  const debouncedSave = useCallback(
-    debounce(async (dataToSave: ValuationData) => {
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
+  // ==========================================================================
+  // DEBOUNCED SAVE (with flush support)
+  // ==========================================================================
+
+  // Initialize the flushable debounced save function
+  useEffect(() => {
+    const saveFn = async (dataToSave: ValuationData) => {
       if (sessionId && !isInitialLoad) {
         try {
           // Wait for pending save
@@ -393,9 +446,26 @@ export function ValuationProvider({ children }: ValuationProviderProps) {
           pendingSaveRef.current = null;
         }
       }
-    }, 1000),
-    [sessionId, isInitialLoad, saveShumaToDatabase, valuationId, session?.user],
-  );
+    };
+
+    debouncedSaveRef.current = createFlushableDebounce(saveFn, 1000);
+
+    // Cleanup on unmount - cancel any pending debounced saves
+    return () => {
+      debouncedSaveRef.current?.cancel();
+    };
+  }, [
+    sessionId,
+    isInitialLoad,
+    saveShumaToDatabase,
+    valuationId,
+    session?.user,
+  ]);
+
+  // Wrapper function that calls the debounced save via ref
+  const debouncedSave = useCallback((dataToSave: ValuationData) => {
+    debouncedSaveRef.current?.(dataToSave);
+  }, []);
 
   // ==========================================================================
   // UPDATE DATA
@@ -509,7 +579,11 @@ export function ValuationProvider({ children }: ValuationProviderProps) {
 
   const saveManually = useCallback(async (): Promise<SaveResult> => {
     if (sessionId && !isInitialLoad) {
-      // Wait for pending save
+      // CRITICAL: Flush any pending debounced save first to ensure all changes are captured
+      console.log("💾 [ValuationContext] Flushing pending debounced save...");
+      debouncedSaveRef.current?.flush();
+
+      // Wait for pending save (may have been triggered by flush)
       if (pendingSaveRef.current) {
         console.log(
           "⏳ [ValuationContext] Waiting for pending save to complete...",
@@ -521,14 +595,17 @@ export function ValuationProvider({ children }: ValuationProviderProps) {
         }
       }
 
+      // Use dataRef to get the LATEST data (avoids stale closure issues)
+      const currentData = dataRef.current;
+
       // First save establishes baseline
       if (!lastSavedData) {
         console.log(
           "💾 [ValuationContext] First save after load - establishing baseline",
         );
       } else {
-        // Deep comparison
-        const hasActualChanges = !deepEqual(data, lastSavedData);
+        // Deep comparison with CURRENT data from ref
+        const hasActualChanges = !deepEqual(currentData, lastSavedData);
         if (!hasActualChanges) {
           console.log(
             "⏭️ [ValuationContext] No changes detected (deep comparison), skipping save",
@@ -554,7 +631,7 @@ export function ValuationProvider({ children }: ValuationProviderProps) {
         sessionId,
         organizationId,
         userId,
-        data,
+        currentData, // Use currentData from ref, not closure
       );
       pendingSaveRef.current = savePromise;
 
@@ -563,7 +640,7 @@ export function ValuationProvider({ children }: ValuationProviderProps) {
       if (result.success) {
         console.log("✅ [ValuationContext] Manual save successful");
         setHasUnsavedChanges(false);
-        setLastSavedData(JSON.parse(JSON.stringify(data)));
+        setLastSavedData(JSON.parse(JSON.stringify(currentData)));
       } else {
         console.error(
           "❌ [ValuationContext] Manual save failed:",
@@ -580,7 +657,7 @@ export function ValuationProvider({ children }: ValuationProviderProps) {
     sessionId,
     isInitialLoad,
     session?.user,
-    data,
+    // Note: We intentionally use dataRef.current instead of data to avoid stale closure issues
     saveShumaToDatabase,
     lastSavedData,
   ]);
