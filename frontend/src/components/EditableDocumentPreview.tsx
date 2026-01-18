@@ -724,7 +724,7 @@ export function EditableDocumentPreview({
     saveOverrideForElement(container);
   }, [getFrameDocument, saveOverrideForElement]);
 
-  // Handler for inserting manual page breaks
+  // Handler for inserting manual page breaks - creates actual new page with header/footer
   const handleInsertPageBreak = useCallback(() => {
     const doc = getFrameDocument();
     if (!doc) {
@@ -744,101 +744,127 @@ export function EditableDocumentPreview({
       targetElement = targetElement.parentElement;
     }
 
-    // Walk up to find a suitable block element
+    // Walk up to find a suitable block element within page-body
     const blockSelectors = [
       ".section-block",
       ".chapter-title",
       ".section-title",
       "p",
-      "div",
       "table",
       "ul",
       "ol",
-      ".page-body > *",
     ];
 
-    while (targetElement && targetElement.tagName !== "SECTION") {
-      const isBlockElement = blockSelectors.some(
-        (sel) =>
-          targetElement?.matches?.(sel) ||
-          targetElement?.closest?.(sel) === targetElement,
+    while (targetElement && !targetElement.classList?.contains("page-body")) {
+      const isBlockElement = blockSelectors.some((sel) =>
+        targetElement?.matches?.(sel),
       );
-      if (isBlockElement && targetElement.parentElement) {
+      if (isBlockElement) {
         break;
       }
       targetElement = targetElement.parentElement;
     }
 
-    if (!targetElement || targetElement.tagName === "SECTION") {
-      alert("לא ניתן להוסיף מעבר עמוד במיקום זה");
+    if (!targetElement || targetElement.classList?.contains("page-body")) {
+      alert("לא ניתן להוסיף מעבר עמוד במיקום זה. יש לבחור אלמנט תוכן.");
+      return;
+    }
+
+    // Find the current page section
+    const currentPage = targetElement.closest("section.page");
+    if (!currentPage) {
+      alert("לא נמצא עמוד נוכחי");
+      return;
+    }
+
+    // Don't allow page breaks on cover page
+    if (currentPage.classList.contains("cover")) {
+      alert("לא ניתן להוסיף מעבר עמוד בעמוד השער");
+      return;
+    }
+
+    // Get the page-body of the current page
+    const currentPageBody = currentPage.querySelector(".page-body");
+    if (!currentPageBody) {
+      alert("לא נמצא תוכן העמוד");
+      return;
+    }
+
+    // Get header and footer from an existing non-cover page
+    const existingPage = doc.querySelector("section.page:not(.cover)");
+    const headerTemplate = existingPage?.querySelector(".page-header");
+    const footerTemplate = existingPage?.querySelector(".page-footer");
+
+    if (!headerTemplate || !footerTemplate) {
+      alert("לא נמצאו תבניות כותרת/תחתית");
       return;
     }
 
     // Generate unique ID for the page break
     const breakId = `pb-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-    // Create page break element
-    const pageBreak = doc.createElement("div");
-    pageBreak.className = "manual-page-break";
-    pageBreak.setAttribute("data-page-break", "manual");
-    pageBreak.setAttribute("data-break-id", breakId);
-    pageBreak.innerHTML =
-      '<span class="delete-break" title="הסר מעבר עמוד">✕</span>';
+    // Create a new page section
+    const newPage = doc.createElement("section");
+    newPage.className = "page";
+    newPage.setAttribute("data-manual-page", "true");
+    newPage.setAttribute("data-break-id", breakId);
 
-    // Insert after target element
-    targetElement.parentNode?.insertBefore(
-      pageBreak,
-      targetElement.nextSibling,
-    );
+    // Clone header
+    const newHeader = headerTemplate.cloneNode(true) as HTMLElement;
+    newPage.appendChild(newHeader);
 
-    // Generate a unique selector for persistence
-    const generateSelector = (el: Element): string => {
-      // Try to find a unique identifier
-      if (el.id) return `#${el.id}`;
-      if (el.getAttribute("data-edit-selector")) {
-        return el.getAttribute("data-edit-selector")!;
-      }
+    // Create new page body
+    const newPageBody = doc.createElement("div");
+    newPageBody.className = "page-body";
 
-      // Build path-based selector
-      const path: string[] = [];
-      let current: Element | null = el;
-      while (current && current !== doc.body && path.length < 5) {
-        let selector = current.tagName.toLowerCase();
-        if (current.className) {
-          const classes = current.className
-            .split(" ")
-            .filter((c) => c && !c.startsWith("__"))
-            .slice(0, 2);
-          if (classes.length > 0) {
-            selector += "." + classes.join(".");
-          }
-        }
-        // Add nth-child for specificity
-        const parent = current.parentElement;
-        if (parent) {
-          const siblings = Array.from(parent.children).filter(
-            (c) => c.tagName === current!.tagName,
+    // Add a visual indicator that this is a user-created page
+    const pageIndicator = doc.createElement("div");
+    pageIndicator.className = "manual-page-indicator";
+    pageIndicator.style.cssText =
+      "text-align: center; color: #3b82f6; font-size: 9pt; margin-bottom: 8px; border-bottom: 1px dashed #3b82f6; padding-bottom: 4px;";
+    pageIndicator.innerHTML = `<span style="cursor: pointer;" title="מחק עמוד זה">עמוד ידני (${breakId.slice(-6)}) ✕</span>`;
+    newPageBody.appendChild(pageIndicator);
+
+    // Move all siblings after the target element to the new page
+    let nextSibling = targetElement.nextSibling;
+    const elementsToMove: Node[] = [];
+
+    while (nextSibling) {
+      elementsToMove.push(nextSibling);
+      nextSibling = nextSibling.nextSibling;
+    }
+
+    // Move elements to new page body
+    elementsToMove.forEach((el) => {
+      newPageBody.appendChild(el);
+    });
+
+    newPage.appendChild(newPageBody);
+
+    // Clone footer and add to new page
+    const newFooter = footerTemplate.cloneNode(true) as HTMLElement;
+    newPage.appendChild(newFooter);
+
+    // Insert new page after current page
+    currentPage.parentNode?.insertBefore(newPage, currentPage.nextSibling);
+
+    // Add delete handler for the page indicator
+    const indicator = newPage.querySelector(".manual-page-indicator span");
+    if (indicator) {
+      indicator.addEventListener("click", () => {
+        if (confirm("האם למחוק את העמוד הידני? התוכן יחזור לעמוד הקודם.")) {
+          // Move content back to original page body
+          const contentToRestore = Array.from(newPageBody.children).filter(
+            (el) => !el.classList.contains("manual-page-indicator"),
           );
-          if (siblings.length > 1) {
-            const index = siblings.indexOf(current) + 1;
-            selector += `:nth-of-type(${index})`;
-          }
-        }
-        path.unshift(selector);
-        current = current.parentElement;
-      }
-      return path.join(" > ");
-    };
-
-    const positionSelector = generateSelector(targetElement);
-
-    // Add click handler for delete button
-    const deleteBtn = pageBreak.querySelector(".delete-break");
-    if (deleteBtn) {
-      deleteBtn.addEventListener("click", () => {
-        if (confirm("האם למחוק את מעבר העמוד?")) {
-          pageBreak.remove();
-          // Update data to remove this break
+          contentToRestore.forEach((el) => {
+            currentPageBody.appendChild(el);
+          });
+          // Remove the new page
+          newPage.remove();
+          // Update page count
+          updatePageCount();
+          // Update data
           const existingBreaks = data.manualPageBreaks || [];
           onDataChange({
             manualPageBreaks: existingBreaks.filter((b) => b.id !== breakId),
@@ -847,6 +873,15 @@ export function EditableDocumentPreview({
       });
     }
 
+    // Update page count
+    updatePageCount();
+
+    // Update page indices
+    const allPages = doc.querySelectorAll("section.page");
+    allPages.forEach((page, idx) => {
+      page.setAttribute("data-page-index", String(idx));
+    });
+
     // Save to data for persistence
     const existingBreaks = data.manualPageBreaks || [];
     onDataChange({
@@ -854,14 +889,20 @@ export function EditableDocumentPreview({
         ...existingBreaks,
         {
           id: breakId,
-          positionAfterSelector: positionSelector,
+          positionAfterSelector: `[data-break-id="${breakId}"]`,
           createdAt: new Date().toISOString(),
         },
       ],
     });
 
-    alert("✅ מעבר עמוד נוסף בהצלחה");
-  }, [getFrameDocument, data, onDataChange]);
+    // Navigate to the new page
+    const newPageIndex = Array.from(allPages).indexOf(newPage);
+    if (newPageIndex >= 0) {
+      navigateToPage(newPageIndex);
+    }
+
+    alert("✅ עמוד חדש נוצר בהצלחה!");
+  }, [getFrameDocument, data, onDataChange, updatePageCount, navigateToPage]);
 
   useEffect(() => {
     const fetchCompanySettings = async () => {
