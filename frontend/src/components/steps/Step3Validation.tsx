@@ -353,15 +353,19 @@ export function Step3Validation({
         trackFieldEdit(field, oldValue, value);
       }
 
+      // CRITICAL: Merge with BOTH props and local state to prevent data loss
+      // Props (data.extractedData) has the full database state
+      // Local state (extractedData) has any recent local edits
       const newExtractedData = {
-        ...extractedData,
-        [field]: value,
+        ...(data.extractedData || {}), // Start with props (full DB state)
+        ...extractedData, // Overlay local edits
+        [field]: value, // Apply the new edit
       };
 
       setExtractedData(newExtractedData);
       updateData({ extractedData: newExtractedData });
     },
-    [extractedData, updateData, trackFieldEdit],
+    [data.extractedData, extractedData, updateData, trackFieldEdit],
   );
 
   // Load AI extractions
